@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output - DO NOT ignore dist/ as it must be committed for GitHub Actions
+# dist/
+
+# Test coverage
+coverage/
+dist/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
