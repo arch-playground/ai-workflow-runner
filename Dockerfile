@@ -46,8 +46,8 @@ COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
 COPY --from=builder /usr/bin/npm /usr/bin/npm
 COPY --from=builder /usr/bin/npx /usr/bin/npx
 
-# Copy Java 21 from builder stage
-COPY --from=builder /usr/lib/jvm/temurin-21-jre /usr/lib/jvm/temurin-21-jre
+# Copy Java 21 from builder stage (path varies by architecture: temurin-21-jre-arm64, temurin-21-jre-amd64)
+COPY --from=builder /usr/lib/jvm/temurin-21-jre-* /usr/lib/jvm/temurin-21-jre/
 ENV JAVA_HOME=/usr/lib/jvm/temurin-21-jre
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
