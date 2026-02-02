@@ -5,6 +5,13 @@ import { validateWorkspacePath, validateRealPath, validateUtf8 } from './securit
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 
+/**
+ * Runs a workflow with timeout and abort signal support.
+ * @param inputs - The action inputs containing workflow path, prompt, and env vars
+ * @param timeoutMs - Maximum execution time in milliseconds
+ * @param abortSignal - Optional abort signal for cancellation
+ * @returns Promise resolving to the runner result
+ */
 export function runWorkflow(
   inputs: ActionInputs,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
@@ -21,40 +28,37 @@ export function runWorkflow(
     ? AbortSignal.any([abortSignal, timeoutController.signal])
     : timeoutController.signal;
 
-  return new Promise((resolve) => {
+  try {
+    // Check if already aborted before starting
     if (combinedAbort.aborted) {
       clearTimeout(timeoutId);
-      resolve({
+      return Promise.resolve({
         success: false,
         output: '',
         error: 'Workflow execution was cancelled',
       });
-      return;
     }
 
-    try {
-      const result = executeWorkflow(inputs, workspace, combinedAbort);
-      clearTimeout(timeoutId);
-      resolve(result);
-    } catch (e) {
-      clearTimeout(timeoutId);
-      if (e instanceof Error && e.name === 'AbortError') {
-        resolve({
-          success: false,
-          output: '',
-          error: abortSignal?.aborted
-            ? 'Workflow execution was cancelled'
-            : `Workflow execution timed out after ${timeoutMs}ms`,
-        });
-        return;
-      }
-      resolve({
+    const result = executeWorkflow(inputs, workspace, combinedAbort);
+    clearTimeout(timeoutId);
+    return Promise.resolve(result);
+  } catch (e) {
+    clearTimeout(timeoutId);
+    if (e instanceof Error && e.name === 'AbortError') {
+      return Promise.resolve({
         success: false,
         output: '',
-        error: e instanceof Error ? e.message : 'Unknown error occurred',
+        error: abortSignal?.aborted
+          ? 'Workflow execution was cancelled'
+          : `Workflow execution timed out after ${timeoutMs}ms`,
       });
     }
-  });
+    return Promise.resolve({
+      success: false,
+      output: '',
+      error: e instanceof Error ? e.message : 'Unknown error occurred',
+    });
+  }
 }
 
 function executeWorkflow(

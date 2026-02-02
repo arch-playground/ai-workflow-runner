@@ -17,7 +17,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/owner/ai-workflow-runner.git"
+    "url": "git+https://github.com/arch-playground/ai-workflow-runner.git"
   },
   "keywords": [
     "github-action",
@@ -28,9 +28,7 @@
   "author": "TanNT",
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^1.10.1",
-    "@actions/exec": "^1.1.1",
-    "@actions/io": "^1.1.3"
+    "@actions/core": "^1.10.1"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

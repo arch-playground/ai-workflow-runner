@@ -51,13 +51,17 @@ export function getInputs(): ActionInputs {
     'NODE_OPTIONS',
     'PYTHONPATH',
     'JAVA_TOOL_OPTIONS',
+    'JAVA_HOME',
   ]);
+
+  // Block GITHUB_* variables to prevent Actions context manipulation
+  const GITHUB_PREFIX = 'GITHUB_';
 
   const VALID_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
   for (const [key, value] of Object.entries(envVars)) {
     if (typeof value !== 'string') {
-      throw new Error(`env_vars key must be a string, got ${typeof value}`);
+      throw new Error(`env_vars["${key}"] must be a string, got ${typeof value}`);
     }
 
     if (!key || key.length === 0) {
@@ -72,6 +76,10 @@ export function getInputs(): ActionInputs {
 
     if (RESERVED_ENV_VARS.has(key.toUpperCase())) {
       throw new Error(`env_vars cannot override reserved variable: ${key}`);
+    }
+
+    if (key.toUpperCase().startsWith(GITHUB_PREFIX)) {
+      throw new Error(`env_vars cannot override GitHub Actions variable: ${key}`);
     }
   }
 

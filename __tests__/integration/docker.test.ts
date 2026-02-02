@@ -48,14 +48,14 @@ describe('Docker Container Integration', () => {
   );
 
   test(
-    'Java 17 is available',
+    'Java 21 is available',
     () => {
       const output = execSync(`docker run --rm --entrypoint java ${DOCKER_IMAGE} --version`, {
         timeout: TIMEOUT_MS,
       })
         .toString()
         .trim();
-      expect(output).toMatch(/17/);
+      expect(output).toMatch(/21/);
     },
     TIMEOUT_MS
   );

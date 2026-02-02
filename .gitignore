@@ -2,11 +2,10 @@
 node_modules/
 
 # Build output - DO NOT ignore dist/ as it must be committed for GitHub Actions
-# dist/
+# dist/ is NOT ignored - it must be committed for GitHub Actions to work
 
 # Test coverage
 coverage/
-dist/
 
 # Environment files
 .env

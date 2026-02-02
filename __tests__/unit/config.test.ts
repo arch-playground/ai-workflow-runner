@@ -179,6 +179,173 @@ describe('config', () => {
 
       expect(() => getInputs()).toThrow('must be a valid JSON object');
     });
+
+    it('parses custom timeout_minutes', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'timeout_minutes':
+            return '60';
+          default:
+            return '';
+        }
+      });
+
+      const inputs = getInputs();
+
+      expect(inputs.timeoutMs).toBe(60 * 60 * 1000);
+    });
+
+    it('rejects non-positive timeout_minutes', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'timeout_minutes':
+            return '0';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('timeout_minutes must be a positive integer');
+    });
+
+    it('rejects negative timeout_minutes', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'timeout_minutes':
+            return '-5';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('timeout_minutes must be a positive integer');
+    });
+
+    it('rejects non-numeric timeout_minutes', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'timeout_minutes':
+            return 'abc';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('timeout_minutes must be a positive integer');
+    });
+
+    it('rejects timeout_minutes exceeding max', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'timeout_minutes':
+            return String(INPUT_LIMITS.MAX_TIMEOUT_MINUTES + 1);
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('timeout_minutes exceeds maximum');
+    });
+
+    it('rejects env_vars with invalid key characters', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'env_vars':
+            return '{"invalid-key": "value"}';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('contains invalid characters');
+    });
+
+    it('rejects env_vars with key starting with number', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'env_vars':
+            return '{"123KEY": "value"}';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('contains invalid characters');
+    });
+
+    it('rejects reserved env var PATH', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'env_vars':
+            return '{"PATH": "/malicious/path"}';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('cannot override reserved variable');
+    });
+
+    it('rejects reserved env var LD_PRELOAD (case insensitive)', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'env_vars':
+            return '{"ld_preload": "/malicious/lib.so"}';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('cannot override reserved variable');
+    });
+
+    it('rejects GITHUB_ prefixed variables', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'env_vars':
+            return '{"GITHUB_TOKEN": "fake_token"}';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('cannot override GitHub Actions variable');
+    });
+
+    it('rejects github_ prefixed variables (case insensitive)', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'env_vars':
+            return '{"github_workspace": "/fake/path"}';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('cannot override GitHub Actions variable');
+    });
   });
 
   describe('validateInputs', () => {

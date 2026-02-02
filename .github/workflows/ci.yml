@@ -54,9 +54,9 @@ jobs:
 
       - name: Verify Docker runtimes
         run: |
-          docker run --rm ai-workflow-runner:test node --version
-          docker run --rm ai-workflow-runner:test python3.11 --version
-          docker run --rm ai-workflow-runner:test java --version
+          docker run --rm --entrypoint node ai-workflow-runner:test --version
+          docker run --rm --entrypoint python3.11 ai-workflow-runner:test --version
+          docker run --rm --entrypoint java ai-workflow-runner:test --version
 
       - name: Integration tests
         run: npm run test:integration
