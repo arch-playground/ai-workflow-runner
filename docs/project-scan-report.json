@@ -1,0 +1,115 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2026-02-04T00:00:00.000Z",
+    "last_updated": "2026-02-04T00:05:00.000Z",
+    "completed": "2026-02-04T00:05:00.000Z"
+  },
+  "mode": "initial_scan",
+  "scan_level": "exhaustive",
+  "project_root": "/Users/tannt/Works/GIT/Personal/Sources/ai-workflow-runner",
+  "output_folder": "/Users/tannt/Works/GIT/Personal/Sources/ai-workflow-runner/docs",
+  "completed_steps": [
+    {
+      "step": "step_1",
+      "status": "completed",
+      "timestamp": "2026-02-04T00:01:00.000Z",
+      "summary": "Classified as monolith with 1 part - Backend/CLI TypeScript GitHub Action"
+    },
+    {
+      "step": "step_2",
+      "status": "completed",
+      "timestamp": "2026-02-04T00:02:00.000Z",
+      "summary": "Found 3 existing docs (README.md, AGENTS.md, LICENSE)"
+    },
+    {
+      "step": "step_3",
+      "status": "completed",
+      "timestamp": "2026-02-04T00:02:30.000Z",
+      "summary": "Tech stack: TypeScript 5.3, Node.js 20, esbuild, Jest, Docker"
+    },
+    {
+      "step": "step_4",
+      "status": "completed",
+      "timestamp": "2026-02-04T00:03:00.000Z",
+      "summary": "Exhaustive scan complete - 12 source files, 6 modules analyzed"
+    },
+    {
+      "step": "step_5",
+      "status": "completed",
+      "timestamp": "2026-02-04T00:03:30.000Z",
+      "summary": "Source tree documented with 8 critical directories"
+    },
+    {
+      "step": "step_6",
+      "status": "completed",
+      "timestamp": "2026-02-04T00:04:00.000Z",
+      "summary": "Dev setup and CI/CD pipeline documented"
+    },
+    {
+      "step": "step_8",
+      "status": "completed",
+      "timestamp": "2026-02-04T00:04:30.000Z",
+      "summary": "Architecture documentation generated"
+    },
+    {
+      "step": "step_9",
+      "status": "completed",
+      "timestamp": "2026-02-04T00:04:45.000Z",
+      "summary": "Supporting documentation files generated"
+    },
+    {
+      "step": "step_10",
+      "status": "completed",
+      "timestamp": "2026-02-04T00:05:00.000Z",
+      "summary": "Master index generated"
+    },
+    {
+      "step": "step_12",
+      "status": "completed",
+      "timestamp": "2026-02-04T00:05:00.000Z",
+      "summary": "Workflow complete"
+    }
+  ],
+  "current_step": "completed",
+  "findings": {
+    "project_classification": {
+      "repository_type": "monolith",
+      "parts_count": 1,
+      "primary_tech": "TypeScript/Node.js GitHub Action"
+    },
+    "technology_stack": {
+      "language": "TypeScript 5.3",
+      "runtime": "Node.js 20",
+      "bundler": "esbuild 0.27",
+      "testing": "Jest 29.7",
+      "container": "Docker (Debian Bookworm)",
+      "ci_cd": "GitHub Actions"
+    },
+    "source_analysis": {
+      "total_source_files": 12,
+      "total_lines": 1314,
+      "modules": 6,
+      "unit_tests": 6,
+      "integration_tests": 1,
+      "e2e_tests": 1
+    }
+  },
+  "project_types": [
+    {
+      "part_id": "main",
+      "project_type_id": "backend",
+      "display_name": "Backend - GitHub Action"
+    }
+  ],
+  "outputs_generated": [
+    "project-scan-report.json",
+    "project-overview.md",
+    "architecture.md",
+    "source-tree-analysis.md",
+    "development-guide.md",
+    "api-contracts.md",
+    "index.md"
+  ],
+  "resume_instructions": "Workflow completed successfully"
+}
