@@ -22,6 +22,9 @@ RUN apt-get update && \
     && apt-get update \
     && apt-get install -y --no-install-recommends nodejs temurin-21-jre
 
+# Install OpenCode CLI globally (required for @opencode-ai/sdk)
+RUN npm install -g opencode-ai
+
 # Stage 2: Runtime stage - minimal image with only necessary files
 FROM debian:bookworm-slim AS runtime
 
@@ -46,6 +49,11 @@ COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
 COPY --from=builder /usr/bin/npm /usr/bin/npm
 COPY --from=builder /usr/bin/npx /usr/bin/npx
 
+# Note: OpenCode CLI is already included in /usr/lib/node_modules/opencode-ai
+# from the builder stage, which was copied as part of /usr/lib/node_modules
+# Just need to create the symlink for the binary
+RUN ln -s /usr/lib/node_modules/opencode-ai/bin/opencode /usr/local/bin/opencode
+
 # Copy Java 21 from builder stage (path varies by architecture: temurin-21-jre-arm64, temurin-21-jre-amd64)
 COPY --from=builder /usr/lib/jvm/temurin-21-jre-* /usr/lib/jvm/temurin-21-jre/
 ENV JAVA_HOME=/usr/lib/jvm/temurin-21-jre
@@ -54,7 +62,8 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # Verify installations
 RUN node --version && \
     python3.11 --version && \
-    java --version
+    java --version && \
+    opencode --version
 
 # Copy application
 COPY dist/ /app/dist/

@@ -5,13 +5,14 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "bundle": "ncc build src/index.ts -o dist --source-map",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist/index.js --sourcemap",
     "test": "jest --coverage",
-    "test:unit": "jest --testPathPattern=unit --coverage",
+    "test:unit": "jest --testPathPattern='src/.*\\.spec\\.ts$' --coverage",
     "test:integration": "jest --testPathPattern=integration --runInBand",
-    "lint": "eslint src __tests__ --max-warnings 0",
-    "format": "prettier --write src __tests__",
-    "format:check": "prettier --check src __tests__",
+    "test:e2e": "jest --testPathPattern=e2e --runInBand --testTimeout=180000",
+    "lint": "eslint src test --max-warnings 0",
+    "format": "prettier --write src test",
+    "format:check": "prettier --check src test",
     "typecheck": "tsc --noEmit",
     "prepare": "husky install"
   },
@@ -28,7 +29,8 @@
   "author": "TanNT",
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^1.10.1"
+    "@actions/core": "^1.10.1",
+    "@opencode-ai/sdk": "^1.1.28"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
@@ -36,6 +38,7 @@
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
     "@vercel/ncc": "^0.38.0",
+    "esbuild": "^0.27.2",
     "eslint": "^8.55.0",
     "eslint-config-prettier": "^9.1.0",
     "husky": "^8.0.0",

@@ -1,5 +1,10 @@
 import * as core from '@actions/core';
-import { ActionInputs, ValidationResult, INPUT_LIMITS } from './types.js';
+import {
+  ActionInputs,
+  ValidationResult,
+  INPUT_LIMITS,
+  type ValidationScriptType,
+} from './types.js';
 import { maskSecrets } from './security.js';
 
 export function getInputs(): ActionInputs {
@@ -85,7 +90,50 @@ export function getInputs(): ActionInputs {
 
   maskSecrets(envVars);
 
-  return { workflowPath, prompt, envVars, timeoutMs };
+  const validationScript = core.getInput('validation_script') || undefined;
+  const validationScriptTypeRaw = core.getInput('validation_script_type') || undefined;
+  const validationMaxRetryRaw = core.getInput('validation_max_retry') || '5';
+
+  let validationScriptType: ValidationScriptType | undefined;
+  if (validationScriptTypeRaw) {
+    // F16 Fix: Trim whitespace before validation
+    const trimmedType = validationScriptTypeRaw.trim();
+    if (trimmedType !== 'python' && trimmedType !== 'javascript') {
+      throw new Error('validation_script_type must be "python" or "javascript"');
+    }
+    validationScriptType = trimmedType;
+  }
+
+  if (validationScriptType && !validationScript) {
+    throw new Error('validation_script_type requires validation_script to be set');
+  }
+
+  if (validationScript && validationScript.length > INPUT_LIMITS.MAX_INLINE_SCRIPT_SIZE) {
+    throw new Error(
+      `validation_script exceeds maximum size of ${INPUT_LIMITS.MAX_INLINE_SCRIPT_SIZE} bytes`
+    );
+  }
+
+  const validationMaxRetry = parseInt(validationMaxRetryRaw, 10);
+  if (
+    isNaN(validationMaxRetry) ||
+    validationMaxRetry < 1 ||
+    validationMaxRetry > INPUT_LIMITS.MAX_VALIDATION_RETRY
+  ) {
+    throw new Error(
+      `validation_max_retry must be between 1 and ${INPUT_LIMITS.MAX_VALIDATION_RETRY}`
+    );
+  }
+
+  return {
+    workflowPath,
+    prompt,
+    envVars,
+    timeoutMs,
+    validationScript,
+    validationScriptType,
+    validationMaxRetry,
+  };
 }
 
 export function validateInputs(inputs: ActionInputs): ValidationResult {

@@ -2,10 +2,12 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  testMatch: ['**/__tests__/**/*.test.ts'],
+  testMatch: ['**/src/**/*.spec.ts', '**/test/**/*.test.ts', '**/test/**/*.e2e-spec.ts'],
+  moduleDirectories: ['node_modules', '<rootDir>'],
+  roots: ['<rootDir>/src', '<rootDir>/test'],
   // Exclude index.ts from coverage - it's an entry point with signal handlers
   // and process.exit() that's effectively tested via E2E tests in CI
-  collectCoverageFrom: ['src/**/*.ts', '!src/types.ts', '!src/index.ts'],
+  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.spec.ts', '!src/types.ts', '!src/index.ts'],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   coverageThreshold: {
@@ -23,7 +25,9 @@ module.exports = {
   errorOnDeprecated: true,
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    '^@opencode-ai/sdk$': '<rootDir>/test/mocks/@opencode-ai/sdk.ts',
   },
+  transformIgnorePatterns: ['node_modules/(?!(@opencode-ai)/)'],
   transform: {
     '^.+\\.tsx?$': [
       'ts-jest',

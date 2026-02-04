@@ -3,6 +3,7 @@ import { getInputs, validateInputs } from './config.js';
 import { runWorkflow } from './runner.js';
 import { sanitizeErrorMessage } from './security.js';
 import { ActionStatus } from './types.js';
+import { getOpenCodeService, hasOpenCodeServiceInstance } from './opencode.js';
 
 const shutdownController = new AbortController();
 let runPromise: Promise<void> | null = null;
@@ -69,6 +70,17 @@ function handleShutdown(signal: string): void {
 
   shutdownController.abort();
 
+  if (hasOpenCodeServiceInstance()) {
+    try {
+      const opencode = getOpenCodeService();
+      opencode.dispose();
+    } catch (error) {
+      core.warning(
+        `[Shutdown] Failed to dispose OpenCode service: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
   const forceExitTimeout = setTimeout(() => {
     core.warning('Graceful shutdown timed out, forcing exit');
     process.exit(1);
@@ -85,8 +97,8 @@ function handleShutdown(signal: string): void {
   }
 }
 
-process.on('SIGTERM', () => handleShutdown('SIGTERM'));
-process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => void handleShutdown('SIGTERM'));
+process.on('SIGINT', () => void handleShutdown('SIGINT'));
 
 runPromise = run();
 runPromise.catch(() => {

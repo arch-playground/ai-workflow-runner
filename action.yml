@@ -18,6 +18,18 @@ inputs:
     description: 'Maximum execution time in minutes (default: 30)'
     required: false
     default: '30'
+  validation_script:
+    description: 'Optional validation script (file path like check.py or inline with prefix like python:print("ok")). Receives AI_LAST_MESSAGE env. Return empty/true for success, other string to continue workflow.'
+    required: false
+    default: ''
+  validation_script_type:
+    description: 'Script type for inline scripts: python or javascript. Auto-detected for file paths by extension (.py or .js). Only required when validation_script is set and type cannot be auto-detected.'
+    required: false
+    default: ''
+  validation_max_retry:
+    description: 'Maximum validation retry attempts when script returns non-empty/non-true (default: 5, max: 20)'
+    required: false
+    default: '5'
 
 outputs:
   status:

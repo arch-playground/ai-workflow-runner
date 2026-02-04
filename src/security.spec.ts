@@ -8,7 +8,7 @@ import {
   maskSecrets,
   sanitizeErrorMessage,
   validateUtf8,
-} from '../../src/security';
+} from './security';
 
 jest.mock('@actions/core');
 

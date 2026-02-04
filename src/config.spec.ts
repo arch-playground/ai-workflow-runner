@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
-import { getInputs, validateInputs } from '../../src/config';
-import { INPUT_LIMITS } from '../../src/types';
+import { getInputs, validateInputs } from './config';
+import { INPUT_LIMITS } from './types';
 
 jest.mock('@actions/core');
 
@@ -346,10 +346,159 @@ describe('config', () => {
 
       expect(() => getInputs()).toThrow('cannot override GitHub Actions variable');
     });
+
+    it('parses validation_script correctly', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'validation_script':
+            return 'check.py';
+          default:
+            return '';
+        }
+      });
+
+      const inputs = getInputs();
+
+      expect(inputs.validationScript).toBe('check.py');
+    });
+
+    it('parses validation_script_type correctly', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'validation_script':
+            return 'print("ok")';
+          case 'validation_script_type':
+            return 'python';
+          default:
+            return '';
+        }
+      });
+
+      const inputs = getInputs();
+
+      expect(inputs.validationScriptType).toBe('python');
+    });
+
+    it('defaults validation_max_retry to 5', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          default:
+            return '';
+        }
+      });
+
+      const inputs = getInputs();
+
+      expect(inputs.validationMaxRetry).toBe(5);
+    });
+
+    it('parses custom validation_max_retry', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'validation_max_retry':
+            return '10';
+          default:
+            return '';
+        }
+      });
+
+      const inputs = getInputs();
+
+      expect(inputs.validationMaxRetry).toBe(10);
+    });
+
+    it('rejects validation_max_retry below 1', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'validation_max_retry':
+            return '0';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('validation_max_retry must be between 1 and');
+    });
+
+    it('rejects validation_max_retry above max', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'validation_max_retry':
+            return String(INPUT_LIMITS.MAX_VALIDATION_RETRY + 1);
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('validation_max_retry must be between 1 and');
+    });
+
+    it('rejects invalid validation_script_type', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'validation_script':
+            return 'check';
+          case 'validation_script_type':
+            return 'ruby';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('validation_script_type must be "python" or "javascript"');
+    });
+
+    it('rejects validation_script_type without validation_script', () => {
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'validation_script_type':
+            return 'python';
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow(
+        'validation_script_type requires validation_script to be set'
+      );
+    });
+
+    it('rejects validation_script exceeding size limit', () => {
+      const largeScript = 'x'.repeat(INPUT_LIMITS.MAX_INLINE_SCRIPT_SIZE + 1);
+      mockCore.getInput.mockImplementation((name: string) => {
+        switch (name) {
+          case 'workflow_path':
+            return 'test.md';
+          case 'validation_script':
+            return largeScript;
+          default:
+            return '';
+        }
+      });
+
+      expect(() => getInputs()).toThrow('validation_script exceeds maximum size');
+    });
   });
 
   describe('validateInputs', () => {
     const DEFAULT_TIMEOUT = INPUT_LIMITS.DEFAULT_TIMEOUT_MINUTES * 60 * 1000;
+    const DEFAULT_VALIDATION_RETRY = INPUT_LIMITS.DEFAULT_VALIDATION_RETRY;
 
     it('returns valid for correct inputs', () => {
       const inputs = {
@@ -357,6 +506,7 @@ describe('config', () => {
         prompt: 'Test prompt',
         envVars: { KEY: 'value' },
         timeoutMs: DEFAULT_TIMEOUT,
+        validationMaxRetry: DEFAULT_VALIDATION_RETRY,
       };
 
       const result = validateInputs(inputs);
@@ -371,6 +521,7 @@ describe('config', () => {
         prompt: '',
         envVars: {},
         timeoutMs: DEFAULT_TIMEOUT,
+        validationMaxRetry: DEFAULT_VALIDATION_RETRY,
       };
 
       const result = validateInputs(inputs);
@@ -385,6 +536,7 @@ describe('config', () => {
         prompt: '',
         envVars: {},
         timeoutMs: DEFAULT_TIMEOUT,
+        validationMaxRetry: DEFAULT_VALIDATION_RETRY,
       };
 
       const result = validateInputs(inputs);
@@ -399,6 +551,7 @@ describe('config', () => {
         prompt: '',
         envVars: {},
         timeoutMs: DEFAULT_TIMEOUT,
+        validationMaxRetry: DEFAULT_VALIDATION_RETRY,
       };
 
       const result = validateInputs(inputs);
@@ -413,6 +566,7 @@ describe('config', () => {
         prompt: 'x'.repeat(INPUT_LIMITS.MAX_PROMPT_LENGTH + 1),
         envVars: {},
         timeoutMs: DEFAULT_TIMEOUT,
+        validationMaxRetry: DEFAULT_VALIDATION_RETRY,
       };
 
       const result = validateInputs(inputs);
