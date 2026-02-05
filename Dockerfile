@@ -40,6 +40,8 @@ RUN apt-get update && \
         ca-certificates \
         python3.11 \
         python3.11-venv \
+        python3-pip \
+    && rm -f /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -62,6 +64,7 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # Verify installations
 RUN node --version && \
     python3.11 --version && \
+    python3 --version && \
     java --version && \
     opencode --version
 

@@ -63,6 +63,14 @@ jobs:
         env:
           DOCKER_IMAGE: ai-workflow-runner:test
 
+      - name: Upload test coverage on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-coverage
+          path: coverage/
+          retention-days: 7
+
       - name: Cleanup Docker
         if: always()
         run: |

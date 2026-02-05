@@ -2,11 +2,12 @@ import * as core from '@actions/core';
 import { getInputs, validateInputs } from './config.js';
 import { runWorkflow } from './runner.js';
 import { sanitizeErrorMessage } from './security.js';
-import { ActionStatus } from './types.js';
+import { ActionStatus, ShutdownSignal, INPUT_LIMITS } from './types.js';
 import { getOpenCodeService, hasOpenCodeServiceInstance } from './opencode.js';
 
 const shutdownController = new AbortController();
 let runPromise: Promise<void> | null = null;
+let isShuttingDown = false;
 
 async function run(): Promise<void> {
   let status: ActionStatus = 'failure';
@@ -65,7 +66,12 @@ async function run(): Promise<void> {
   }
 }
 
-function handleShutdown(signal: string): void {
+function handleShutdown(signal: ShutdownSignal): void {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+
   core.info(`Received ${signal}, initiating graceful shutdown...`);
 
   shutdownController.abort();
@@ -84,7 +90,7 @@ function handleShutdown(signal: string): void {
   const forceExitTimeout = setTimeout(() => {
     core.warning('Graceful shutdown timed out, forcing exit');
     process.exit(1);
-  }, 10000);
+  }, INPUT_LIMITS.SHUTDOWN_TIMEOUT_MS);
 
   if (runPromise) {
     void runPromise.finally(() => {
@@ -101,6 +107,21 @@ process.on('SIGTERM', () => void handleShutdown('SIGTERM'));
 process.on('SIGINT', () => void handleShutdown('SIGINT'));
 
 runPromise = run();
-runPromise.catch(() => {
-  // Error already handled in run()
-});
+runPromise
+  .catch(() => {
+    // Error already handled in run()
+  })
+  .finally(() => {
+    // Dispose OpenCode service to release resources and allow process to exit
+    if (hasOpenCodeServiceInstance()) {
+      try {
+        const opencode = getOpenCodeService();
+        opencode.dispose();
+      } catch {
+        // Ignore disposal errors during normal exit
+      }
+    }
+    // Exit with appropriate code based on whether setFailed was called
+    // Note: process.exitCode is set by @actions/core when setFailed is called
+    process.exit(process.exitCode ?? 0);
+  });

@@ -19834,8 +19834,10 @@ var INPUT_LIMITS = {
   // 100KB
   MAX_LAST_MESSAGE_SIZE: 102400,
   // 100KB
-  MAX_INLINE_SCRIPT_SIZE: 102400
+  MAX_INLINE_SCRIPT_SIZE: 102400,
   // 100KB
+  SHUTDOWN_TIMEOUT_MS: 1e4
+  // 10 seconds for graceful shutdown
 };
 
 // src/security.ts
@@ -22349,6 +22351,7 @@ async function runValidationLoop(opencode, session, inputs, workspace, timeoutMs
 // src/index.ts
 var shutdownController = new AbortController();
 var runPromise = null;
+var isShuttingDown = false;
 async function run() {
   let status = "failure";
   let outputsSet = false;
@@ -22396,6 +22399,10 @@ async function run() {
   }
 }
 function handleShutdown(signal) {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
   core6.info(`Received ${signal}, initiating graceful shutdown...`);
   shutdownController.abort();
   if (hasOpenCodeServiceInstance()) {
@@ -22411,7 +22418,7 @@ function handleShutdown(signal) {
   const forceExitTimeout = setTimeout(() => {
     core6.warning("Graceful shutdown timed out, forcing exit");
     process.exit(1);
-  }, 1e4);
+  }, INPUT_LIMITS.SHUTDOWN_TIMEOUT_MS);
   if (runPromise) {
     void runPromise.finally(() => {
       clearTimeout(forceExitTimeout);
@@ -22426,6 +22433,15 @@ process.on("SIGTERM", () => void handleShutdown("SIGTERM"));
 process.on("SIGINT", () => void handleShutdown("SIGINT"));
 runPromise = run();
 runPromise.catch(() => {
+}).finally(() => {
+  if (hasOpenCodeServiceInstance()) {
+    try {
+      const opencode = getOpenCodeService();
+      opencode.dispose();
+    } catch {
+    }
+  }
+  process.exit(process.exitCode ?? 0);
 });
 /*! Bundled license information:
 

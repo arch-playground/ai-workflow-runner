@@ -53,6 +53,9 @@ export const INPUT_LIMITS = {
   MAX_VALIDATION_OUTPUT_SIZE: 102_400, // 100KB
   MAX_LAST_MESSAGE_SIZE: 102_400, // 100KB
   MAX_INLINE_SCRIPT_SIZE: 102_400, // 100KB
+  SHUTDOWN_TIMEOUT_MS: 10_000, // 10 seconds for graceful shutdown
 } as const;
+
+export type ShutdownSignal = 'SIGTERM' | 'SIGINT';
 
 export type ValidationScriptType = 'python' | 'javascript';

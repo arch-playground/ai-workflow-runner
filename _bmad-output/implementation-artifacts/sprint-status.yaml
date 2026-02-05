@@ -1,0 +1,84 @@
+# Sprint Status Tracking
+# Generated: 2026-02-04
+# Project: AI Workflow Runner
+
+# STATUS DEFINITIONS:
+# - backlog: Not started, in queue
+# - ready-for-dev: Story file created with full context, ready for implementation
+# - in-progress: Currently being worked on
+# - review: Implementation complete, awaiting code review
+# - done: Fully complete and merged
+
+sprint_info:
+  name: 'MVP Implementation Sprint'
+  started: '2026-02-04'
+  project: 'ai-workflow-runner'
+
+development_status:
+  # Epic 1: Project Foundation & Core Runner Infrastructure
+  epic-1: 'done'
+  1-1-define-typescript-types-and-constants: 'done'
+  1-2-create-action-metadata: 'done'
+  1-3-implement-input-configuration-parsing: 'done'
+  1-4-implement-path-security-validation: 'done'
+  1-5-implement-secret-masking: 'done'
+  1-6-implement-error-message-sanitization: 'done'
+  1-7-implement-basic-workflow-file-reading: 'done'
+  1-8-unit-tests-for-configuration-and-security: 'done'
+  epic-1-retrospective: 'ready-for-dev'
+
+  # Epic 2: OpenCode SDK Integration & AI Workflow Execution
+  epic-2: 'done'
+  2-1-create-opencode-service-singleton: 'done'
+  2-2-implement-sdk-initialization: 'done'
+  2-3-implement-session-creation-and-prompt-execution: 'done'
+  2-4-implement-session-idle-detection: 'done'
+  2-5-implement-real-time-output-streaming: 'done'
+  2-6-implement-message-capture-for-validation: 'done'
+  2-7-implement-permission-auto-approval: 'done'
+  2-8-implement-event-loop-with-reconnection: 'done'
+  2-9-implement-follow-up-messages: 'done'
+  2-10-combine-workflow-content-with-prompt: 'done'
+  epic-2-retrospective: 'ready-for-dev'
+
+  # Epic 3: Validation & Retry System
+  epic-3: 'done'
+  3-1-parse-validation-inputs: 'done'
+  3-2-implement-script-type-detection: 'done'
+  3-3-implement-interpreter-availability-check: 'done'
+  3-4-implement-validation-script-execution: 'done'
+  3-5-implement-script-output-parsing: 'done'
+  3-6-implement-script-timeout-and-kill: 'done'
+  3-7-implement-output-size-limits: 'done'
+  3-8-implement-validation-retry-loop: 'done'
+  epic-3-retrospective: 'ready-for-dev'
+
+  # Epic 4: Lifecycle Management & Graceful Shutdown
+  epic-4: 'done'
+  4-1-implement-main-entry-point: 'done'
+  4-2-implement-sigterm-sigint-handling: 'done'
+  4-3-implement-opencode-service-disposal: 'done'
+  4-4-implement-abort-signal-propagation: 'done'
+  4-5-implement-resource-cleanup: 'done'
+  4-6-implement-forced-exit-timeout: 'done'
+  epic-4-retrospective: 'ready-for-dev'
+
+  # Epic 5: Docker Container & Multi-Runtime Environment
+  epic-5: 'done'
+  5-1-create-multi-stage-dockerfile: 'done'
+  5-2-install-nodejs-20: 'done'
+  5-3-install-python-311: 'done'
+  5-4-install-java-21: 'done'
+  5-5-install-opencode-cli: 'done'
+  5-6-create-signal-forwarding-entrypoint: 'done'
+  epic-5-retrospective: 'ready-for-dev'
+
+  # Epic 6: CI/CD & Release Automation
+  epic-6: 'done'
+  6-1-create-ci-workflow: 'done'
+  6-2-create-docker-build-verification: 'done'
+  6-3-create-release-workflow: 'done'
+  6-4-create-e2e-test-workflow: 'done'
+  6-5-configure-dependabot: 'done'
+  6-6-configure-code-quality-tools: 'done'
+  epic-6-retrospective: 'ready-for-dev'
