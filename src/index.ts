@@ -9,15 +9,44 @@ const shutdownController = new AbortController();
 let runPromise: Promise<void> | null = null;
 let isShuttingDown = false;
 
+function setCancelledOutput(): void {
+  core.setOutput('status', 'cancelled');
+  core.setOutput('result', JSON.stringify({ cancelled: true }));
+}
+
+function disposeOpenCodeService(): void {
+  if (!hasOpenCodeServiceInstance()) {
+    return;
+  }
+  try {
+    const opencode = getOpenCodeService();
+    opencode.dispose();
+  } catch (error) {
+    core.warning(
+      `[Shutdown] Failed to dispose OpenCode service: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+function disposeOpenCodeServiceSilently(): void {
+  if (!hasOpenCodeServiceInstance()) {
+    return;
+  }
+  try {
+    const opencode = getOpenCodeService();
+    opencode.dispose();
+  } catch {
+    // Ignore disposal errors during normal exit
+  }
+}
+
 async function run(): Promise<void> {
   let status: ActionStatus = 'failure';
   let outputsSet = false;
 
   try {
     if (shutdownController.signal.aborted) {
-      status = 'cancelled';
-      core.setOutput('status', status);
-      core.setOutput('result', JSON.stringify({ cancelled: true }));
+      setCancelledOutput();
       outputsSet = true;
       return;
     }
@@ -35,9 +64,7 @@ async function run(): Promise<void> {
     const result = await runWorkflow(inputs, inputs.timeoutMs, shutdownController.signal);
 
     if (shutdownController.signal.aborted) {
-      status = 'cancelled';
-      core.setOutput('status', status);
-      core.setOutput('result', JSON.stringify({ cancelled: true }));
+      setCancelledOutput();
       outputsSet = true;
       return;
     }
@@ -73,19 +100,8 @@ function handleShutdown(signal: ShutdownSignal): void {
   isShuttingDown = true;
 
   core.info(`Received ${signal}, initiating graceful shutdown...`);
-
   shutdownController.abort();
-
-  if (hasOpenCodeServiceInstance()) {
-    try {
-      const opencode = getOpenCodeService();
-      opencode.dispose();
-    } catch (error) {
-      core.warning(
-        `[Shutdown] Failed to dispose OpenCode service: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }
+  disposeOpenCodeService();
 
   const forceExitTimeout = setTimeout(() => {
     core.warning('Graceful shutdown timed out, forcing exit');
@@ -112,16 +128,6 @@ runPromise
     // Error already handled in run()
   })
   .finally(() => {
-    // Dispose OpenCode service to release resources and allow process to exit
-    if (hasOpenCodeServiceInstance()) {
-      try {
-        const opencode = getOpenCodeService();
-        opencode.dispose();
-      } catch {
-        // Ignore disposal errors during normal exit
-      }
-    }
-    // Exit with appropriate code based on whether setFailed was called
-    // Note: process.exitCode is set by @actions/core when setFailed is called
+    disposeOpenCodeServiceSilently();
     process.exit(process.exitCode ?? 0);
   });

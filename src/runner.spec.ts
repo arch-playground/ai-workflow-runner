@@ -61,7 +61,7 @@ describe('runner', () => {
     prompt: 'Test prompt',
     envVars: { TEST_KEY: 'test_value' },
     timeoutMs: INPUT_LIMITS.DEFAULT_TIMEOUT_MINUTES * 60 * 1000,
-    validationMaxRetry: INPUT_LIMITS.DEFAULT_VALIDATION_RETRY,
+    maxValidationRetries: INPUT_LIMITS.DEFAULT_VALIDATION_RETRY,
     ...overrides,
   });
 
@@ -284,7 +284,7 @@ describe('runner', () => {
         .mockResolvedValueOnce({ success: false, continueMessage: 'Fix this' })
         .mockResolvedValueOnce({ success: true, continueMessage: '' });
 
-      const inputs = createValidInputs({ validationScript: 'check.py', validationMaxRetry: 3 });
+      const inputs = createValidInputs({ validationScript: 'check.py', maxValidationRetries: 3 });
       const result = await runWorkflow(inputs);
 
       expect(result.success).toBe(true);
@@ -306,7 +306,7 @@ describe('runner', () => {
         continueMessage: 'Still failing',
       });
 
-      const inputs = createValidInputs({ validationScript: 'check.py', validationMaxRetry: 2 });
+      const inputs = createValidInputs({ validationScript: 'check.py', maxValidationRetries: 2 });
       const result = await runWorkflow(inputs);
 
       expect(result.success).toBe(false);
@@ -394,7 +394,7 @@ describe('runner', () => {
         .mockRejectedValueOnce(new Error('Interpreter not found'))
         .mockResolvedValueOnce({ success: true, continueMessage: '' });
 
-      const inputs = createValidInputs({ validationScript: 'check.py', validationMaxRetry: 3 });
+      const inputs = createValidInputs({ validationScript: 'check.py', maxValidationRetries: 3 });
       const result = await runWorkflow(inputs);
 
       expect(result.success).toBe(true);

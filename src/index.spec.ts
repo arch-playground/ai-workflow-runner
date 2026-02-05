@@ -32,7 +32,7 @@ describe('index', () => {
     prompt: 'Test prompt',
     envVars: {},
     timeoutMs: 60000,
-    validationMaxRetry: 5,
+    maxValidationRetries: 5,
   });
 
   const setupMocks = (): void => {

@@ -1,7 +1,12 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
 import { ActionInputs, RunnerResult, OpenCodeSession, INPUT_LIMITS } from './types.js';
-import { validateWorkspacePath, validateRealPath, validateUtf8 } from './security.js';
+import {
+  validateWorkspacePath,
+  validateRealPath,
+  validateUtf8,
+  truncateString,
+} from './security.js';
 import { getOpenCodeService, OpenCodeService } from './opencode.js';
 import { executeValidationScript } from './validation.js';
 
@@ -58,14 +63,13 @@ export async function runWorkflow(
     session = await opencode.runSession(fullPrompt, timeoutMs, abortSignal);
 
     if (inputs.validationScript) {
-      session = await runValidationLoop(
+      session = await runValidationLoop(session, {
         opencode,
-        session,
         inputs,
         workspace,
         timeoutMs,
-        abortSignal
-      );
+        abortSignal,
+      });
     }
 
     const output = JSON.stringify({
@@ -73,14 +77,9 @@ export async function runWorkflow(
       lastMessage: session.lastMessage,
     });
 
-    const truncatedOutput =
-      output.length > INPUT_LIMITS.MAX_OUTPUT_SIZE
-        ? output.substring(0, INPUT_LIMITS.MAX_OUTPUT_SIZE) + '...[truncated]'
-        : output;
-
     return {
       success: true,
-      output: truncatedOutput,
+      output: truncateString(output, INPUT_LIMITS.MAX_OUTPUT_SIZE),
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -113,6 +112,14 @@ interface WorkflowValidationResult {
   valid: boolean;
   error?: string;
   absolutePath?: string;
+}
+
+interface ValidationLoopContext {
+  opencode: OpenCodeService;
+  inputs: ActionInputs;
+  workspace: string;
+  timeoutMs: number;
+  abortSignal?: AbortSignal;
 }
 
 function validateWorkflowFile(inputs: ActionInputs, workspace: string): WorkflowValidationResult {
@@ -173,17 +180,14 @@ function validateWorkflowFile(inputs: ActionInputs, workspace: string): Workflow
 }
 
 async function runValidationLoop(
-  opencode: OpenCodeService,
   session: OpenCodeSession,
-  inputs: ActionInputs,
-  workspace: string,
-  timeoutMs: number,
-  abortSignal?: AbortSignal
+  context: ValidationLoopContext
 ): Promise<OpenCodeSession> {
+  const { opencode, inputs, workspace, timeoutMs, abortSignal } = context;
   let currentSession = session;
 
-  for (let attempt = 1; attempt <= inputs.validationMaxRetry; attempt++) {
-    core.info(`[Validation] Attempt ${attempt}/${inputs.validationMaxRetry}`);
+  for (let attempt = 1; attempt <= inputs.maxValidationRetries; attempt++) {
+    core.info(`[Validation] Attempt ${attempt}/${inputs.maxValidationRetries}`);
 
     try {
       const validationResult = await executeValidationScript({
@@ -200,9 +204,9 @@ async function runValidationLoop(
         return currentSession;
       }
 
-      if (attempt === inputs.validationMaxRetry) {
+      if (attempt === inputs.maxValidationRetries) {
         throw new Error(
-          `Validation failed after ${inputs.validationMaxRetry} attempts. Last output: ${validationResult.continueMessage}`
+          `Validation failed after ${inputs.maxValidationRetries} attempts. Last output: ${validationResult.continueMessage}`
         );
       }
 
@@ -218,7 +222,7 @@ async function runValidationLoop(
         throw error;
       }
 
-      if (attempt === inputs.validationMaxRetry) {
+      if (attempt === inputs.maxValidationRetries) {
         throw error;
       }
 

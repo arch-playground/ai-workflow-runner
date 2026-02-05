@@ -75,3 +75,15 @@ export function validateUtf8(buffer: Buffer, filePath: string): string {
     throw new Error(`File is not valid UTF-8: ${path.basename(filePath)}`);
   }
 }
+
+const TRUNCATION_MARKER = '...[truncated]';
+
+/**
+ * Truncates a string to the specified maximum length, appending a marker if truncated.
+ */
+export function truncateString(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return value.substring(0, maxLength) + TRUNCATION_MARKER;
+}

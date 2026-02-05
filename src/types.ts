@@ -5,7 +5,7 @@ export interface ActionInputs {
   timeoutMs: number;
   validationScript?: string;
   validationScriptType?: ValidationScriptType;
-  validationMaxRetry: number;
+  maxValidationRetries: number;
 }
 
 export interface OpenCodeSession {
@@ -54,6 +54,8 @@ export const INPUT_LIMITS = {
   MAX_LAST_MESSAGE_SIZE: 102_400, // 100KB
   MAX_INLINE_SCRIPT_SIZE: 102_400, // 100KB
   SHUTDOWN_TIMEOUT_MS: 10_000, // 10 seconds for graceful shutdown
+  SIGKILL_GRACE_PERIOD_MS: 5_000, // 5 seconds to wait before SIGKILL
+  MAX_STDERR_SIZE: 10_000, // 10KB for stderr capture
 } as const;
 
 export type ShutdownSignal = 'SIGTERM' | 'SIGINT';

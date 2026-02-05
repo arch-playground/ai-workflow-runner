@@ -1,8 +1,8 @@
 import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk';
 import * as core from '@actions/core';
 import { OpenCodeSession, INPUT_LIMITS } from './types.js';
+import { truncateString } from './security.js';
 
-// F13 Fix: Extract magic strings as constants
 const SESSION_STATUS = {
   IDLE: 'idle',
   ERROR: 'error',
@@ -32,6 +32,11 @@ interface SessionMessageState {
   currentMessageId: string | null;
   messageBuffer: string;
   lastCompleteMessage: string;
+}
+
+interface ParsedEvent {
+  type: string;
+  properties?: Record<string, unknown>;
 }
 
 let openCodeServiceInstance: OpenCodeService | null = null;
@@ -102,7 +107,6 @@ export class OpenCodeService {
     timeoutMs: number,
     abortSignal?: AbortSignal
   ): Promise<OpenCodeSession> {
-    // F4 Fix: Check disposed state before proceeding
     if (this.isDisposed) {
       throw new Error('OpenCode service disposed - cannot run session');
     }
@@ -158,10 +162,7 @@ export class OpenCodeService {
       sessionState.messageBuffer = '';
     }
 
-    const truncatedMessage =
-      message.length > INPUT_LIMITS.MAX_VALIDATION_OUTPUT_SIZE
-        ? message.substring(0, INPUT_LIMITS.MAX_VALIDATION_OUTPUT_SIZE) + '...[truncated]'
-        : message;
+    const truncatedMessage = truncateString(message, INPUT_LIMITS.MAX_VALIDATION_OUTPUT_SIZE);
 
     core.info(`[OpenCode] Sending follow-up: ${truncatedMessage.substring(0, 100)}...`);
 
@@ -181,9 +182,8 @@ export class OpenCodeService {
     const message = state?.lastCompleteMessage || state?.messageBuffer || '';
     if (message.length > INPUT_LIMITS.MAX_LAST_MESSAGE_SIZE) {
       core.warning('[OpenCode] Last message truncated due to size limit');
-      return message.substring(0, INPUT_LIMITS.MAX_LAST_MESSAGE_SIZE) + '...[truncated]';
     }
-    return message;
+    return truncateString(message, INPUT_LIMITS.MAX_LAST_MESSAGE_SIZE);
   }
 
   dispose(): void {
@@ -239,31 +239,12 @@ export class OpenCodeService {
 
         if (attempt < maxReconnectAttempts - 1) {
           core.info(`[OpenCode] Attempting to reconnect event loop in ${reconnectDelayMs}ms...`);
-          // F12 Fix: Use abortable delay to prevent reconnection after dispose
-          await new Promise<void>((resolve) => {
-            const timeoutId = setTimeout(() => resolve(), reconnectDelayMs);
-            if (signal) {
-              const abortHandler = (): void => {
-                clearTimeout(timeoutId);
-                resolve();
-              };
-              signal.addEventListener('abort', abortHandler, { once: true });
-            }
-          });
+          await this.abortableDelay(reconnectDelayMs, signal);
           if (!signal?.aborted) {
             void runLoop(attempt + 1);
           }
         } else {
-          core.error(
-            '[OpenCode] Event loop failed after max reconnection attempts. Session idle detection may not work.'
-          );
-          for (const [, callbacks] of this.sessionCompletionCallbacks) {
-            if (callbacks.abortCleanup) callbacks.abortCleanup();
-            callbacks.reject(
-              new Error('Event loop disconnected - cannot detect session completion')
-            );
-          }
-          this.sessionCompletionCallbacks.clear();
+          this.handleEventLoopFailure();
         }
       }
     };
@@ -271,103 +252,146 @@ export class OpenCodeService {
     void runLoop();
   }
 
+  private abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const timeoutId = setTimeout(() => resolve(), ms);
+      if (signal) {
+        const abortHandler = (): void => {
+          clearTimeout(timeoutId);
+          resolve();
+        };
+        signal.addEventListener('abort', abortHandler, { once: true });
+      }
+    });
+  }
+
+  private handleEventLoopFailure(): void {
+    core.error(
+      '[OpenCode] Event loop failed after max reconnection attempts. Session idle detection may not work.'
+    );
+    for (const [, callbacks] of this.sessionCompletionCallbacks) {
+      if (callbacks.abortCleanup) callbacks.abortCleanup();
+      callbacks.reject(new Error('Event loop disconnected - cannot detect session completion'));
+    }
+    this.sessionCompletionCallbacks.clear();
+  }
+
   private handleEvent(event: unknown, client: OpencodeClient): void {
     if (!event || typeof event !== 'object' || !('type' in event)) return;
-    const e = event as { type: string; properties?: Record<string, unknown> };
+    const parsedEvent = event as ParsedEvent;
 
-    if (e.type === EVENT_TYPES.PERMISSION_UPDATED) {
-      const permission = e.properties as { sessionID?: string; id?: string };
-      if (permission.sessionID && permission.id) {
-        void client
-          .postSessionIdPermissionsPermissionId({
-            path: { id: permission.sessionID, permissionID: permission.id },
-            body: { response: 'always' },
-          })
-          .catch((err) => {
-            core.warning(`[OpenCode] Failed to auto-approve permission ${permission.id}: ${err}`);
-          });
-      }
+    switch (parsedEvent.type) {
+      case EVENT_TYPES.PERMISSION_UPDATED:
+        this.handlePermissionUpdated(parsedEvent, client);
+        break;
+      case EVENT_TYPES.MESSAGE_UPDATED:
+        this.handleMessageUpdated(parsedEvent);
+        break;
+      case EVENT_TYPES.MESSAGE_PART_UPDATED:
+        this.handleMessagePartUpdated(parsedEvent);
+        break;
+      case EVENT_TYPES.SESSION_IDLE:
+      case EVENT_TYPES.SESSION_STATUS:
+        this.handleSessionStatusChange(parsedEvent);
+        break;
     }
+  }
 
-    if (e.type === EVENT_TYPES.MESSAGE_UPDATED) {
-      const info = (e.properties as { info?: { id?: string; role?: string; sessionID?: string } })
-        ?.info;
-      if (info?.role === 'assistant' && info.id && info.sessionID) {
-        const state = this.sessionMessageState.get(info.sessionID);
-        if (state) {
-          if (state.currentMessageId && state.currentMessageId !== info.id && state.messageBuffer) {
-            state.lastCompleteMessage = state.messageBuffer;
-          }
-          if (state.currentMessageId !== info.id) {
-            state.currentMessageId = info.id;
-            state.messageBuffer = '';
-          }
-        }
-      }
+  private handlePermissionUpdated(event: ParsedEvent, client: OpencodeClient): void {
+    const permission = event.properties as { sessionID?: string; id?: string };
+    if (permission.sessionID && permission.id) {
+      void client
+        .postSessionIdPermissionsPermissionId({
+          path: { id: permission.sessionID, permissionID: permission.id },
+          body: { response: 'always' },
+        })
+        .catch((err) => {
+          core.warning(`[OpenCode] Failed to auto-approve permission ${permission.id}: ${err}`);
+        });
     }
+  }
 
-    // F14 Fix: Combined duplicate message.part.updated handlers
-    if (e.type === EVENT_TYPES.MESSAGE_PART_UPDATED) {
-      const part = (
-        e.properties as {
-          part?: {
-            type?: string;
-            text?: string;
-            messageID?: string;
-            sessionID?: string;
-            tool?: string;
-            state?: { status?: string };
-          };
-        }
-      )?.part;
-
-      // Handle text parts
-      if (part?.type === 'text' && part.text && part.sessionID) {
-        const state = this.sessionMessageState.get(part.sessionID);
-        if (state) {
-          if (!state.currentMessageId || part.messageID === state.currentMessageId) {
-            core.info(`[OpenCode] ${part.text}`);
-            state.messageBuffer += part.text;
-          }
-        }
-      }
-
-      // Handle tool parts
-      if (part?.type === 'tool' && part.tool && part.state?.status) {
-        core.info(`[OpenCode] Tool: ${part.tool} - ${part.state.status}`);
-      }
-    }
-
-    if (e.type === EVENT_TYPES.SESSION_IDLE || e.type === EVENT_TYPES.SESSION_STATUS) {
-      const props = e.properties as {
-        sessionID?: string;
-        status?: { type?: string; error?: string };
-      };
-      const sessionID = props?.sessionID;
-      const statusType = props?.status?.type;
-      const isIdle = e.type === EVENT_TYPES.SESSION_IDLE || statusType === SESSION_STATUS.IDLE;
-      const isError =
-        statusType === SESSION_STATUS.ERROR || statusType === SESSION_STATUS.DISCONNECTED;
-
-      if (sessionID && (isIdle || isError)) {
-        const state = this.sessionMessageState.get(sessionID);
-        if (state && state.messageBuffer) {
+  private handleMessageUpdated(event: ParsedEvent): void {
+    const info = (event.properties as { info?: { id?: string; role?: string; sessionID?: string } })
+      ?.info;
+    if (info?.role === 'assistant' && info.id && info.sessionID) {
+      const state = this.sessionMessageState.get(info.sessionID);
+      if (state) {
+        if (state.currentMessageId && state.currentMessageId !== info.id && state.messageBuffer) {
           state.lastCompleteMessage = state.messageBuffer;
         }
-
-        const callbacks = this.sessionCompletionCallbacks.get(sessionID);
-        if (callbacks) {
-          if (callbacks.abortCleanup) callbacks.abortCleanup();
-          this.sessionCompletionCallbacks.delete(sessionID);
-
-          if (isError) {
-            callbacks.reject(
-              new Error(`Session ${statusType}: ${props?.status?.error || 'unknown error'}`)
-            );
-          } else {
-            callbacks.resolve();
-          }
+        if (state.currentMessageId !== info.id) {
+          state.currentMessageId = info.id;
+          state.messageBuffer = '';
         }
+      }
+    }
+  }
+
+  private handleMessagePartUpdated(event: ParsedEvent): void {
+    const part = (
+      event.properties as {
+        part?: {
+          type?: string;
+          text?: string;
+          messageID?: string;
+          sessionID?: string;
+          tool?: string;
+          state?: { status?: string };
+        };
+      }
+    )?.part;
+
+    if (part?.type === 'text' && part.text && part.sessionID) {
+      this.handleTextPart(part);
+    }
+
+    if (part?.type === 'tool' && part.tool && part.state?.status) {
+      core.info(`[OpenCode] Tool: ${part.tool} - ${part.state.status}`);
+    }
+  }
+
+  private handleTextPart(part: { text?: string; messageID?: string; sessionID?: string }): void {
+    const state = this.sessionMessageState.get(part.sessionID!);
+    if (state) {
+      if (!state.currentMessageId || part.messageID === state.currentMessageId) {
+        core.info(`[OpenCode] ${part.text}`);
+        state.messageBuffer += part.text;
+      }
+    }
+  }
+
+  private handleSessionStatusChange(event: ParsedEvent): void {
+    const props = event.properties as {
+      sessionID?: string;
+      status?: { type?: string; error?: string };
+    };
+    const sessionID = props?.sessionID;
+    const statusType = props?.status?.type;
+    const isIdle = event.type === EVENT_TYPES.SESSION_IDLE || statusType === SESSION_STATUS.IDLE;
+    const isError =
+      statusType === SESSION_STATUS.ERROR || statusType === SESSION_STATUS.DISCONNECTED;
+
+    if (sessionID && (isIdle || isError)) {
+      this.finalizeSession(sessionID, isError, props?.status?.error);
+    }
+  }
+
+  private finalizeSession(sessionID: string, isError: boolean, errorMessage?: string): void {
+    const state = this.sessionMessageState.get(sessionID);
+    if (state && state.messageBuffer) {
+      state.lastCompleteMessage = state.messageBuffer;
+    }
+
+    const callbacks = this.sessionCompletionCallbacks.get(sessionID);
+    if (callbacks) {
+      if (callbacks.abortCleanup) callbacks.abortCleanup();
+      this.sessionCompletionCallbacks.delete(sessionID);
+
+      if (isError) {
+        callbacks.reject(new Error(`Session error: ${errorMessage || 'unknown error'}`));
+      } else {
+        callbacks.resolve();
       }
     }
   }

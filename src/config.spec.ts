@@ -395,7 +395,7 @@ describe('config', () => {
 
       const inputs = getInputs();
 
-      expect(inputs.validationMaxRetry).toBe(5);
+      expect(inputs.maxValidationRetries).toBe(5);
     });
 
     it('parses custom validation_max_retry', () => {
@@ -412,7 +412,7 @@ describe('config', () => {
 
       const inputs = getInputs();
 
-      expect(inputs.validationMaxRetry).toBe(10);
+      expect(inputs.maxValidationRetries).toBe(10);
     });
 
     it('rejects validation_max_retry below 1', () => {
@@ -506,7 +506,7 @@ describe('config', () => {
         prompt: 'Test prompt',
         envVars: { KEY: 'value' },
         timeoutMs: DEFAULT_TIMEOUT,
-        validationMaxRetry: DEFAULT_VALIDATION_RETRY,
+        maxValidationRetries: DEFAULT_VALIDATION_RETRY,
       };
 
       const result = validateInputs(inputs);
@@ -521,7 +521,7 @@ describe('config', () => {
         prompt: '',
         envVars: {},
         timeoutMs: DEFAULT_TIMEOUT,
-        validationMaxRetry: DEFAULT_VALIDATION_RETRY,
+        maxValidationRetries: DEFAULT_VALIDATION_RETRY,
       };
 
       const result = validateInputs(inputs);
@@ -536,7 +536,7 @@ describe('config', () => {
         prompt: '',
         envVars: {},
         timeoutMs: DEFAULT_TIMEOUT,
-        validationMaxRetry: DEFAULT_VALIDATION_RETRY,
+        maxValidationRetries: DEFAULT_VALIDATION_RETRY,
       };
 
       const result = validateInputs(inputs);
@@ -551,7 +551,7 @@ describe('config', () => {
         prompt: '',
         envVars: {},
         timeoutMs: DEFAULT_TIMEOUT,
-        validationMaxRetry: DEFAULT_VALIDATION_RETRY,
+        maxValidationRetries: DEFAULT_VALIDATION_RETRY,
       };
 
       const result = validateInputs(inputs);
@@ -566,7 +566,7 @@ describe('config', () => {
         prompt: 'x'.repeat(INPUT_LIMITS.MAX_PROMPT_LENGTH + 1),
         envVars: {},
         timeoutMs: DEFAULT_TIMEOUT,
-        validationMaxRetry: DEFAULT_VALIDATION_RETRY,
+        maxValidationRetries: DEFAULT_VALIDATION_RETRY,
       };
 
       const result = validateInputs(inputs);

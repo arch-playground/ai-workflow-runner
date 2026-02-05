@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as core from '@actions/core';
 import { ValidationScriptType, ValidationOutput, INPUT_LIMITS } from './types.js';
-import { validateWorkspacePath } from './security.js';
+import { validateWorkspacePath, truncateString } from './security.js';
 
 export interface ValidationInput {
   script: string;
@@ -22,43 +22,80 @@ interface ScriptDetectionResult {
   isInline: boolean;
 }
 
-export function detectScriptType(
-  script: string,
-  providedType?: ValidationScriptType
-): ScriptDetectionResult {
-  const lowerScript = script.toLowerCase();
+interface RunScriptInput {
+  command: string;
+  scriptPath: string;
+  lastMessage: string;
+  envVars: Record<string, string>;
+  abortSignal?: AbortSignal;
+}
 
-  if (lowerScript.endsWith('.sh') || lowerScript.endsWith('.bash')) {
+function rejectUnsupportedExtension(scriptLowerCase: string): void {
+  if (scriptLowerCase.endsWith('.sh') || scriptLowerCase.endsWith('.bash')) {
     throw new Error(
       'Shell scripts (.sh, .bash) are not supported. Use Python (.py) or JavaScript (.js) for validation scripts.'
     );
   }
-  if (lowerScript.endsWith('.ts')) {
+  if (scriptLowerCase.endsWith('.ts')) {
     throw new Error(
       'TypeScript (.ts) is not directly supported. Use JavaScript (.js) or compile TypeScript to JavaScript first.'
     );
   }
+}
 
-  if (lowerScript.endsWith('.py')) return { type: 'python', code: script, isInline: false };
-  if (lowerScript.endsWith('.js')) return { type: 'javascript', code: script, isInline: false };
+function detectByFileExtension(
+  script: string,
+  scriptLowerCase: string
+): ScriptDetectionResult | null {
+  if (scriptLowerCase.endsWith('.py')) {
+    return { type: 'python', code: script, isInline: false };
+  }
+  if (scriptLowerCase.endsWith('.js')) {
+    return { type: 'javascript', code: script, isInline: false };
+  }
+  return null;
+}
 
-  if (lowerScript.startsWith('python:')) {
-    const code = script.slice(7).trim();
-    if (!code) throw new Error('Empty inline script: python: prefix provided with no code');
-    return { type: 'python', code, isInline: true };
+function extractInlineCode(script: string, prefixLength: number): string {
+  const code = script.slice(prefixLength).trim();
+  if (!code) {
+    throw new Error(
+      `Empty inline script: ${script.substring(0, prefixLength)} prefix provided with no code`
+    );
   }
-  if (lowerScript.startsWith('javascript:')) {
-    const code = script.slice(11).trim();
-    if (!code) throw new Error('Empty inline script: javascript: prefix provided with no code');
-    return { type: 'javascript', code, isInline: true };
-  }
-  if (lowerScript.startsWith('js:')) {
-    const code = script.slice(3).trim();
-    if (!code) throw new Error('Empty inline script: js: prefix provided with no code');
-    return { type: 'javascript', code, isInline: true };
-  }
+  return code;
+}
 
-  if (providedType) return { type: providedType, code: script, isInline: true };
+function detectByPrefix(script: string, scriptLowerCase: string): ScriptDetectionResult | null {
+  if (scriptLowerCase.startsWith('python:')) {
+    return { type: 'python', code: extractInlineCode(script, 7), isInline: true };
+  }
+  if (scriptLowerCase.startsWith('javascript:')) {
+    return { type: 'javascript', code: extractInlineCode(script, 11), isInline: true };
+  }
+  if (scriptLowerCase.startsWith('js:')) {
+    return { type: 'javascript', code: extractInlineCode(script, 3), isInline: true };
+  }
+  return null;
+}
+
+export function detectScriptType(
+  script: string,
+  providedType?: ValidationScriptType
+): ScriptDetectionResult {
+  const scriptLowerCase = script.toLowerCase();
+
+  rejectUnsupportedExtension(scriptLowerCase);
+
+  const byExtension = detectByFileExtension(script, scriptLowerCase);
+  if (byExtension) return byExtension;
+
+  const byPrefix = detectByPrefix(script, scriptLowerCase);
+  if (byPrefix) return byPrefix;
+
+  if (providedType) {
+    return { type: providedType, code: script, isInline: true };
+  }
 
   throw new Error(
     'Cannot determine script type. Use file extension (.py/.js), prefix (python:/javascript:), or set validation_script_type.'
@@ -70,7 +107,6 @@ async function checkInterpreterAvailable(command: string): Promise<boolean> {
     const child = spawn(command, ['--version'], { stdio: 'ignore' });
 
     const timeoutId = setTimeout(() => {
-      // F17 Fix: Log timeout condition to help users diagnose interpreter issues
       core.warning(
         `[Validation] Interpreter check for '${command}' timed out after ${INPUT_LIMITS.INTERPRETER_CHECK_TIMEOUT_MS}ms`
       );
@@ -89,6 +125,36 @@ async function checkInterpreterAvailable(command: string): Promise<boolean> {
   });
 }
 
+function createTempScriptFile(detection: ScriptDetectionResult): string {
+  const ext = detection.type === 'python' ? '.py' : '.js';
+  const tempFile = path.join(os.tmpdir(), `validation-${randomUUID()}${ext}`);
+  // Use O_EXCL flag to prevent TOCTOU race condition (atomic create)
+  const fd = fs.openSync(
+    tempFile,
+    fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
+    0o600
+  );
+  fs.writeSync(fd, detection.code, 0, 'utf8');
+  fs.closeSync(fd);
+  return tempFile;
+}
+
+function resolveScriptPath(
+  detection: ScriptDetectionResult,
+  workspacePath: string
+): { scriptPath: string; tempFile: string | null } {
+  if (detection.isInline) {
+    const tempFile = createTempScriptFile(detection);
+    return { scriptPath: tempFile, tempFile };
+  }
+
+  const scriptPath = validateWorkspacePath(workspacePath, detection.code);
+  if (!fs.existsSync(scriptPath)) {
+    throw new Error(`Validation script not found: ${detection.code}`);
+  }
+  return { scriptPath, tempFile: null };
+}
+
 export async function executeValidationScript(input: ValidationInput): Promise<ValidationOutput> {
   const { script, scriptType, lastMessage, workspacePath, envVars, abortSignal } = input;
   const detection = detectScriptType(script, scriptType);
@@ -103,30 +169,10 @@ export async function executeValidationScript(input: ValidationInput): Promise<V
 
   core.info(`[Validation] Executing ${detection.type} script (inline: ${detection.isInline})`);
 
-  let scriptPath: string;
-  let tempFile: string | null = null;
-
-  if (detection.isInline) {
-    const ext = detection.type === 'python' ? '.py' : '.js';
-    tempFile = path.join(os.tmpdir(), `validation-${randomUUID()}${ext}`);
-    // F7 Fix: Use O_EXCL flag to prevent TOCTOU race condition (atomic create)
-    const fd = fs.openSync(
-      tempFile,
-      fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
-      0o600
-    );
-    fs.writeSync(fd, detection.code, 0, 'utf8');
-    fs.closeSync(fd);
-    scriptPath = tempFile;
-  } else {
-    scriptPath = validateWorkspacePath(workspacePath, detection.code);
-    if (!fs.existsSync(scriptPath)) {
-      throw new Error(`Validation script not found: ${detection.code}`);
-    }
-  }
+  const { scriptPath, tempFile } = resolveScriptPath(detection, workspacePath);
 
   try {
-    const output = await runScript(command, scriptPath, lastMessage, envVars, abortSignal);
+    const output = await runScript({ command, scriptPath, lastMessage, envVars, abortSignal });
     return parseValidationOutput(output);
   } finally {
     if (tempFile && fs.existsSync(tempFile)) {
@@ -135,31 +181,31 @@ export async function executeValidationScript(input: ValidationInput): Promise<V
   }
 }
 
-function runScript(
-  command: string,
-  scriptPath: string,
-  lastMessage: string,
+function buildChildEnv(
   envVars: Record<string, string>,
-  abortSignal?: AbortSignal
-): Promise<string> {
+  sanitizedLastMessage: string
+): Record<string, string> {
+  // Only pass essential env vars + user-provided vars to prevent leaking secrets
+  const essentialEnvVars: Record<string, string> = {
+    PATH: process.env['PATH'] || '',
+    HOME: process.env['HOME'] || '',
+    LANG: process.env['LANG'] || 'en_US.UTF-8',
+    TERM: process.env['TERM'] || 'xterm',
+  };
+  return { ...essentialEnvVars, ...envVars, AI_LAST_MESSAGE: sanitizedLastMessage };
+}
+
+function runScript(input: RunScriptInput): Promise<string> {
+  const { command, scriptPath, lastMessage, envVars, abortSignal } = input;
+
   return new Promise((resolve, reject) => {
-    // eslint-disable-next-line no-control-regex
-    let sanitizedLastMessage = lastMessage.replace(/\x00/g, '');
-    if (sanitizedLastMessage.length > INPUT_LIMITS.MAX_LAST_MESSAGE_SIZE) {
-      sanitizedLastMessage =
-        sanitizedLastMessage.substring(0, INPUT_LIMITS.MAX_LAST_MESSAGE_SIZE) + '...[truncated]';
-    }
+    const sanitizedLastMessage = truncateString(
+      // eslint-disable-next-line no-control-regex
+      lastMessage.replace(/\x00/g, ''),
+      INPUT_LIMITS.MAX_LAST_MESSAGE_SIZE
+    );
 
-    // F3 Fix: Only pass essential env vars + user-provided vars, not full process.env
-    // This prevents leaking sensitive GitHub Actions secrets to validation scripts
-    const essentialEnvVars: Record<string, string> = {
-      PATH: process.env['PATH'] || '',
-      HOME: process.env['HOME'] || '',
-      LANG: process.env['LANG'] || 'en_US.UTF-8',
-      TERM: process.env['TERM'] || 'xterm',
-    };
-    const childEnv = { ...essentialEnvVars, ...envVars, AI_LAST_MESSAGE: sanitizedLastMessage };
-
+    const childEnv = buildChildEnv(envVars, sanitizedLastMessage);
     const child: ChildProcess = spawn(command, [scriptPath], {
       env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -179,7 +225,7 @@ function runScript(
           core.warning('[Validation] Process did not respond to SIGTERM, sending SIGKILL');
           child.kill('SIGKILL');
         }
-      }, 5000);
+      }, INPUT_LIMITS.SIGKILL_GRACE_PERIOD_MS);
     }, INPUT_LIMITS.VALIDATION_SCRIPT_TIMEOUT_MS);
 
     if (abortSignal) {
@@ -213,8 +259,8 @@ function runScript(
     });
 
     child.stderr?.on('data', (data: Buffer) => {
-      if (stderr.length < 10000) {
-        stderr += data.toString().substring(0, 10000 - stderr.length);
+      if (stderr.length < INPUT_LIMITS.MAX_STDERR_SIZE) {
+        stderr += data.toString().substring(0, INPUT_LIMITS.MAX_STDERR_SIZE - stderr.length);
       }
     });
 

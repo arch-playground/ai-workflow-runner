@@ -429,7 +429,7 @@ describe('OpenCodeService', () => {
         },
       });
 
-      await expect(sessionPromise).rejects.toThrow('Session disconnected: Connection lost');
+      await expect(sessionPromise).rejects.toThrow('Session error: Connection lost');
     });
 
     it('streams message content via core.info()', async () => {
