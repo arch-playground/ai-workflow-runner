@@ -29,7 +29,7 @@
   "author": "TanNT",
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^1.10.1",
+    "@actions/core": "^3.0.0",
     "@opencode-ai/sdk": "^1.1.28"
   },
   "devDependencies": {
