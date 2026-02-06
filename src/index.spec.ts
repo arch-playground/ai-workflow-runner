@@ -451,7 +451,7 @@ describe('index', () => {
 
       // Act - Trigger shutdown which aborts the signal
       sigTermHandler!();
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await flushPromises();
 
       // Assert
       expect(mockCore.setOutput).toHaveBeenCalledWith('status', 'cancelled');

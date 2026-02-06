@@ -86,7 +86,7 @@ development_status:
   # Epic 7: Configuration Customization & Examples
   epic-7: 'in-progress'
   7-1-add-configuration-inputs-to-action: 'done'
-  7-2-parse-configuration-inputs: 'backlog'
+  7-2-parse-configuration-inputs: 'done'
   7-3-load-config-files-and-pass-to-sdk: 'backlog'
   7-4-implement-list-models-feature: 'backlog'
   7-5-create-example-workflows: 'backlog'

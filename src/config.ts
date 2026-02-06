@@ -5,7 +5,7 @@ import {
   INPUT_LIMITS,
   type ValidationScriptType,
 } from './types.js';
-import { maskSecrets } from './security.js';
+import { maskSecrets, validateWorkspacePath } from './security.js';
 
 const RESERVED_ENV_VARS = new Set([
   'PATH',
@@ -146,11 +146,19 @@ export function getInputs(): ActionInputs {
 
   const maxValidationRetries = parseValidationMaxRetry(maxValidationRetriesRaw);
 
-  const opencodeConfig = core.getInput('opencode_config') || undefined;
-  const authConfig = core.getInput('auth_config') || undefined;
+  const opencodeConfigRaw = core.getInput('opencode_config') || undefined;
+  const authConfigRaw = core.getInput('auth_config') || undefined;
   const model = core.getInput('model') || undefined;
   const listModelsRaw = core.getInput('list_models') || 'false';
   const listModels = listModelsRaw.trim().toLowerCase() === 'true';
+
+  const workspacePath = process.env.GITHUB_WORKSPACE || process.cwd();
+  const opencodeConfig = opencodeConfigRaw
+    ? validateWorkspacePath(workspacePath, opencodeConfigRaw)
+    : undefined;
+  const authConfig = authConfigRaw
+    ? validateWorkspacePath(workspacePath, authConfigRaw)
+    : undefined;
 
   return {
     workflowPath,

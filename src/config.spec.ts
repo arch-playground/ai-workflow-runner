@@ -1,10 +1,19 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as yaml from 'js-yaml';
 import * as core from '@actions/core';
 import { getInputs, validateInputs } from './config';
 import { INPUT_LIMITS } from './types';
+import { maskSecrets, validateWorkspacePath } from './security';
 
 jest.mock('@actions/core');
+jest.mock('./security');
 
 const mockCore = core as jest.Mocked<typeof core>;
+const mockMaskSecrets = maskSecrets as jest.MockedFunction<typeof maskSecrets>;
+const mockValidateWorkspacePath = validateWorkspacePath as jest.MockedFunction<
+  typeof validateWorkspacePath
+>;
 
 function mockInputs(overrides: Record<string, string> = {}): void {
   const defaults: Record<string, string> = { workflow_path: 'test.md' };
@@ -55,8 +64,7 @@ describe('config', () => {
       getInputs();
 
       // Assert
-      expect(mockCore.setSecret).toHaveBeenCalledWith('value1');
-      expect(mockCore.setSecret).toHaveBeenCalledWith('value2');
+      expect(mockMaskSecrets).toHaveBeenCalledWith({ SECRET1: 'value1', SECRET2: 'value2' });
     });
 
     it('rejects env_vars exceeding size limit', () => {
@@ -296,15 +304,17 @@ describe('config', () => {
       expect(() => getInputs()).toThrow('validation_script exceeds maximum size');
     });
 
-    it('captures opencode_config path when provided', () => {
+    it('validates opencode_config within workspace (7.2-UNIT-001, 7.2-UNIT-002)', () => {
       // Arrange
       mockInputs({ opencode_config: 'config/opencode.json' });
+      mockValidateWorkspacePath.mockReturnValue('/workspace/config/opencode.json');
 
       // Act
       const inputs = getInputs();
 
       // Assert
-      expect(inputs.opencodeConfig).toBe('config/opencode.json');
+      expect(mockValidateWorkspacePath).toHaveBeenCalledWith(process.cwd(), 'config/opencode.json');
+      expect(inputs.opencodeConfig).toBe('/workspace/config/opencode.json');
     });
 
     it('returns undefined for opencodeConfig when input is empty', () => {
@@ -318,15 +328,32 @@ describe('config', () => {
       expect(inputs.opencodeConfig).toBeUndefined();
     });
 
-    it('captures auth_config path when provided', () => {
+    it('rejects opencode_config with path traversal (7.2-UNIT-003)', () => {
+      // Arrange
+      mockInputs({ opencode_config: '../../../etc/secrets' });
+      mockValidateWorkspacePath.mockImplementation(() => {
+        throw new Error(
+          'Invalid workflow path: absolute paths and parent directory references are not allowed'
+        );
+      });
+
+      // Act & Assert
+      expect(() => getInputs()).toThrow(
+        'Invalid workflow path: absolute paths and parent directory references are not allowed'
+      );
+    });
+
+    it('validates auth_config within workspace (7.2-UNIT-004, 7.2-UNIT-005)', () => {
       // Arrange
       mockInputs({ auth_config: 'config/auth.json' });
+      mockValidateWorkspacePath.mockReturnValue('/workspace/config/auth.json');
 
       // Act
       const inputs = getInputs();
 
       // Assert
-      expect(inputs.authConfig).toBe('config/auth.json');
+      expect(mockValidateWorkspacePath).toHaveBeenCalledWith(process.cwd(), 'config/auth.json');
+      expect(inputs.authConfig).toBe('/workspace/config/auth.json');
     });
 
     it('returns undefined for authConfig when input is empty', () => {
@@ -338,6 +365,55 @@ describe('config', () => {
 
       // Assert
       expect(inputs.authConfig).toBeUndefined();
+    });
+
+    it('rejects auth_config with path traversal (7.2-UNIT-006)', () => {
+      // Arrange
+      mockInputs({ auth_config: '../../../etc/passwd' });
+      mockValidateWorkspacePath.mockImplementation(() => {
+        throw new Error(
+          'Invalid workflow path: absolute paths and parent directory references are not allowed'
+        );
+      });
+
+      // Act & Assert
+      expect(() => getInputs()).toThrow(
+        'Invalid workflow path: absolute paths and parent directory references are not allowed'
+      );
+    });
+
+    it('does not call validateWorkspacePath when configs are empty', () => {
+      // Arrange
+      mockInputs();
+
+      // Act
+      getInputs();
+
+      // Assert
+      expect(mockValidateWorkspacePath).not.toHaveBeenCalled();
+    });
+
+    it('uses GITHUB_WORKSPACE for path validation when set', () => {
+      // Arrange
+      const originalEnv = process.env.GITHUB_WORKSPACE;
+      process.env.GITHUB_WORKSPACE = '/github/workspace';
+
+      try {
+        mockInputs({ opencode_config: 'config/opencode.json' });
+        mockValidateWorkspacePath.mockReturnValue('/github/workspace/config/opencode.json');
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(mockValidateWorkspacePath).toHaveBeenCalledWith(
+          '/github/workspace',
+          'config/opencode.json'
+        );
+        expect(inputs.opencodeConfig).toBe('/github/workspace/config/opencode.json');
+      } finally {
+        process.env.GITHUB_WORKSPACE = originalEnv;
+      }
     });
 
     it('captures model string when provided', () => {
@@ -415,6 +491,56 @@ describe('config', () => {
 
       // Assert
       expect(inputs.listModels).toBe(true);
+    });
+  });
+
+  describe('action.yml schema', () => {
+    interface ActionYmlInput {
+      description: string;
+      required?: boolean;
+      default?: string;
+    }
+
+    let actionInputs: Record<string, ActionYmlInput>;
+
+    beforeAll(() => {
+      const actionYmlPath = path.resolve(__dirname, '..', 'action.yml');
+      const actionYml = yaml.load(fs.readFileSync(actionYmlPath, 'utf8')) as {
+        inputs: Record<string, ActionYmlInput>;
+      };
+      actionInputs = actionYml.inputs;
+    });
+
+    it('defines opencode_config as optional string with empty default (7.1-UNIT-001)', () => {
+      // Assert
+      const input = actionInputs['opencode_config']!;
+      expect(input).toBeDefined();
+      expect(input.required).toBe(false);
+      expect(input.default).toBe('');
+    });
+
+    it('defines auth_config as optional string with empty default (7.1-UNIT-002)', () => {
+      // Assert
+      const input = actionInputs['auth_config']!;
+      expect(input).toBeDefined();
+      expect(input.required).toBe(false);
+      expect(input.default).toBe('');
+    });
+
+    it('defines model as optional string with empty default (7.1-UNIT-003)', () => {
+      // Assert
+      const input = actionInputs['model']!;
+      expect(input).toBeDefined();
+      expect(input.required).toBe(false);
+      expect(input.default).toBe('');
+    });
+
+    it('defines list_models as optional boolean with false default (7.1-UNIT-004)', () => {
+      // Assert
+      const input = actionInputs['list_models']!;
+      expect(input).toBeDefined();
+      expect(input.required).toBe(false);
+      expect(input.default).toBe('false');
     });
   });
 
