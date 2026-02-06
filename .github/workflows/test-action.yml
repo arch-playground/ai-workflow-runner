@@ -22,7 +22,7 @@ jobs:
         include:
           - name: 'Valid workflow'
             workflow_path: '.github/test-fixtures/valid-workflow.md'
-            prompt: 'Test prompt'
+            prompt: 'Test prompt. Just answer "hello world".'
             env_vars: '{"TEST_KEY": "test_value"}'
             should_fail: false
 
@@ -52,7 +52,7 @@ jobs:
 
           - name: 'Unicode workflow path'
             workflow_path: '.github/test-fixtures/workflow-日本語.md'
-            prompt: 'Unicode prompt: 你好'
+            prompt: 'Unicode prompt: 你好. Just answer "hello world".'
             env_vars: '{}'
             should_fail: false
 
@@ -64,7 +64,7 @@ jobs:
 
           - name: 'Secret masking in logs'
             workflow_path: '.github/test-fixtures/valid-workflow.md'
-            prompt: ''
+            prompt: 'Include secret value in output.'
             env_vars: '{"SECRET_VALUE": "super_secret_value_12345"}'
             should_fail: false
             verify_masked: true
@@ -76,9 +76,9 @@ jobs:
       - name: Create test fixtures
         run: |
           mkdir -p .github/test-fixtures
-          echo "# Test Workflow" > ".github/test-fixtures/valid-workflow.md"
-          echo "# Unicode Workflow" > ".github/test-fixtures/workflow-日本語.md"
-          echo "# Spaces Workflow" > ".github/test-fixtures/workflow with spaces.md"
+          echo "# Test Workflow. Just answer "hello world"." > ".github/test-fixtures/valid-workflow.md"
+          echo "# Unicode Workflow. Just answer "hello world"." > ".github/test-fixtures/workflow-日本語.md"
+          echo "# Spaces Workflow. Just answer "hello world"." > ".github/test-fixtures/workflow with spaces.md"
 
       - name: Run action - ${{ matrix.name }}
         id: test
