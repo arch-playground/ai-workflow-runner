@@ -1,6 +1,7 @@
 # KafkaTestHelper Implementation
 
 ## Table of Contents
+
 - [Topic Management with Admin](#topic-management-with-admin)
 - [Complete Implementation](#complete-implementation)
 - [Usage Patterns](#usage-patterns)
@@ -16,12 +17,12 @@ Auto-create causes timing issues - tests may fail intermittently waiting for top
 
 ### Why Use Admin Instead of Auto-Create?
 
-| Auto-Create Problems | Admin Benefits |
-|---------------------|----------------|
-| Timing issues - topic may not be ready | Topic guaranteed ready before tests |
+| Auto-Create Problems                   | Admin Benefits                             |
+| -------------------------------------- | ------------------------------------------ |
+| Timing issues - topic may not be ready | Topic guaranteed ready before tests        |
 | No control over partitions/replication | Explicit partition and replication control |
-| Intermittent test failures | Deterministic test setup |
-| Hidden dependencies on broker config | Self-contained test configuration |
+| Intermittent test failures             | Deterministic test setup                   |
+| Hidden dependencies on broker config   | Self-contained test configuration          |
 
 ### Admin Initialization Pattern
 
@@ -130,7 +131,7 @@ export class KafkaTestHelper {
       if (messages.length >= count) {
         return messages.slice(0, count);
       }
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
     }
 
     const messages = this.messageBuffers.get(topic) || [];
@@ -158,7 +159,7 @@ export class KafkaTestHelper {
       if (found) {
         return found as { key: string | null; value: T };
       }
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
     }
 
     throw new Error(`Timeout: Message matching predicate not found`);
@@ -188,10 +189,12 @@ export class KafkaTestHelper {
   async publishEvent(topic: string, event: unknown, key?: string): Promise<void> {
     await this.producer.send({
       topic,
-      messages: [{
-        key: key || null,
-        value: JSON.stringify(event),
-      }],
+      messages: [
+        {
+          key: key || null,
+          value: JSON.stringify(event),
+        },
+      ],
     });
   }
 
@@ -202,7 +205,7 @@ export class KafkaTestHelper {
   ): Promise<void> {
     await this.producer.send({
       topic,
-      messages: events.map(item => ({
+      messages: events.map((item) => ({
         key: item.key || null,
         value: JSON.stringify(item.event),
       })),
@@ -222,11 +225,13 @@ export class KafkaTestHelper {
     const topics = await this.admin.listTopics();
     if (!topics.includes(topic)) {
       await this.admin.createTopics({
-        topics: [{
-          topic,
-          numPartitions,
-          replicationFactor,
-        }],
+        topics: [
+          {
+            topic,
+            numPartitions,
+            replicationFactor,
+          },
+        ],
       });
     }
   }
@@ -258,11 +263,13 @@ export class KafkaTestHelper {
   ): Promise<void> {
     await this.admin.alterConfigs({
       validateOnly: false,
-      resources: [{
-        type: 2, // TOPIC
-        name: topic,
-        configEntries,
-      }],
+      resources: [
+        {
+          type: 2, // TOPIC
+          name: topic,
+          configEntries,
+        },
+      ],
     });
   }
 
@@ -316,20 +323,24 @@ export class KafkaTestHelper {
 
       if (stateNum === STABLE_STATE) {
         // Small buffer for consume loop to fully start
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 500));
         return; // Consumer ready
       }
 
       // Log for debugging
       if (state !== null) {
         const stateNames: Record<number, string> = {
-          0: 'Unknown', 1: 'PreparingRebalance', 2: 'CompletingRebalance',
-          3: 'Stable', 4: 'Dead', 5: 'Empty'
+          0: 'Unknown',
+          1: 'PreparingRebalance',
+          2: 'CompletingRebalance',
+          3: 'Stable',
+          4: 'Dead',
+          5: 'Empty',
         };
         console.log(`Consumer group '${groupId}' state: ${stateNames[stateNum] || state}`);
       }
 
-      await new Promise(r => setTimeout(r, pollIntervalMs));
+      await new Promise((r) => setTimeout(r, pollIntervalMs));
     }
 
     throw new Error(`Timeout waiting for consumer group '${groupId}' to reach Stable state`);
@@ -378,13 +389,13 @@ export class KafkaTestHelper {
       if (count >= expectedMembers) {
         return;
       }
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500));
     }
 
     const finalCount = await this.getConsumerGroupMemberCount(groupId);
     throw new Error(
       `Timeout waiting for ${expectedMembers} members in group ${groupId}. ` +
-      `Current count: ${finalCount}`
+        `Current count: ${finalCount}`
     );
   }
 
@@ -512,7 +523,7 @@ The Admin API `describeGroups` provides real-time consumer group state, enabling
 ```typescript
 // ❌ WRONG: Blind wait (may be too short or wastefully long)
 await app.startAllMicroservices();
-await new Promise(r => setTimeout(r, 5000)); // Guessing wait time
+await new Promise((r) => setTimeout(r, 5000)); // Guessing wait time
 
 // ✅ CORRECT: Admin API state-based synchronization
 await app.startAllMicroservices();
@@ -541,14 +552,14 @@ await kafkaHelper.publishEvent('request-topic-1', { data: 'test' });
 
 #### Consumer Group States Reference
 
-| State | Value | Meaning | Test Action |
-|-------|-------|---------|-------------|
-| `Unknown` | 0 | State unknown | ⏳ Retry query |
-| `PreparingRebalance` | 1 | Rebalancing in progress | ⏳ Wait |
-| `CompletingRebalance` | 2 | Finishing rebalance | ⏳ Wait |
-| `Stable` | 3 | Consumer ready, partitions assigned | ✅ Safe to proceed |
-| `Dead` | 4 | Group deleted | ❌ Error - reinitialize |
-| `Empty` | 5 | No active members | ⚠️ Check consumer started |
+| State                 | Value | Meaning                             | Test Action               |
+| --------------------- | ----- | ----------------------------------- | ------------------------- |
+| `Unknown`             | 0     | State unknown                       | ⏳ Retry query            |
+| `PreparingRebalance`  | 1     | Rebalancing in progress             | ⏳ Wait                   |
+| `CompletingRebalance` | 2     | Finishing rebalance                 | ⏳ Wait                   |
+| `Stable`              | 3     | Consumer ready, partitions assigned | ✅ Safe to proceed        |
+| `Dead`                | 4     | Group deleted                       | ❌ Error - reinitialize   |
+| `Empty`               | 5     | No active members                   | ⚠️ Check consumer started |
 
 **Note:** @confluentinc/kafka-javascript (node-rdkafka) uses numeric values. KafkaJS uses string names.
 
@@ -567,49 +578,252 @@ expect(memberCount).toBe(3);
 
 ---
 
+### Broker Health Verification
+
+**CRITICAL: Always verify broker health in beforeAll for reliable tests.**
+
+Tests can fail if the broker is unavailable or recovering from previous test file operations. Use these methods to ensure broker readiness:
+
+```typescript
+beforeAll(async () => {
+  kafkaHelper = new KafkaTestHelper();
+  await kafkaHelper.connect();
+
+  // CRITICAL: Wait for broker to be ready before any operations
+  await kafkaHelper.waitForBrokerReady(30000);
+
+  // Then proceed with topic creation and subscription
+  await kafkaHelper.createTopicIfNotExists(inputTopic, 1);
+  await kafkaHelper.subscribeToTopic(outputTopic, false);
+  // ...
+}, 90000);
+```
+
+#### After Infrastructure Manipulation Tests
+
+Tests that stop/pause Docker containers (e.g., self-healing tests) should ensure broker health in afterAll:
+
+```typescript
+// In self-healing.e2e-spec.ts or similar
+afterAll(async () => {
+  // Ensure broker is fully healthy before next test file runs
+  await kafkaHelper.ensureBrokerHealthy(60000);
+
+  // Add small delay to allow librdkafka to stabilize
+  await new Promise((r) => setTimeout(r, 5000));
+
+  await kafkaHelper.disconnect();
+}, 90000);
+```
+
+#### Broker Health Check Implementation
+
+```typescript
+/**
+ * Quick health check using Admin API listTopics().
+ * Returns true if broker responds within timeout.
+ */
+async isBrokerHealthy(timeoutMs: number = 5000): Promise<boolean> {
+  try {
+    await Promise.race([
+      this.admin.listTopics(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Broker health check timeout')), timeoutMs)
+      ),
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Wait for broker to be ready with polling.
+ * Use in beforeAll before any Kafka operations.
+ */
+async waitForBrokerReady(
+  timeoutMs: number = 30000,
+  pollIntervalMs: number = 1000
+): Promise<void> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    if (await this.isBrokerHealthy(5000)) {
+      return; // Broker is ready
+    }
+    console.log('Waiting for broker to be ready...');
+    await new Promise(r => setTimeout(r, pollIntervalMs));
+  }
+
+  throw new Error(`Broker not ready after ${timeoutMs}ms`);
+}
+
+/**
+ * Comprehensive broker health verification.
+ * Use after infrastructure manipulation (Docker stop/pause).
+ */
+async ensureBrokerHealthy(timeoutMs: number = 60000): Promise<void> {
+  await this.waitForBrokerReady(timeoutMs);
+
+  // Verify can list topics (confirms Admin API working)
+  await this.admin.listTopics();
+
+  // Small buffer for full stability
+  await new Promise(r => setTimeout(r, 1000));
+}
+```
+
+---
+
 ## API Reference
+
+### Admin Methods (Broker Health)
+
+| Method                                          | Description                                                |
+| ----------------------------------------------- | ---------------------------------------------------------- |
+| `isBrokerHealthy(timeoutMs)`                    | Quick health check - returns true if broker responds       |
+| `waitForBrokerReady(timeoutMs, pollIntervalMs)` | Poll until broker is available                             |
+| `ensureBrokerHealthy(timeoutMs)`                | Comprehensive health verification for infrastructure tests |
 
 ### Admin Methods (Topic Management)
 
-| Method | Description |
-|--------|-------------|
+| Method                                                   | Description                                    |
+| -------------------------------------------------------- | ---------------------------------------------- |
 | `createTopicIfNotExists(topic, partitions, replication)` | Create topic if not exists - call in beforeAll |
-| `ensureTopicExists(topic, partitions)` | Alias for createTopicIfNotExists |
-| `deleteTopic(topic)` | Delete topic (for cleanup) |
-| `updateTopicConfig(topic, configEntries)` | Update topic configuration |
-| `listTopics()` | List all topics |
-| `deleteConsumerGroupOffsets(groupId)` | Reset consumer group |
+| `ensureTopicExists(topic, partitions)`                   | Alias for createTopicIfNotExists               |
+| `deleteTopic(topic)`                                     | Delete topic (for cleanup)                     |
+| `updateTopicConfig(topic, configEntries)`                | Update topic configuration                     |
+| `listTopics()`                                           | List all topics                                |
+| `deleteConsumerGroupOffsets(groupId)`                    | Reset consumer group                           |
+
+### Admin Methods (Consumer Group Cleanup)
+
+| Method                                   | Description                                           |
+| ---------------------------------------- | ----------------------------------------------------- |
+| `deleteConsumerGroup(groupId)`           | Delete a consumer group - use in afterAll for cleanup |
+| `deleteConsumerGroupsByPattern(pattern)` | Delete all groups matching RegExp pattern             |
+
+#### Consumer Group Cleanup Example
+
+```typescript
+afterAll(async () => {
+  // Store group IDs before closing clients
+  const mainGroupId = client?.getResponseConsumerGroupId();
+  const customGroupId = customClient?.getResponseConsumerGroupId();
+
+  // Close clients first (consumers must be disconnected before group deletion)
+  await client?.close();
+  await customClient?.close();
+
+  // Delete consumer groups to prevent state accumulation
+  if (mainGroupId) {
+    await kafkaHelper.deleteConsumerGroup(mainGroupId);
+  }
+  if (customGroupId) {
+    await kafkaHelper.deleteConsumerGroup(customGroupId);
+  }
+
+  // Clean up orphaned groups from failed test runs
+  await kafkaHelper.deleteConsumerGroupsByPattern(/^test-client-.*-response-consumer-/);
+
+  kafkaHelper.disconnectAdmin();
+}, 30000);
+```
+
+#### Implementation
+
+```typescript
+/**
+ * Delete a consumer group from the broker.
+ * Use in afterAll to clean up test consumer groups.
+ *
+ * IMPORTANT: Consumers must be disconnected before deleting the group.
+ */
+async deleteConsumerGroup(groupId: string): Promise<void> {
+  return new Promise((resolve) => {
+    this.admin.deleteGroups([groupId], { timeout: 10000 }, (err) => {
+      if (err) {
+        const errorCode = (err as LibrdKafkaError).code;
+        // Error code 69 = GROUP_ID_NOT_FOUND, which is acceptable
+        if (errorCode === 69) {
+          resolve();
+        } else {
+          console.warn(`Could not delete consumer group '${groupId}': ${err.message}`);
+          resolve(); // Don't fail tests due to cleanup issues
+        }
+      } else {
+        console.log(`Deleted consumer group: ${groupId}`);
+        resolve();
+      }
+    });
+  });
+}
+
+/**
+ * Delete all consumer groups matching a pattern.
+ * Useful for cleaning up orphaned test consumer groups.
+ */
+async deleteConsumerGroupsByPattern(pattern: RegExp): Promise<void> {
+  return new Promise((resolve) => {
+    this.admin.listGroups({ timeout: 10000 }, (err, result) => {
+      if (err) {
+        console.warn(`Could not list consumer groups: ${err.message}`);
+        resolve();
+        return;
+      }
+
+      const matchingGroups = (result.groups || [])
+        .filter((g) => pattern.test(g.groupId))
+        .map((g) => g.groupId);
+
+      if (matchingGroups.length === 0) {
+        resolve();
+        return;
+      }
+
+      console.log(`Deleting ${matchingGroups.length} orphaned consumer groups...`);
+
+      this.admin.deleteGroups(matchingGroups, { timeout: 10000 }, (deleteErr) => {
+        if (deleteErr) {
+          console.warn(`Could not delete some consumer groups: ${deleteErr.message}`);
+        }
+        resolve();
+      });
+    });
+  });
+}
+```
 
 ### Admin Methods (Consumer Group Monitoring)
 
-| Method | Description |
-|--------|-------------|
-| `waitForConsumerGroupStable(groupId, timeoutMs)` | Poll until consumer group state is 'Stable' |
-| `getConsumerGroupState(groupId)` | Get current state: 'Stable', 'PreparingRebalance', 'CompletingRebalance', 'Empty', 'Dead' |
-| `waitForConsumerGroupMembers(groupId, expectedMembers, timeoutMs)` | Wait for specific member count |
-| `getConsumerGroupMemberCount(groupId)` | Get current consumer count in group |
+| Method                                                             | Description                                                                               |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `waitForConsumerGroupStable(groupId, timeoutMs)`                   | Poll until consumer group state is 'Stable'                                               |
+| `getConsumerGroupState(groupId)`                                   | Get current state: 'Stable', 'PreparingRebalance', 'CompletingRebalance', 'Empty', 'Dead' |
+| `waitForConsumerGroupMembers(groupId, expectedMembers, timeoutMs)` | Wait for specific member count                                                            |
+| `getConsumerGroupMemberCount(groupId)`                             | Get current consumer count in group                                                       |
 
 ### Connection Methods
 
-| Method | Description |
-|--------|-------------|
-| `connect()` | Initialize Kafka connections (producer + admin) |
-| `disconnect()` | Clean up all connections |
+| Method         | Description                                     |
+| -------------- | ----------------------------------------------- |
+| `connect()`    | Initialize Kafka connections (producer + admin) |
+| `disconnect()` | Clean up all connections                        |
 
 ### Consumer Methods
 
-| Method | Description |
-|--------|-------------|
-| `subscribeToTopic(topic, fromBeginning)` | Pre-subscribe to topic, accumulate in buffer |
-| `waitForMessages(topic, count, timeout)` | Poll for expected message count |
-| `waitForMessage(topic, predicate, timeout)` | Poll for specific message |
-| `clearMessages(topic)` | Clear buffer for topic (primary isolation) |
-| `clearAllMessages()` | Clear all buffers |
-| `getMessages(topic)` | Get current buffer contents |
+| Method                                      | Description                                  |
+| ------------------------------------------- | -------------------------------------------- |
+| `subscribeToTopic(topic, fromBeginning)`    | Pre-subscribe to topic, accumulate in buffer |
+| `waitForMessages(topic, count, timeout)`    | Poll for expected message count              |
+| `waitForMessage(topic, predicate, timeout)` | Poll for specific message                    |
+| `clearMessages(topic)`                      | Clear buffer for topic (primary isolation)   |
+| `clearAllMessages()`                        | Clear all buffers                            |
+| `getMessages(topic)`                        | Get current buffer contents                  |
 
 ### Producer Methods
 
-| Method | Description |
-|--------|-------------|
-| `publishEvent(topic, event, key)` | Publish single message |
-| `publishBatch(topic, events)` | Publish multiple messages |
+| Method                            | Description               |
+| --------------------------------- | ------------------------- |
+| `publishEvent(topic, event, key)` | Publish single message    |
+| `publishBatch(topic, events)`     | Publish multiple messages |

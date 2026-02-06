@@ -2,38 +2,38 @@
 
 ## Status Overview
 
-| Phase | Files | Complete |
-|-------|-------|----------|
-| Foundation | 3 | 3/3 |
-| Workflows | 9 | 9/9 |
-| **Code Quality (Clean Code book)** | | |
-| naming | 3 | 3/3 |
-| functions | 4 | 4/4 |
-| comments | 3 | 3/3 |
-| formatting | 3 | 3/3 |
-| error-handling | 3 | 3/3 |
-| unit-tests | 3 | 3/3 |
-| classes | 3 | 3/3 |
-| smells | 3 | 3/3 |
-| **Professional Practices (Clean Coder book)** | | |
-| professionalism | 3 | 3/3 |
-| saying-no | 3 | 3/3 |
-| commitment | 3 | 3/3 |
-| coding-practices | 3 | 3/3 |
-| tdd | 3 | 3/3 |
-| practicing | 3 | 3/3 |
-| acceptance-testing | 3 | 3/3 |
-| testing-strategies | 3 | 3/3 |
-| time-management | 3 | 3/3 |
-| estimation | 3 | 3/3 |
-| pressure | 3 | 3/3 |
-| collaboration | 3 | 3/3 |
-| **Total** | **73** | **73/73** |
+| Phase                                         | Files  | Complete  |
+| --------------------------------------------- | ------ | --------- |
+| Foundation                                    | 3      | 3/3       |
+| Workflows                                     | 9      | 9/9       |
+| **Code Quality (Clean Code book)**            |        |           |
+| naming                                        | 3      | 3/3       |
+| functions                                     | 4      | 4/4       |
+| comments                                      | 3      | 3/3       |
+| formatting                                    | 3      | 3/3       |
+| error-handling                                | 3      | 3/3       |
+| unit-tests                                    | 3      | 3/3       |
+| classes                                       | 3      | 3/3       |
+| smells                                        | 3      | 3/3       |
+| **Professional Practices (Clean Coder book)** |        |           |
+| professionalism                               | 3      | 3/3       |
+| saying-no                                     | 3      | 3/3       |
+| commitment                                    | 3      | 3/3       |
+| coding-practices                              | 3      | 3/3       |
+| tdd                                           | 3      | 3/3       |
+| practicing                                    | 3      | 3/3       |
+| acceptance-testing                            | 3      | 3/3       |
+| testing-strategies                            | 3      | 3/3       |
+| time-management                               | 3      | 3/3       |
+| estimation                                    | 3      | 3/3       |
+| pressure                                      | 3      | 3/3       |
+| collaboration                                 | 3      | 3/3       |
+| **Total**                                     | **73** | **73/73** |
 
 ## Legend
 
 - [ ] Not started
-- [~] In progress  
+- [~] In progress
 - [x] Completed
 - [-] Skipped/Not needed
 
@@ -47,15 +47,23 @@
 
 ## Workflows
 
-- [x] workflows/code-review.md - Review code for quality
-- [x] workflows/pr-review.md - Review pull requests
+- [x] workflows/code-review/workflow.md - Review code for quality (step-file architecture: 10 step files)
+- [x] workflows/pr-review/workflow.md - Review pull requests (step-file architecture: 10 step files)
 - [x] workflows/tdd.md - Test-driven development cycle
-- [x] workflows/refactoring.md - Safe refactoring with tests
+- [x] workflows/refactoring/workflow.md - Safe refactoring with tests (step-file architecture: 8 step files)
 - [x] workflows/new-feature.md - Building new functionality
 - [x] workflows/bug-fix.md - Fixing bugs properly
 - [x] workflows/test-strategy.md - Planning test coverage
 - [x] workflows/estimation.md - PERT-based task estimation
 - [x] workflows/deadline-negotiation.md - Handling deadline pressure
+
+### Step-File Workflows (new)
+
+Code review, PR review, and refactoring workflows converted to step-file architecture for context-safe execution. Original files preserved as `.legacy.md`.
+
+- [x] workflows/code-review.legacy.md (original, preserved for reference)
+- [x] workflows/pr-review.legacy.md (original, preserved for reference)
+- [x] workflows/refactoring.legacy.md (original, preserved for reference)
 
 ---
 

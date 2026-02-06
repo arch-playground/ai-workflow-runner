@@ -63,14 +63,14 @@ E2E testing validates complete workflows from user perspective, using real infra
 
 For comprehensive step-by-step guidance, use the appropriate workflow:
 
-| Workflow | When to Use |
-|----------|-------------|
-| [Setup E2E Test](workflows/setup-e2e-test.md) | Setting up E2E infrastructure for a new or existing project |
-| [Writing E2E Test](workflows/writing-e2e-test.md) | Creating new E2E test cases with proper GWT pattern |
-| [Review E2E Test](workflows/review-e2e-test.md) | Reviewing existing tests for quality and correctness |
-| [Running E2E Test](workflows/running-e2e-test.md) | Executing tests with proper verification |
-| [Debugging E2E Test](workflows/debugging-e2e-test.md) | Systematically fixing failing tests |
-| [Optimize E2E Test](workflows/optimize-e2e-test.md) | Improving test suite performance |
+| Workflow                                              | When to Use                                                 |
+| ----------------------------------------------------- | ----------------------------------------------------------- |
+| [Setup E2E Test](workflows/setup/workflow.md)         | Setting up E2E infrastructure for a new or existing project |
+| [Writing E2E Test](workflows/writing/workflow.md)     | Creating new E2E test cases with proper GWT pattern         |
+| [Review E2E Test](workflows/review/workflow.md)       | Reviewing existing tests for quality and correctness        |
+| [Running E2E Test](workflows/running/workflow.md)     | Executing tests with proper verification                    |
+| [Debugging E2E Test](workflows/debugging/workflow.md) | Systematically fixing failing tests                         |
+| [Optimize E2E Test](workflows/optimize/workflow.md)   | Improving test suite performance                            |
 
 ## Workflow Selection Guide
 
@@ -78,14 +78,14 @@ For comprehensive step-by-step guidance, use the appropriate workflow:
 
 ### Detect User Intent → Select Workflow
 
-| User Says / Wants | Workflow to Load | File |
-|-------------------|------------------|------|
-| "Set up E2E tests", "configure docker-compose", "add E2E to project", "create test helpers" | **Setup** | `workflows/setup-e2e-test.md` |
-| "Write E2E tests", "add integration tests", "test this endpoint", "create e2e-spec" | **Writing** | `workflows/writing-e2e-test.md` |
-| "Review E2E tests", "check test quality", "audit tests", "is this test correct?" | **Reviewing** | `workflows/review-e2e-test.md` |
-| "Run E2E tests", "execute tests", "start docker and test", "check if tests pass" | **Running** | `workflows/running-e2e-test.md` |
-| "Fix E2E tests", "debug tests", "tests are failing", "flaky test", "connection error" | **Debugging** | `workflows/debugging-e2e-test.md` |
-| "Speed up E2E tests", "optimize tests", "tests are slow", "reduce test time" | **Optimizing** | `workflows/optimize-e2e-test.md` |
+| User Says / Wants                                                                           | Workflow to Load | File                              |
+| ------------------------------------------------------------------------------------------- | ---------------- | --------------------------------- |
+| "Set up E2E tests", "configure docker-compose", "add E2E to project", "create test helpers" | **Setup**        | `workflows/setup/workflow.md`     |
+| "Write E2E tests", "add integration tests", "test this endpoint", "create e2e-spec"         | **Writing**      | `workflows/writing/workflow.md`   |
+| "Review E2E tests", "check test quality", "audit tests", "is this test correct?"            | **Reviewing**    | `workflows/review/workflow.md`    |
+| "Run E2E tests", "execute tests", "start docker and test", "check if tests pass"            | **Running**      | `workflows/running/workflow.md`   |
+| "Fix E2E tests", "debug tests", "tests are failing", "flaky test", "connection error"       | **Debugging**    | `workflows/debugging/workflow.md` |
+| "Speed up E2E tests", "optimize tests", "tests are slow", "reduce test time"                | **Optimizing**   | `workflows/optimize/workflow.md`  |
 
 ### Workflow Execution Protocol
 
@@ -153,13 +153,17 @@ references/
 > **Tip**: For detailed step-by-step guidance, use the [Workflows](#workflows) section above.
 
 ### Setup New E2E Structure
-**Workflow**: [Setup E2E Test](workflows/setup-e2e-test.md)
+
+**Workflow**: [Setup E2E Test](workflows/setup/workflow.md)
+
 1. Read `references/common/knowledge.md` - Understand E2E fundamentals
 2. Read `references/common/nestjs-setup.md` - Project setup
 3. Read technology-specific `docker-setup.md` files as needed
 
 ### Write Test Cases
-**Workflow**: [Writing E2E Test](workflows/writing-e2e-test.md)
+
+**Workflow**: [Writing E2E Test](workflows/writing/workflow.md)
+
 1. **MANDATORY**: Read `references/common/rules.md` - GWT pattern, timeouts
 2. Read `references/common/test-case-creation-guide.md` - Templates
 3. Read technology-specific files:
@@ -170,30 +174,39 @@ references/
    - **API**: `references/api/rules.md` → `test-helper.md`
 
 ### Review Test Quality
-**Workflow**: [Review E2E Test](workflows/review-e2e-test.md)
+
+**Workflow**: [Review E2E Test](workflows/review/workflow.md)
+
 1. Read `references/common/rules.md` - Check against mandatory patterns
 2. Read `references/common/best-practices.md` - Quality standards
 3. Read technology-specific `rules.md` files
 
 ### Run E2E Tests
-**Workflow**: [Running E2E Test](workflows/running-e2e-test.md)
+
+**Workflow**: [Running E2E Test](workflows/running/workflow.md)
+
 1. Verify Docker infrastructure is running
 2. Run tests sequentially with `npm run test:e2e > /tmp/e2e-${E2E_SESSION}-output.log 2>&1`
 3. Follow failure protocol if tests fail
 
 ### Debug Failing Tests
-**Workflow**: [Debugging E2E Test](workflows/debugging-e2e-test.md)
+
+**Workflow**: [Debugging E2E Test](workflows/debugging/workflow.md)
+
 1. Read `references/common/debugging.md`
 2. Create `/tmp/e2e-${E2E_SESSION}-failures.md` tracking file
 3. Fix ONE test at a time
 
 ### Optimize Test Performance
-**Workflow**: [Optimize E2E Test](workflows/optimize-e2e-test.md)
+
+**Workflow**: [Optimize E2E Test](workflows/optimize/workflow.md)
+
 1. Read `references/common/best-practices.md` - Performance patterns
 2. Read `references/kafka/performance.md` for Kafka tests
 3. Measure baseline before making changes
 
 ### Examples
+
 - Read `references/common/examples.md` for general patterns
 - Read technology-specific `examples.md` for detailed scenarios
 
@@ -202,6 +215,7 @@ references/
 ## Core Principles
 
 ### 0. Context Efficiency (Temp File Output)
+
 **ALWAYS redirect E2E test output to temp files, NOT console**. E2E output is verbose and bloats agent context.
 
 **IMPORTANT**: Redirect output to temp files only (NO console output). Use unique session ID to prevent conflicts.
@@ -224,6 +238,7 @@ rm -f /tmp/e2e-${E2E_SESSION}-*.log /tmp/e2e-${E2E_SESSION}-*.md
 ```
 
 **Temp Files** (with `${E2E_SESSION}` unique per agent):
+
 - `/tmp/e2e-${E2E_SESSION}-output.log` - Full test output
 - `/tmp/e2e-${E2E_SESSION}-failures.log` - Filtered failure output
 - `/tmp/e2e-${E2E_SESSION}-failures.md` - Tracking file for one-by-one fixing
@@ -231,20 +246,20 @@ rm -f /tmp/e2e-${E2E_SESSION}-*.log /tmp/e2e-${E2E_SESSION}-*.md
 - `/tmp/e2e-${E2E_SESSION}-verify.log` - Verification runs
 
 ### 1. Real Infrastructure
+
 Test against actual services via Docker. Never mock databases or message brokers for E2E tests.
 
 ### 2. GWT Pattern (Mandatory)
+
 ALL E2E tests MUST follow Given-When-Then:
+
 ```typescript
 it('should create user and return 201', async () => {
   // GIVEN: Valid user data
   const userData = { email: 'test@example.com', name: 'Test' };
 
   // WHEN: Creating user
-  const response = await request(httpServer)
-    .post('/users')
-    .send(userData)
-    .expect(201);
+  const response = await request(httpServer).post('/users').send(userData).expect(201);
 
   // THEN: User created with correct data
   expect(response.body.data.email).toBe('test@example.com');
@@ -252,13 +267,17 @@ it('should create user and return 201', async () => {
 ```
 
 ### 3. Test Isolation
+
 Each test MUST be independent:
+
 - Clean database state in `beforeEach`
 - Use unique identifiers (consumer groups, topics)
 - Wait for async operations to complete
 
 ### 4. Specific Assertions
+
 Assert exact values, not just existence:
+
 ```typescript
 // WRONG
 expect(response.body.data).toBeDefined();
@@ -266,7 +285,7 @@ expect(response.body.data).toBeDefined();
 // CORRECT
 expect(response.body).toMatchObject({
   code: 'SUCCESS',
-  data: { email: 'test@example.com', name: 'Test' }
+  data: { email: 'test@example.com', name: 'Test' },
 });
 ```
 
@@ -304,7 +323,7 @@ const config: Config = {
   testEnvironment: 'node',
   testMatch: ['**/*.e2e-spec.ts'],
   testTimeout: 25000,
-  maxWorkers: 1,           // CRITICAL: Sequential execution
+  maxWorkers: 1, // CRITICAL: Sequential execution
   clearMocks: true,
   forceExit: true,
   detectOpenHandles: true,
@@ -315,13 +334,13 @@ const config: Config = {
 
 ## Technology-Specific Timeouts
 
-| Technology | Wait Time | Strategy |
-|------------|-----------|----------|
-| Kafka | 10-20s max (polling) | Smart polling with 50ms intervals |
-| PostgreSQL | <1s | Direct queries |
-| MongoDB | <1s | Direct queries |
-| Redis | <100ms | In-memory operations |
-| External API | 1-5s | Network latency |
+| Technology   | Wait Time            | Strategy                          |
+| ------------ | -------------------- | --------------------------------- |
+| Kafka        | 10-20s max (polling) | Smart polling with 50ms intervals |
+| PostgreSQL   | <1s                  | Direct queries                    |
+| MongoDB      | <1s                  | Direct queries                    |
+| Redis        | <100ms               | In-memory operations              |
+| External API | 1-5s                 | Network latency                   |
 
 ---
 
@@ -359,16 +378,18 @@ When E2E tests fail:
 ## Common Patterns
 
 ### Database Cleanup (PostgreSQL/MongoDB)
+
 ```typescript
 beforeEach(async () => {
-  await new Promise(r => setTimeout(r, 500)); // Wait for in-flight
-  await repository.clear();  // PostgreSQL
+  await new Promise((r) => setTimeout(r, 500)); // Wait for in-flight
+  await repository.clear(); // PostgreSQL
   // OR
   await model.deleteMany({}); // MongoDB
 });
 ```
 
 ### Kafka Test Helper Pattern
+
 ```typescript
 // Use pre-subscription + buffer clearing (NOT fromBeginning: true)
 const kafkaHelper = new KafkaTestHelper();
@@ -377,6 +398,7 @@ await kafkaHelper.subscribeToTopic(outputTopic, false);
 ```
 
 ### Redis Cleanup
+
 ```typescript
 beforeEach(async () => {
   await redis.flushdb();
@@ -384,6 +406,7 @@ beforeEach(async () => {
 ```
 
 ### External API Mock (MSW)
+
 ```typescript
 mockServer.use(
   http.post('https://api.external.com/endpoint', () => {
@@ -393,6 +416,7 @@ mockServer.use(
 ```
 
 ### Async Event Verification (Kafka)
+
 ```typescript
 // Use smart polling instead of fixed waits
 await kafkaHelper.publishEvent(inputTopic, event, event.id);
