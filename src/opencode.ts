@@ -379,7 +379,7 @@ export class OpenCodeService {
 
   private finalizeSession(sessionID: string, isError: boolean, errorMessage?: string): void {
     const state = this.sessionMessageState.get(sessionID);
-    if (state && state.messageBuffer) {
+    if (state?.messageBuffer) {
       state.lastCompleteMessage = state.messageBuffer;
     }
 

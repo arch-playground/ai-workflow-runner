@@ -159,15 +159,15 @@ shutdownController (index.ts)
 
 **Decision:** Flat module structure with clear responsibilities
 
-| Module          | Responsibility                              | Dependencies                           |
-| --------------- | ------------------------------------------- | -------------------------------------- |
-| `index.ts`      | Entry point, signal handling, orchestration | All modules                            |
-| `runner.ts`     | Workflow execution, validation loop         | opencode, validation, config, security |
-| `config.ts`     | Input parsing, validation                   | types, security                        |
-| `security.ts`   | Path validation, secret masking             | @actions/core                          |
-| `opencode.ts`   | SDK integration, session management         | @opencode-ai/sdk, types                |
-| `validation.ts` | Script execution engine                     | security, types                        |
-| `types.ts`      | Type definitions, constants                 | None                                   |
+| Module          | Responsibility                                   | Dependencies                           |
+| --------------- | ------------------------------------------------ | -------------------------------------- |
+| `index.ts`      | Entry point, signal handling, orchestration      | All modules                            |
+| `runner.ts`     | Workflow execution, validation loop, list models | opencode, validation, config, security |
+| `config.ts`     | Input parsing, validation                        | types, security                        |
+| `security.ts`   | Path validation, secret masking                  | @actions/core                          |
+| `opencode.ts`   | SDK integration, session management, config load | @opencode-ai/sdk, types                |
+| `validation.ts` | Script execution engine                          | security, types                        |
+| `types.ts`      | Type definitions, constants                      | None                                   |
 
 **Rationale:** Flat structure preferred over deep nesting for a tool of this size. Each module has single responsibility. Circular dependencies avoided via careful import ordering.
 
@@ -226,14 +226,29 @@ shutdownController (index.ts)
 
 ### Configuration Strategy
 
-**Decision:** GitHub Action inputs only (MVP)
+**Decision:** GitHub Action inputs with optional config file passthrough
 
-| Source                | Support      | Notes                              |
-| --------------------- | ------------ | ---------------------------------- |
-| Action inputs         | Yes          | Primary configuration method       |
-| Environment variables | Partial      | GITHUB_WORKSPACE, standard GH vars |
-| Config files          | No (Phase 2) | `.ai-workflow-runner.yml` deferred |
-| Profiles              | No (Phase 2) | Environment-based configs deferred |
+| Source                | Support | Notes                                          |
+| --------------------- | ------- | ---------------------------------------------- |
+| Action inputs         | Yes     | Primary configuration method                   |
+| OpenCode config files | Yes     | Passed through to SDK (config.json, auth.json) |
+| Model override        | Yes     | Action input overrides config file default     |
+| Environment variables | Partial | GITHUB_WORKSPACE, standard GH vars             |
+
+**Config File Flow:**
+
+1. User stores config in GitHub Variables (`vars.OPENCODE_CONFIG`)
+2. User stores auth in GitHub Secrets (`secrets.OPENCODE_AUTH`)
+3. Workflow step writes files to disk before action runs
+4. Action reads files and passes to OpenCode SDK
+5. SDK handles all provider-specific logic
+
+**Security Model:**
+
+- Auth files contain secrets → stored in GitHub Secrets
+- Config files are non-sensitive → stored in GitHub Variables
+- Files written with 0o600 permissions
+- Files cleaned up after workflow completes
 
 ### Phase 2 Considerations
 
@@ -652,6 +667,29 @@ ai-workflow-runner/
 │   ├── source-tree-analysis.md
 │   ├── development-guide.md
 │   └── api-contracts.md
+│
+├── examples/                         # EXAMPLE WORKFLOWS
+│   ├── basic-workflow/
+│   │   ├── README.md                 # Setup guide
+│   │   ├── workflow.md               # AI workflow file
+│   │   └── .github/workflows/
+│   │       └── run-ai.yml            # GitHub Action example
+│   ├── with-validation/
+│   │   ├── README.md
+│   │   ├── workflow.md
+│   │   ├── validate.py
+│   │   └── .github/workflows/
+│   │       └── run-ai.yml
+│   ├── github-copilot/
+│   │   ├── README.md                 # Copilot-specific setup
+│   │   ├── workflow.md
+│   │   └── .github/workflows/
+│   │       └── run-ai.yml
+│   └── custom-model/
+│       ├── README.md                 # Model selection guide
+│       ├── workflow.md
+│       └── .github/workflows/
+│           └── run-ai.yml
 │
 ├── action.yml                        # GitHub Action definition
 ├── Dockerfile                        # Multi-runtime container

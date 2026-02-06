@@ -111,12 +111,18 @@ _Note: Pure open-source community tool with no commercial objectives._
 
 ### Phase 2 - Growth
 
-- Workflow marketplace/registry integration
-- Caching for faster subsequent runs
-- Parallel workflow execution
-- Workflow templates for common use cases
-- GitHub App version for easier setup
-- Metrics/telemetry dashboard
+| Capability                                             | Status  |
+| ------------------------------------------------------ | ------- |
+| Custom OpenCode configuration (config.json, auth.json) | Planned |
+| Model selection input                                  | Planned |
+| List available models feature                          | Planned |
+| Example workflows folder                               | Planned |
+| Workflow marketplace/registry integration              | Planned |
+| Caching for faster subsequent runs                     | Planned |
+| Parallel workflow execution                            | Planned |
+| Workflow templates for common use cases                | Planned |
+| GitHub App version for easier setup                    | Planned |
+| Metrics/telemetry dashboard                            | Planned |
 
 ### Phase 3 - Vision
 
@@ -238,6 +244,10 @@ _Note: Pure open-source community tool with no commercial objectives._
 | `validation_script`      | No       | Validation script path or inline code |
 | `validation_script_type` | No       | python or javascript                  |
 | `validation_max_retry`   | No       | Max retry attempts (default: 5)       |
+| `opencode_config`        | No       | Path to OpenCode config.json file     |
+| `auth_config`            | No       | Path to OpenCode auth.json file       |
+| `model`                  | No       | Model to use (overrides config)       |
+| `list_models`            | No       | Print available models and exit       |
 
 **Outputs:**
 
@@ -308,6 +318,15 @@ _Note: Pure open-source community tool with no commercial objectives._
 - **FR28:** System can detect and reject path traversal attempts
 - **FR29:** System can mask all environment variable values as secrets
 - **FR30:** System can sanitize error messages to remove sensitive paths
+
+### Configuration Customization
+
+- **FR39:** User can specify path to OpenCode config.json file
+- **FR40:** User can specify path to OpenCode auth.json file
+- **FR41:** User can specify model to use (overrides config file default)
+- **FR42:** User can enable list_models mode to print available models and exit
+- **FR43:** System can load and pass config files to OpenCode SDK
+- **FR44:** System can query and display available models from SDK
 
 ### Lifecycle Management
 

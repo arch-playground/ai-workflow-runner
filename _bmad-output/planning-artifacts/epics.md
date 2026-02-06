@@ -13,7 +13,8 @@ inputDocuments:
   - 'docs/index.md'
   - '_bmad-output/implementation-artifacts/tech-spec-opencode-sdk-runner.md'
   - '_bmad-output/implementation-artifacts/tech-spec-ai-workflow-runner-init.md'
-implementationStatus: 'MVP Complete - All epics implemented'
+implementationStatus: 'MVP Complete - Epic 7 (Configuration Customization) pending'
+lastUpdated: '2026-02-06'
 ---
 
 # AI Workflow Runner - Epic Breakdown
@@ -22,7 +23,7 @@ implementationStatus: 'MVP Complete - All epics implemented'
 
 This document provides the complete epic and story breakdown for AI Workflow Runner, decomposing the requirements from the PRD, Architecture, and Tech Specs into implementable stories.
 
-**Implementation Status:** MVP Complete - All 6 epics fully implemented.
+**Implementation Status:** MVP Complete (Epics 1-6). Epic 7 (Configuration Customization & Examples) pending.
 
 ## Requirements Inventory
 
@@ -197,6 +198,12 @@ This document provides the complete epic and story breakdown for AI Workflow Run
 | FR36 | Epic 1 | Error for invalid config        |
 | FR37 | Epic 3 | Error for validation failures   |
 | FR38 | Epic 4 | Distinguish runner vs AI errors |
+| FR39 | Epic 7 | OpenCode config.json input      |
+| FR40 | Epic 7 | OpenCode auth.json input        |
+| FR41 | Epic 7 | Model selection input           |
+| FR42 | Epic 7 | List models mode                |
+| FR43 | Epic 7 | Load and pass config to SDK     |
+| FR44 | Epic 7 | Query and display models        |
 
 ## Epic List
 
@@ -235,6 +242,12 @@ Developers can run workflows that use Node.js, Python, or Java without additiona
 Contributors can confidently develop, test, and release the action with automated quality gates.
 **NFRs addressed:** NFR16, NFR18, NFR19, NFR20
 **Status:** ✅ IMPLEMENTED
+
+### Epic 7: Configuration Customization & Examples
+
+Users can customize OpenCode SDK configuration (providers, auth, models) and have complete example workflows for onboarding.
+**FRs covered:** FR39, FR40, FR41, FR42, FR43, FR44
+**Status:** 🔲 NOT STARTED
 
 ---
 
@@ -1162,3 +1175,166 @@ So that **the codebase is maintainable**.
 **Given** TypeScript configuration
 **When** strict mode is enabled
 **Then** noImplicitReturns, noFallthroughCasesInSwitch, noUncheckedIndexedAccess are enforced
+
+---
+
+## Epic 7: Configuration Customization & Examples
+
+**Goal:** Users can customize OpenCode SDK configuration (providers, auth, models) and have complete example workflows for onboarding.
+
+**FRs covered:** FR39, FR40, FR41, FR42, FR43, FR44
+**Status:** 🔲 NOT STARTED
+
+**Implementation Files:**
+
+- `action.yml` - New inputs
+- `src/types.ts` - Extended ActionInputs
+- `src/config.ts` - Parse new inputs
+- `src/opencode.ts` - Load config files, list models
+- `src/runner.ts` - Handle list_models mode
+- `examples/` - Example workflows
+
+### Story 7.1: Add Configuration Inputs to Action
+
+As a **GitHub Actions user**,
+I want **to specify OpenCode config and auth file paths**,
+So that **I can use my own API keys and provider settings**.
+
+**Acceptance Criteria:**
+
+**Given** action.yml file
+**When** updated
+**Then** input `opencode_config` is defined as optional string
+**And** input `auth_config` is defined as optional string
+**And** input `model` is defined as optional string
+**And** input `list_models` is defined as optional boolean with default 'false'
+
+### Story 7.2: Parse Configuration Inputs
+
+As a **developer**,
+I want **new inputs parsed and validated**,
+So that **config paths are validated before use**.
+
+**Acceptance Criteria:**
+
+**Given** opencode_config input provided
+**When** getInputs() is called
+**Then** path is captured in ActionInputs
+**And** path is validated within workspace using validateWorkspacePath()
+
+**Given** auth_config input provided
+**When** getInputs() is called
+**Then** path is captured in ActionInputs
+**And** path is validated within workspace
+
+**Given** model input provided
+**When** getInputs() is called
+**Then** model string is captured in ActionInputs
+
+**Given** list_models is 'true'
+**When** getInputs() is called
+**Then** listModels boolean is set to true
+
+### Story 7.3: Load Config Files and Pass to SDK
+
+As a **developer**,
+I want **config files loaded and passed to OpenCode SDK**,
+So that **users can customize provider settings**.
+
+**Acceptance Criteria:**
+
+**Given** opencode_config path provided
+**When** OpenCodeService.initialize() is called
+**Then** config file is read as JSON
+**And** config is passed to createOpencode() options
+
+**Given** auth_config path provided
+**When** OpenCodeService.initialize() is called
+**Then** auth file is read as JSON
+**And** auth is passed to createOpencode() options
+
+**Given** model input provided
+**When** session is created
+**Then** model is passed to session options
+
+**Given** config file does not exist
+**When** initialize() is called
+**Then** clear error is returned: 'Config file not found: {path}'
+
+**Given** config file is invalid JSON
+**When** initialize() is called
+**Then** clear error is returned: 'Invalid JSON in config file'
+
+### Story 7.4: Implement List Models Feature
+
+As a **GitHub Actions user**,
+I want **to see available models**,
+So that **I can choose the right model for my workflow**.
+
+**Acceptance Criteria:**
+
+**Given** list_models is true
+**When** action runs
+**Then** SDK is initialized with provided config/auth
+**And** available models are queried from SDK
+**And** models are printed to console in format:
+
+```
+=== Available Models ===
+  - {model_id}: {model_name} ({provider})
+========================
+```
+
+**And** action exits with status 'success'
+**And** workflow execution is skipped
+
+**Given** list_models is true but SDK initialization fails
+**When** action runs
+**Then** error is logged and action fails
+
+### Story 7.5: Create Example Workflows
+
+As a **GitHub Actions user**,
+I want **complete example workflows**,
+So that **I can quickly set up AI workflows in my repository**.
+
+**Acceptance Criteria:**
+
+**Given** examples/basic-workflow/
+**When** user copies files
+**Then** README.md explains setup steps
+**And** workflow.md contains simple AI workflow
+**And** .github/workflows/run-ai.yml shows action usage
+
+**Given** examples/with-validation/
+**When** user copies files
+**Then** README.md explains validation setup
+**And** validate.py shows Python validation script
+**And** workflow demonstrates retry behavior
+
+**Given** examples/github-copilot/
+**When** user copies files
+**Then** README.md explains Copilot token setup
+**And** workflow shows auth_config usage with Copilot provider
+**And** clear instructions for generating personal Copilot token
+
+**Given** examples/custom-model/
+**When** user copies files
+**Then** README.md explains model selection
+**And** workflow shows model input usage
+**And** demonstrates list_models feature
+
+### Story 7.6: Update Documentation
+
+As a **GitHub Actions user**,
+I want **README updated with configuration options**,
+So that **I understand how to customize the action**.
+
+**Acceptance Criteria:**
+
+**Given** README.md
+**When** updated
+**Then** new inputs are documented in inputs table
+**And** configuration section explains GitHub Variables/Secrets setup
+**And** examples section links to examples/ folder
+**And** Copilot setup is documented with token generation link
