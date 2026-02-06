@@ -30,6 +30,22 @@ inputs:
     description: 'Maximum validation retry attempts when script returns non-empty/non-true (default: 5, max: 20)'
     required: false
     default: '5'
+  opencode_config:
+    description: 'Path to OpenCode config.json file (relative to workspace). Contains provider and model settings.'
+    required: false
+    default: ''
+  auth_config:
+    description: 'Path to OpenCode auth.json file (relative to workspace). Contains API keys and authentication. Store in GitHub Secrets, not Variables.'
+    required: false
+    default: ''
+  model:
+    description: 'Model to use for AI execution (e.g., "anthropic/claude-3-opus"). Overrides config file default.'
+    required: false
+    default: ''
+  list_models:
+    description: 'If "true", print available models and exit without running workflow'
+    required: false
+    default: 'false'
 
 outputs:
   status:

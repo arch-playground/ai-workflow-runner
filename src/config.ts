@@ -146,6 +146,12 @@ export function getInputs(): ActionInputs {
 
   const maxValidationRetries = parseValidationMaxRetry(maxValidationRetriesRaw);
 
+  const opencodeConfig = core.getInput('opencode_config') || undefined;
+  const authConfig = core.getInput('auth_config') || undefined;
+  const model = core.getInput('model') || undefined;
+  const listModelsRaw = core.getInput('list_models') || 'false';
+  const listModels = listModelsRaw.trim().toLowerCase() === 'true';
+
   return {
     workflowPath,
     prompt,
@@ -154,6 +160,10 @@ export function getInputs(): ActionInputs {
     validationScript,
     validationScriptType,
     maxValidationRetries,
+    opencodeConfig,
+    authConfig,
+    model,
+    listModels,
   };
 }
 

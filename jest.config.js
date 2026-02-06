@@ -26,6 +26,8 @@ module.exports = {
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
     '^@opencode-ai/sdk$': '<rootDir>/test/mocks/@opencode-ai/sdk.ts',
+    // @actions/core v3 is ESM-only; moduleNameMapper is required for Jest CJS resolution
+    '^@actions/core$': '<rootDir>/test/mocks/@actions/core.ts',
   },
   transformIgnorePatterns: ['node_modules/(?!(@opencode-ai)/)'],
   transform: {

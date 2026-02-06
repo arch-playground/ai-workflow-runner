@@ -12,6 +12,12 @@
 
 import type { ActionInputs, RunnerResult } from './types';
 
+const ASYNC_SETTLE_MS = 50;
+
+async function flushPromises(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ASYNC_SETTLE_MS));
+}
+
 describe('index', () => {
   // Store mocks at module scope so they persist across resetModules
   let mockCore: jest.Mocked<typeof import('@actions/core')>;
@@ -33,6 +39,7 @@ describe('index', () => {
     envVars: {},
     timeoutMs: 60000,
     maxValidationRetries: 5,
+    listModels: false,
   });
 
   const setupMocks = (): void => {
@@ -72,26 +79,7 @@ describe('index', () => {
       getOpenCodeService: mockGetOpenCodeService,
       hasOpenCodeServiceInstance: mockHasOpenCodeServiceInstance,
     }));
-    jest.doMock('./types', () => ({
-      INPUT_LIMITS: {
-        SHUTDOWN_TIMEOUT_MS: 10000,
-        MAX_WORKFLOW_PATH_LENGTH: 1024,
-        MAX_PROMPT_LENGTH: 100000,
-        MAX_ENV_VARS_SIZE: 65536,
-        MAX_ENV_VARS_COUNT: 100,
-        MAX_OUTPUT_SIZE: 900000,
-        MAX_WORKFLOW_FILE_SIZE: 10485760,
-        DEFAULT_TIMEOUT_MINUTES: 30,
-        MAX_TIMEOUT_MINUTES: 360,
-        MAX_VALIDATION_RETRY: 20,
-        DEFAULT_VALIDATION_RETRY: 5,
-        VALIDATION_SCRIPT_TIMEOUT_MS: 60000,
-        INTERPRETER_CHECK_TIMEOUT_MS: 5000,
-        MAX_VALIDATION_OUTPUT_SIZE: 102400,
-        MAX_LAST_MESSAGE_SIZE: 102400,
-        MAX_INLINE_SCRIPT_SIZE: 102400,
-      },
-    }));
+    jest.doMock('./types', () => jest.requireActual('./types'));
   };
 
   const loadIndexModule = (): void => {
@@ -115,6 +103,11 @@ describe('index', () => {
     // Import the module fresh
     require('./index');
   };
+
+  async function loadAndFlush(): Promise<void> {
+    loadIndexModule();
+    await flushPromises();
+  }
 
   beforeEach(() => {
     // Reset modules to clear cache
@@ -140,8 +133,7 @@ describe('index', () => {
       mockGetInputs.mockReturnValue(inputs);
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(mockGetInputs).toHaveBeenCalled();
@@ -154,8 +146,7 @@ describe('index', () => {
       mockValidateInputs.mockReturnValue({ valid: true, errors: [] });
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(mockValidateInputs).toHaveBeenCalledWith(inputs);
@@ -167,8 +158,7 @@ describe('index', () => {
       mockGetInputs.mockReturnValue(inputs);
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(mockRunWorkflow).toHaveBeenCalledWith(inputs, inputs.timeoutMs, expect.any(Object));
@@ -179,8 +169,7 @@ describe('index', () => {
       mockRunWorkflow.mockResolvedValue({ success: true, output: '{"result":"done"}' });
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(mockCore.setOutput).toHaveBeenCalledWith('status', 'success');
@@ -196,8 +185,7 @@ describe('index', () => {
       });
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(mockCore.setOutput).toHaveBeenCalledWith('status', 'failure');
@@ -212,8 +200,7 @@ describe('index', () => {
       });
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(mockCore.error).toHaveBeenCalledWith('Invalid timeout');
@@ -229,8 +216,7 @@ describe('index', () => {
       mockSanitizeErrorMessage.mockReturnValue('Path validation failed');
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(mockSanitizeErrorMessage).toHaveBeenCalledWith(error);
@@ -246,8 +232,7 @@ describe('index', () => {
       mockRunWorkflow.mockRejectedValue('String error');
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(mockCore.setOutput).toHaveBeenCalledWith(
@@ -260,13 +245,12 @@ describe('index', () => {
   describe('handleShutdown()', () => {
     it('logs SIGTERM signal and initiates graceful shutdown', async () => {
       // Arrange
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Act
       expect(sigTermHandler).not.toBeNull();
       sigTermHandler!();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
 
       // Assert
       expect(mockCore.info).toHaveBeenCalledWith(
@@ -276,13 +260,12 @@ describe('index', () => {
 
     it('logs SIGINT signal and initiates graceful shutdown', async () => {
       // Arrange
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Act
       expect(sigIntHandler).not.toBeNull();
       sigIntHandler!();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
 
       // Assert
       expect(mockCore.info).toHaveBeenCalledWith(
@@ -293,12 +276,11 @@ describe('index', () => {
     it('disposes OpenCode service if instance exists', async () => {
       // Arrange
       mockHasOpenCodeServiceInstance.mockReturnValue(true);
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Act
       sigTermHandler!();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
 
       // Assert
       expect(mockGetOpenCodeService).toHaveBeenCalled();
@@ -313,12 +295,11 @@ describe('index', () => {
           throw new Error('Dispose failed');
         }),
       });
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Act
       sigTermHandler!();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
 
       // Assert
       expect(mockCore.warning).toHaveBeenCalledWith(
@@ -328,14 +309,13 @@ describe('index', () => {
 
     it('ignores duplicate shutdown signals', async () => {
       // Arrange
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Act - Send multiple signals
       sigTermHandler!();
       sigTermHandler!();
       sigIntHandler!();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
 
       // Assert - should only log shutdown message once
       const shutdownCalls = mockCore.info.mock.calls.filter(
@@ -347,12 +327,11 @@ describe('index', () => {
     it('does not dispose OpenCode service if no instance exists', async () => {
       // Arrange
       mockHasOpenCodeServiceInstance.mockReturnValue(false);
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Act
       sigTermHandler!();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
 
       // Assert
       expect(mockGetOpenCodeService).not.toHaveBeenCalled();
@@ -373,11 +352,11 @@ describe('index', () => {
       // Arrange - workflow never resolves
       mockRunWorkflow.mockImplementation(() => new Promise(() => {}));
       loadIndexModule();
-      await jest.advanceTimersByTimeAsync(50);
+      await jest.advanceTimersByTimeAsync(ASYNC_SETTLE_MS);
 
       // Act - Trigger shutdown
       sigTermHandler!();
-      await jest.advanceTimersByTimeAsync(50);
+      await jest.advanceTimersByTimeAsync(ASYNC_SETTLE_MS);
 
       // Advance past the 10 second forced exit timeout
       await jest.advanceTimersByTimeAsync(10100);
@@ -397,15 +376,15 @@ describe('index', () => {
           })
       );
       loadIndexModule();
-      await jest.advanceTimersByTimeAsync(50);
+      await jest.advanceTimersByTimeAsync(ASYNC_SETTLE_MS);
 
       // Trigger shutdown
       sigTermHandler!();
-      await jest.advanceTimersByTimeAsync(50);
+      await jest.advanceTimersByTimeAsync(ASYNC_SETTLE_MS);
 
       // Act - Resolve the run promise before timeout
       resolveRun!({ success: true, output: '{}' });
-      await jest.advanceTimersByTimeAsync(50);
+      await jest.advanceTimersByTimeAsync(ASYNC_SETTLE_MS);
 
       // Assert
       expect(exitMock).toHaveBeenCalledWith(0);
@@ -424,7 +403,7 @@ describe('index', () => {
 
       // Act - Trigger shutdown after run completes
       sigTermHandler!();
-      await jest.advanceTimersByTimeAsync(50);
+      await jest.advanceTimersByTimeAsync(ASYNC_SETTLE_MS);
 
       // Assert
       expect(exitMock).toHaveBeenCalledWith(0);
@@ -443,8 +422,7 @@ describe('index', () => {
       );
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(capturedSignal).toBeDefined();
@@ -466,8 +444,7 @@ describe('index', () => {
           });
         }
       );
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Verify signal was passed
       expect(capturedSignal).toBeDefined();
@@ -481,7 +458,7 @@ describe('index', () => {
     });
 
     it('returns cancelled if signal is already aborted before run starts', async () => {
-      // This test verifies the early abort check in run()
+      // Arrange
       let capturedSignal: AbortSignal | undefined;
 
       mockRunWorkflow.mockImplementation(
@@ -495,8 +472,7 @@ describe('index', () => {
       );
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(capturedSignal).toBeDefined();
@@ -531,8 +507,7 @@ describe('index', () => {
       });
 
       // Act
-      loadIndexModule();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await loadAndFlush();
 
       // Assert
       expect(mockCore.setOutput).toHaveBeenCalledWith('status', 'failure');

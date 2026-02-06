@@ -7,7 +7,7 @@
     "build": "tsc",
     "bundle": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=dist/index.js --sourcemap",
     "test": "jest --coverage",
-    "test:unit": "jest --testPathPattern='src/.*\\.spec\\.ts$' --coverage",
+    "test:unit": "jest --testPathPatterns='src/.*\\.spec\\.ts$' --coverage",
     "test:integration": "jest --testPathPattern=integration --runInBand",
     "test:e2e": "jest --testPathPattern=e2e --runInBand --testTimeout=180000",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --max-warnings 0",

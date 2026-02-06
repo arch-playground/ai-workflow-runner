@@ -6,6 +6,10 @@ export interface ActionInputs {
   validationScript?: string;
   validationScriptType?: ValidationScriptType;
   maxValidationRetries: number;
+  opencodeConfig?: string;
+  authConfig?: string;
+  model?: string;
+  listModels: boolean;
 }
 
 export interface OpenCodeSession {

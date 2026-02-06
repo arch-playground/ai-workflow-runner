@@ -62,6 +62,7 @@ describe('runner', () => {
     envVars: { TEST_KEY: 'test_value' },
     timeoutMs: INPUT_LIMITS.DEFAULT_TIMEOUT_MINUTES * 60 * 1000,
     maxValidationRetries: INPUT_LIMITS.DEFAULT_VALIDATION_RETRY,
+    listModels: false,
     ...overrides,
   });
 

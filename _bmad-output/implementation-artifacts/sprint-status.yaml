@@ -82,3 +82,13 @@ development_status:
   6-5-configure-dependabot: 'done'
   6-6-configure-code-quality-tools: 'done'
   epic-6-retrospective: 'ready-for-dev'
+
+  # Epic 7: Configuration Customization & Examples
+  epic-7: 'in-progress'
+  7-1-add-configuration-inputs-to-action: 'done'
+  7-2-parse-configuration-inputs: 'backlog'
+  7-3-load-config-files-and-pass-to-sdk: 'backlog'
+  7-4-implement-list-models-feature: 'backlog'
+  7-5-create-example-workflows: 'backlog'
+  7-6-update-documentation: 'backlog'
+  epic-7-retrospective: 'backlog'
