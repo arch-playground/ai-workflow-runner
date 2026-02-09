@@ -20,6 +20,10 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      lint: ${{ steps.lint.outcome }}
+      format: ${{ steps.format.outcome }}
+      typecheck: ${{ steps.typecheck.outcome }}
 
     steps:
       - name: Checkout
@@ -42,25 +46,43 @@ jobs:
         run: npm ci
 
       - name: Lint
+        id: lint
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Lint (CI report)
+        if: always()
         run: |
           mkdir -p reports
-          npm run lint
           npm run lint:ci || true
 
       - name: Format check
+        id: format
+        continue-on-error: true
         run: npm run format:check
 
       - name: Type check
+        id: typecheck
+        continue-on-error: true
         run: npm run typecheck
 
       - name: Upload lint report
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: lint-report
+          name: quality-reports
           path: reports/eslint-report.json
           retention-days: 7
           if-no-files-found: ignore
+
+      - name: Quality gate
+        if: steps.lint.outcome == 'failure' || steps.format.outcome == 'failure' || steps.typecheck.outcome == 'failure'
+        run: |
+          echo "::error::Quality gate failed"
+          echo "  Lint:      ${{ steps.lint.outcome }}"
+          echo "  Format:    ${{ steps.format.outcome }}"
+          echo "  Typecheck: ${{ steps.typecheck.outcome }}"
+          exit 1
 
   # ─── Job 2: Unit Tests ───
   unit-test:
@@ -99,7 +121,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: unit-test-results
+          name: unit-test-reports
           path: |
             reports/unit-tests.xml
             coverage/coverage-summary.json
@@ -124,9 +146,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Security audit
-        run: npm audit --audit-level=high --omit=dev
+      - name: Audit (JSON report)
         continue-on-error: true
+        run: |
+          mkdir -p reports
+          npm audit --json > reports/audit-results.json 2>&1 || true
+
+      - name: Audit (production only)
+        run: npm audit --audit-level=high --omit=dev || true
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: security-reports
+          path: reports/audit-results.json
+          retention-days: 7
+          if-no-files-found: ignore
 
   # ─── Job 4: Build + Integration Tests ───
   build-and-integration:
@@ -150,14 +186,69 @@ jobs:
       - name: Bundle
         run: npm run bundle
 
+      - name: Capture bundle size
+        id: bundle
+        run: |
+          BUNDLE_SIZE=$(stat --format=%s dist/index.js 2>/dev/null || stat -f%z dist/index.js 2>/dev/null || echo "0")
+          BUNDLE_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $BUNDLE_SIZE / 1048576}")
+          echo "size_bytes=$BUNDLE_SIZE" >> "$GITHUB_OUTPUT"
+          echo "size_mb=$BUNDLE_SIZE_MB" >> "$GITHUB_OUTPUT"
+          echo "Bundle size: ${BUNDLE_SIZE_MB} MB"
+
       - name: Build Docker image
         run: docker build -t ai-workflow-runner:test .
 
-      - name: Verify Docker runtimes
+      - name: Capture Docker image metadata
+        id: docker
         run: |
-          docker run --rm --entrypoint node ai-workflow-runner:test --version
-          docker run --rm --entrypoint python3.11 ai-workflow-runner:test --version
-          docker run --rm --entrypoint java ai-workflow-runner:test --version
+          IMAGE_SIZE=$(docker image inspect ai-workflow-runner:test --format='{{.Size}}')
+          IMAGE_SIZE_MB=$(awk "BEGIN {printf \"%.1f\", $IMAGE_SIZE / 1048576}")
+          IMAGE_ID=$(docker image inspect ai-workflow-runner:test --format='{{.Id}}' | cut -d: -f2 | head -c 12)
+          IMAGE_CREATED=$(docker image inspect ai-workflow-runner:test --format='{{.Created}}' | cut -dT -f1)
+          LAYER_COUNT=$(docker image inspect ai-workflow-runner:test --format='{{len .RootFS.Layers}}')
+          echo "size_bytes=$IMAGE_SIZE" >> "$GITHUB_OUTPUT"
+          echo "size_mb=$IMAGE_SIZE_MB" >> "$GITHUB_OUTPUT"
+          echo "image_id=$IMAGE_ID" >> "$GITHUB_OUTPUT"
+          echo "created=$IMAGE_CREATED" >> "$GITHUB_OUTPUT"
+          echo "layers=$LAYER_COUNT" >> "$GITHUB_OUTPUT"
+          echo "Docker image: ${IMAGE_SIZE_MB} MB, ${LAYER_COUNT} layers"
+
+      - name: Verify Docker runtimes
+        id: runtimes
+        run: |
+          NODE_VER=$(docker run --rm --entrypoint node ai-workflow-runner:test --version)
+          PYTHON_VER=$(docker run --rm --entrypoint python3.11 ai-workflow-runner:test --version)
+          JAVA_VER=$(docker run --rm --entrypoint java ai-workflow-runner:test --version 2>&1 | head -1)
+          echo "node=$NODE_VER" >> "$GITHUB_OUTPUT"
+          echo "python=$PYTHON_VER" >> "$GITHUB_OUTPUT"
+          echo "java=$JAVA_VER" >> "$GITHUB_OUTPUT"
+
+      - name: Save build metadata
+        run: |
+          mkdir -p reports
+          jq -n \
+            --argjson bundle_bytes "${{ steps.bundle.outputs.size_bytes }}" \
+            --arg bundle_mb "${{ steps.bundle.outputs.size_mb }}" \
+            --argjson docker_bytes "${{ steps.docker.outputs.size_bytes }}" \
+            --arg docker_mb "${{ steps.docker.outputs.size_mb }}" \
+            --arg docker_id "${{ steps.docker.outputs.image_id }}" \
+            --arg docker_created "${{ steps.docker.outputs.created }}" \
+            --argjson docker_layers "${{ steps.docker.outputs.layers }}" \
+            --arg node "${{ steps.runtimes.outputs.node }}" \
+            --arg python "${{ steps.runtimes.outputs.python }}" \
+            --arg java "${{ steps.runtimes.outputs.java }}" \
+            '{
+              bundle_size_bytes: $bundle_bytes,
+              bundle_size_mb: $bundle_mb,
+              docker_size_bytes: $docker_bytes,
+              docker_size_mb: $docker_mb,
+              docker_image_id: $docker_id,
+              docker_created: $docker_created,
+              docker_layers: $docker_layers,
+              runtime_node: $node,
+              runtime_python: $python,
+              runtime_java: $java
+            }' > reports/build-metadata.json
 
       - name: Integration tests
         run: npm run test:integration:ci
@@ -175,12 +266,14 @@ jobs:
           reporter: jest-junit
           fail-on-error: false
 
-      - name: Upload integration test results
+      - name: Upload build and integration results
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: integration-test-results
-          path: reports/integration-tests.xml
+          name: build-and-integration-reports
+          path: |
+            reports/integration-tests.xml
+            reports/build-metadata.json
           retention-days: 7
           if-no-files-found: ignore
 
@@ -329,98 +422,289 @@ jobs:
     timeout-minutes: 3
 
     steps:
-      - name: Download artifacts
+      - name: Download unit test reports
+        continue-on-error: true
         uses: actions/download-artifact@v6
         with:
-          merge-multiple: true
-          path: artifacts
+          name: unit-test-reports
+          path: unit-test-reports
+
+      - name: Download build and integration reports
         continue-on-error: true
+        uses: actions/download-artifact@v6
+        with:
+          name: build-and-integration-reports
+          path: build-reports
+
+      - name: Download security reports
+        continue-on-error: true
+        uses: actions/download-artifact@v6
+        with:
+          name: security-reports
+          path: security-reports
 
       - name: Generate pipeline report
         id: report
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          UNIT_RESULT: ${{ needs.unit-test.result }}
+          SECURITY_RESULT: ${{ needs.security-audit.result }}
+          INTEGRATION_RESULT: ${{ needs.build-and-integration.result }}
+          E2E_RESULT: ${{ needs.e2e-action-tests.result }}
+          QUALITY_LINT: ${{ needs.quality.outputs.lint }}
+          QUALITY_FORMAT: ${{ needs.quality.outputs.format }}
+          QUALITY_TYPECHECK: ${{ needs.quality.outputs.typecheck }}
         run: |
-          # Collect job statuses
-          QUALITY="${{ needs.quality.result }}"
-          UNIT="${{ needs.unit-test.result }}"
-          SECURITY="${{ needs.security-audit.result }}"
-          INTEGRATION="${{ needs.build-and-integration.result }}"
-          E2E="${{ needs.e2e-action-tests.result }}"
-
           status_icon() {
             case "$1" in
               success) echo "✅" ;;
               failure) echo "❌" ;;
               cancelled) echo "⏹️" ;;
               skipped) echo "⏭️" ;;
-              *) echo "❓" ;;
+              *) echo "⚠️" ;;
             esac
           }
 
-          # Parse unit test JUnit XML if available
-          UNIT_TESTS=""
-          if [ -f artifacts/unit-tests.xml ]; then
-            TESTS=$(grep -oP 'tests="\K[0-9]+' artifacts/unit-tests.xml | head -1 || echo "0")
-            FAILURES=$(grep -oP 'failures="\K[0-9]+' artifacts/unit-tests.xml | head -1 || echo "0")
-            ERRORS=$(grep -oP 'errors="\K[0-9]+' artifacts/unit-tests.xml | head -1 || echo "0")
-            UNIT_TESTS=" ($TESTS tests, $FAILURES failures, $ERRORS errors)"
+          # ── Parse unit test results ──
+          UNIT_DETAIL="—"
+          if [ -f unit-test-reports/reports/unit-tests.xml ]; then
+            UT_TESTS=$(grep -o 'tests="[0-9]*"' unit-test-reports/reports/unit-tests.xml | head -1 | grep -o '[0-9]*' || echo "0")
+            UT_FAILURES=$(grep -o 'failures="[0-9]*"' unit-test-reports/reports/unit-tests.xml | head -1 | grep -o '[0-9]*' || echo "0")
+            UT_TIME=$(grep -o 'time="[0-9.]*"' unit-test-reports/reports/unit-tests.xml | head -1 | grep -o '[0-9.]*' || echo "0")
+            UT_PASSED=$((UT_TESTS - UT_FAILURES))
+            UNIT_DETAIL="${UT_PASSED}/${UT_TESTS} passed (${UT_TIME}s)"
           fi
 
-          # Parse integration test JUnit XML if available
-          INT_TESTS=""
-          if [ -f artifacts/integration-tests.xml ]; then
-            TESTS=$(grep -oP 'tests="\K[0-9]+' artifacts/integration-tests.xml | head -1 || echo "0")
-            FAILURES=$(grep -oP 'failures="\K[0-9]+' artifacts/integration-tests.xml | head -1 || echo "0")
-            ERRORS=$(grep -oP 'errors="\K[0-9]+' artifacts/integration-tests.xml | head -1 || echo "0")
-            INT_TESTS=" ($TESTS tests, $FAILURES failures, $ERRORS errors)"
+          # ── Parse integration test results ──
+          INT_DETAIL="—"
+          if [ -f build-reports/reports/integration-tests.xml ]; then
+            IT_TESTS=$(grep -o 'tests="[0-9]*"' build-reports/reports/integration-tests.xml | head -1 | grep -o '[0-9]*' || echo "0")
+            IT_FAILURES=$(grep -o 'failures="[0-9]*"' build-reports/reports/integration-tests.xml | head -1 | grep -o '[0-9]*' || echo "0")
+            IT_TIME=$(grep -o 'time="[0-9.]*"' build-reports/reports/integration-tests.xml | head -1 | grep -o '[0-9.]*' || echo "0")
+            IT_PASSED=$((IT_TESTS - IT_FAILURES))
+            INT_DETAIL="${IT_PASSED}/${IT_TESTS} passed (${IT_TIME}s)"
           fi
 
-          # Parse coverage if available
-          COVERAGE=""
-          if [ -f artifacts/coverage-summary.json ]; then
-            LINES=$(python3 -c 'import json; data = json.load(open("artifacts/coverage-summary.json")); print(str(data["total"]["lines"]["pct"]) + "%")' 2>/dev/null || echo "N/A")
-            BRANCHES=$(python3 -c 'import json; data = json.load(open("artifacts/coverage-summary.json")); print(str(data["total"]["branches"]["pct"]) + "%")' 2>/dev/null || echo "N/A")
-            COVERAGE="| Coverage | Lines: $LINES / Branches: $BRANCHES |"
+          # ── Parse security audit results ──
+          AUDIT_DETAIL="—"
+          AUDIT_SECTION=""
+          if [ -f security-reports/audit-results.json ]; then
+            AUDIT_TOTAL=$(jq -r '.metadata.vulnerabilities // {} | to_entries | map(.value) | add // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
+            AUDIT_CRITICAL=$(jq -r '.metadata.vulnerabilities.critical // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
+            AUDIT_HIGH=$(jq -r '.metadata.vulnerabilities.high // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
+            AUDIT_MODERATE=$(jq -r '.metadata.vulnerabilities.moderate // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
+            AUDIT_LOW=$(jq -r '.metadata.vulnerabilities.low // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
+            AUDIT_INFO=$(jq -r '.metadata.vulnerabilities.info // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
+
+            if [ "$AUDIT_TOTAL" = "0" ]; then
+              AUDIT_DETAIL="No vulnerabilities found"
+            else
+              AUDIT_DETAIL="${AUDIT_TOTAL} vulnerabilities found"
+            fi
+
+            AUDIT_SECTION="
+          <details>
+          <summary><strong>Security Audit</strong></summary>
+
+          | Severity | Count |
+          |----------|-------|
+          | Critical | ${AUDIT_CRITICAL} |
+          | High | ${AUDIT_HIGH} |
+          | Moderate | ${AUDIT_MODERATE} |
+          | Low | ${AUDIT_LOW} |
+          | Info | ${AUDIT_INFO} |
+
+          </details>"
           fi
 
-          # Determine overall status
-          if [ "$QUALITY" = "success" ] && [ "$UNIT" = "success" ] && [ "$INTEGRATION" = "success" ] && [ "$E2E" = "success" ]; then
+          # ── Quality details ──
+          LINT_ICON=$(status_icon "$QUALITY_LINT")
+          FORMAT_ICON=$(status_icon "$QUALITY_FORMAT")
+          TC_ICON=$(status_icon "$QUALITY_TYPECHECK")
+          QUALITY_DETAIL="${LINT_ICON} Lint, ${FORMAT_ICON} Format, ${TC_ICON} Typecheck"
+
+          # ── E2E details (8 matrix cases) ──
+          E2E_DETAIL="8 matrix cases"
+
+          # ── Build metadata ──
+          BUILD_DETAIL="—"
+          BUILD_SECTION=""
+          if [ -f build-reports/reports/build-metadata.json ]; then
+            BUNDLE_MB=$(jq -r '.bundle_size_mb' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
+            DOCKER_MB=$(jq -r '.docker_size_mb' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
+            DOCKER_ID=$(jq -r '.docker_image_id' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
+            DOCKER_LAYERS=$(jq -r '.docker_layers' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
+            NODE_VER=$(jq -r '.runtime_node' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
+            PYTHON_VER=$(jq -r '.runtime_python' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
+            JAVA_VER=$(jq -r '.runtime_java' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
+            BUILD_DETAIL="Bundle: ${BUNDLE_MB} MB, Image: ${DOCKER_MB} MB"
+
+            BUILD_SECTION="
+          <details>
+          <summary><strong>Build Report</strong></summary>
+
+          | Metric | Value |
+          |--------|-------|
+          | Bundle size | ${BUNDLE_MB} MB |
+          | Docker image size | ${DOCKER_MB} MB |
+          | Docker image ID | \`${DOCKER_ID}\` |
+          | Docker layers | ${DOCKER_LAYERS} |
+          | Status | $(status_icon "$INTEGRATION_RESULT") |
+
+          **Runtimes**
+
+          | Runtime | Version |
+          |---------|---------|
+          | Node.js | ${NODE_VER} |
+          | Python | ${PYTHON_VER} |
+          | Java | ${JAVA_VER} |
+
+          </details>"
+          fi
+
+          # ── Coverage report ──
+          COVERAGE_SECTION=""
+          if [ -f unit-test-reports/coverage/coverage-summary.json ]; then
+            COV_LINES=$(jq -r '.total.lines.pct' unit-test-reports/coverage/coverage-summary.json 2>/dev/null || echo "—")
+            COV_BRANCHES=$(jq -r '.total.branches.pct' unit-test-reports/coverage/coverage-summary.json 2>/dev/null || echo "—")
+            COV_FUNCTIONS=$(jq -r '.total.functions.pct' unit-test-reports/coverage/coverage-summary.json 2>/dev/null || echo "—")
+            COV_STATEMENTS=$(jq -r '.total.statements.pct' unit-test-reports/coverage/coverage-summary.json 2>/dev/null || echo "—")
+
+            cov_status() {
+              if [ "$1" = "—" ]; then echo "⚠️";
+              elif [ "$(awk "BEGIN {print ($1 >= 80)}")" = "1" ]; then echo "✅";
+              else echo "❌"; fi
+            }
+
+            COVERAGE_SECTION="
+          <details>
+          <summary><strong>Coverage Report</strong> (threshold: 80%)</summary>
+
+          | Metric | Coverage | Threshold | Status |
+          |--------|----------|-----------|--------|
+          | Lines | ${COV_LINES}% | 80% | $(cov_status "$COV_LINES") |
+          | Branches | ${COV_BRANCHES}% | 75% | $(cov_status "$COV_BRANCHES") |
+          | Functions | ${COV_FUNCTIONS}% | 80% | $(cov_status "$COV_FUNCTIONS") |
+          | Statements | ${COV_STATEMENTS}% | 80% | $(cov_status "$COV_STATEMENTS") |
+
+          </details>"
+          fi
+
+          # ── E2E matrix breakdown ──
+          E2E_SECTION="
+          <details>
+          <summary><strong>E2E Action Test Matrix</strong></summary>
+
+          | Test Case | Expected |
+          |-----------|----------|
+          | Valid workflow | success |
+          | Missing workflow_path | failure |
+          | Invalid env_vars JSON | failure |
+          | Non-existent workflow | failure |
+          | Path traversal blocked | failure |
+          | Unicode workflow path | success |
+          | Spaces in path | success |
+          | Secret masking in logs | success |
+
+          </details>"
+
+          # ── Determine overall status ──
+          if [ "$QUALITY_RESULT" = "success" ] && [ "$UNIT_RESULT" = "success" ] && [ "$INTEGRATION_RESULT" = "success" ] && [ "$E2E_RESULT" = "success" ]; then
             OVERALL="✅ **Pipeline Passed**"
           else
             OVERALL="❌ **Pipeline Failed**"
           fi
 
-          # Generate markdown report
+          # ── Assemble report ──
           {
             echo "## CI Pipeline Report"
             echo ""
             echo "$OVERALL"
             echo ""
-            echo "| Job | Status |"
-            echo "|-----|--------|"
-            echo "| Quality (lint, format, typecheck) | $(status_icon "$QUALITY") $QUALITY |"
-            echo "| Unit Tests | $(status_icon "$UNIT") $UNIT$UNIT_TESTS |"
-            echo "| Security Audit | $(status_icon "$SECURITY") $SECURITY |"
-            echo "| Build & Integration Tests | $(status_icon "$INTEGRATION") $INTEGRATION$INT_TESTS |"
-            echo "| E2E Action Tests | $(status_icon "$E2E") $E2E |"
-            if [ -n "$COVERAGE" ]; then
-              echo "$COVERAGE"
+            echo "### Summary"
+            echo ""
+            echo "| Job | Status | Details |"
+            echo "|-----|--------|---------|"
+            echo "| **Quality** | $(status_icon "$QUALITY_RESULT") $QUALITY_RESULT | ${QUALITY_DETAIL} |"
+            echo "| **Unit Tests** | $(status_icon "$UNIT_RESULT") $UNIT_RESULT | ${UNIT_DETAIL} |"
+            echo "| **Security Audit** | $(status_icon "$SECURITY_RESULT") $SECURITY_RESULT | ${AUDIT_DETAIL} |"
+            echo "| **Build & Integration** | $(status_icon "$INTEGRATION_RESULT") $INTEGRATION_RESULT | ${INT_DETAIL} |"
+            echo "| **E2E Action Tests** | $(status_icon "$E2E_RESULT") $E2E_RESULT | ${E2E_DETAIL} |"
+            if [ -n "$BUILD_SECTION" ]; then
+              echo "$BUILD_SECTION"
             fi
-          } | tee pipeline-report.md >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "$COVERAGE_SECTION" ]; then
+              echo "$COVERAGE_SECTION"
+            fi
+            if [ -n "$AUDIT_SECTION" ]; then
+              echo "$AUDIT_SECTION"
+            fi
+            echo "$E2E_SECTION"
+            echo ""
+            echo "[View full run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          } > pipeline-report.md
+
+          cat pipeline-report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: PR comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
+          header: ci-report
           path: pipeline-report.md
         continue-on-error: true
 
-      - name: PR status check
-        if: github.event_name == 'pull_request'
+      - name: PR status check - Quality Gate
+        if: always()
         uses: LouisBrunner/checks-action@v1.6.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          name: CI Pipeline Summary
-          conclusion: ${{ (needs.quality.result == 'success' && needs.unit-test.result == 'success' && needs.build-and-integration.result == 'success' && needs.e2e-action-tests.result == 'success') && 'success' || 'failure' }}
+          name: Quality Gate
+          conclusion: ${{ needs.quality.result }}
           output: |
-            {"summary": "Quality: ${{ needs.quality.result }}, Unit: ${{ needs.unit-test.result }}, Integration: ${{ needs.build-and-integration.result }}, E2E: ${{ needs.e2e-action-tests.result }}"}
+            {"summary": "Lint: ${{ needs.quality.outputs.lint }}, Format: ${{ needs.quality.outputs.format }}, Typecheck: ${{ needs.quality.outputs.typecheck }}"}
+        continue-on-error: true
+
+      - name: PR status check - Test Suite
+        if: always()
+        uses: LouisBrunner/checks-action@v1.6.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: Test Suite
+          conclusion: ${{ needs.unit-test.result }}
+          output: |
+            {"summary": "Unit tests with coverage reporting"}
+        continue-on-error: true
+
+      - name: PR status check - Build & Integration
+        if: always()
+        uses: LouisBrunner/checks-action@v1.6.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: Build & Integration
+          conclusion: ${{ needs.build-and-integration.result }}
+          output: |
+            {"summary": "Bundle, Docker build, runtime verification, integration tests"}
+        continue-on-error: true
+
+      - name: PR status check - E2E Action Tests
+        if: always()
+        uses: LouisBrunner/checks-action@v1.6.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: E2E Action Tests
+          conclusion: ${{ needs.e2e-action-tests.result }}
+          output: |
+            {"summary": "8 matrix cases covering valid, invalid, security, and edge-case inputs"}
+        continue-on-error: true
+
+      - name: PR status check - Security Audit
+        if: always()
+        uses: LouisBrunner/checks-action@v1.6.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: Security Audit
+          conclusion: ${{ needs.security-audit.result }}
+          output: |
+            {"summary": "npm audit for dependency vulnerabilities"}
         continue-on-error: true
