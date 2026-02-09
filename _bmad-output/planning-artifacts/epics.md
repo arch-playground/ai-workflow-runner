@@ -13,8 +13,8 @@ inputDocuments:
   - 'docs/index.md'
   - '_bmad-output/implementation-artifacts/tech-spec-opencode-sdk-runner.md'
   - '_bmad-output/implementation-artifacts/tech-spec-ai-workflow-runner-init.md'
-implementationStatus: 'MVP Complete - Epic 7 (Configuration Customization) pending'
-lastUpdated: '2026-02-06'
+implementationStatus: 'MVP Complete - Epic 7 (Configuration Customization) and Epic 8 (Distribution & Marketplace) pending'
+lastUpdated: '2026-02-09'
 ---
 
 # AI Workflow Runner - Epic Breakdown
@@ -23,7 +23,7 @@ lastUpdated: '2026-02-06'
 
 This document provides the complete epic and story breakdown for AI Workflow Runner, decomposing the requirements from the PRD, Architecture, and Tech Specs into implementable stories.
 
-**Implementation Status:** MVP Complete (Epics 1-6). Epic 7 (Configuration Customization & Examples) pending.
+**Implementation Status:** MVP Complete (Epics 1-6). Epic 7 (Configuration Customization & Examples) and Epic 8 (Distribution & Marketplace Publishing) pending.
 
 ## Requirements Inventory
 
@@ -85,11 +85,19 @@ This document provides the complete epic and story breakdown for AI Workflow Run
 - FR37: System can return clear error messages for validation script failures
 - FR38: System can distinguish runner errors from workflow/AI errors
 
+**Distribution & Publishing (FR45-FR49):**
+
+- FR45: System can publish pre-built Docker image to GitHub Container Registry (GHCR)
+- FR46: System can automatically build and push Docker image on release/tag
+- FR47: Action references pre-built GHCR image instead of building from Dockerfile at consumer runtime
+- FR48: Action is listed on GitHub Marketplace as a free action
+- FR49: System can tag Docker images with semver versions matching GitHub release tags
+
 ### NonFunctional Requirements
 
 **Performance (NFR1-NFR4):**
 
-- NFR1: Docker image build < 10 minutes on CI
+- NFR1: Pre-built Docker image pull < 2 minutes on CI
 - NFR2: Runner startup < 30 seconds
 - NFR3: Console streaming latency < 1 second
 - NFR4: Graceful shutdown < 10 seconds
@@ -204,6 +212,11 @@ This document provides the complete epic and story breakdown for AI Workflow Run
 | FR42 | Epic 7 | List models mode                |
 | FR43 | Epic 7 | Load and pass config to SDK     |
 | FR44 | Epic 7 | Query and display models        |
+| FR45 | Epic 8 | Publish Docker image to GHCR    |
+| FR46 | Epic 8 | Auto build/push on release      |
+| FR47 | Epic 8 | Reference pre-built GHCR image  |
+| FR48 | Epic 8 | GitHub Marketplace listing      |
+| FR49 | Epic 8 | Semver Docker image tags        |
 
 ## Epic List
 
@@ -247,6 +260,12 @@ Contributors can confidently develop, test, and release the action with automate
 
 Users can customize OpenCode SDK configuration (providers, auth, models) and have complete example workflows for onboarding.
 **FRs covered:** FR39, FR40, FR41, FR42, FR43, FR44
+**Status:** 🔲 NOT STARTED
+
+### Epic 8: Distribution & Marketplace Publishing
+
+The action is distributed via pre-built Docker image on GHCR and listed on GitHub Marketplace for discoverability.
+**FRs covered:** FR45, FR46, FR47, FR48, FR49
 **Status:** 🔲 NOT STARTED
 
 ---
@@ -1338,3 +1357,90 @@ So that **I understand how to customize the action**.
 **And** configuration section explains GitHub Variables/Secrets setup
 **And** examples section links to examples/ folder
 **And** Copilot setup is documented with token generation link
+
+---
+
+## Epic 8: Distribution & Marketplace Publishing
+
+**Goal:** The action is distributed via pre-built Docker image on GHCR and listed on GitHub Marketplace for discoverability, eliminating per-run Docker builds for consumers.
+
+**FRs covered:** FR45, FR46, FR47, FR48, FR49
+**Status:** 🔲 NOT STARTED
+
+**Implementation Files:**
+
+- `.github/workflows/release.yml` - Add Docker build & push job
+- `action.yml` - Update image reference to GHCR
+
+### Story 8.1: Add Docker Image Build & Push to Release Pipeline
+
+As a **maintainer**,
+I want **Docker images automatically built and pushed to GHCR on release**,
+So that **consumers pull a pre-built image instead of building from Dockerfile**.
+
+**Acceptance Criteria:**
+
+**Given** a release tag matching `v*.*.*` is pushed
+**When** the release workflow runs
+**Then** it authenticates to GHCR using `GITHUB_TOKEN`
+**And** it builds the Docker image from `Dockerfile`
+**And** it pushes the image to `ghcr.io/arch-playground/ai-workflow-runner`
+**And** the image is tagged with the full semver version (e.g., `1.2.3`)
+**And** the image is tagged with the major version (e.g., `1`)
+**And** the image is tagged with `latest`
+
+**Given** the release workflow already has build and test jobs
+**When** the Docker publish job runs
+**Then** it runs after the existing build/test jobs succeed
+**And** it requires `packages: write` permission
+
+**Given** the Docker build fails
+**When** the release workflow runs
+**Then** the failure is reported clearly
+**And** the GitHub Release is still created (Docker publish is non-blocking)
+
+### Story 8.2: Update action.yml to Reference Pre-built GHCR Image
+
+As a **GitHub Actions user**,
+I want **the action to use a pre-built Docker image**,
+So that **my workflows start faster without building the image**.
+
+**Acceptance Criteria:**
+
+**Given** `action.yml` file
+**When** updated
+**Then** `runs.image` is changed from `'Dockerfile'` to `'docker://ghcr.io/arch-playground/ai-workflow-runner:1'`
+**And** the major version tag is used (not `latest`) for stability
+**And** all existing inputs and outputs remain unchanged
+
+**Given** a consumer uses `arch-playground/ai-workflow-runner@v1`
+**When** the action runs
+**Then** GitHub pulls the pre-built image from GHCR
+**And** no Docker build step occurs
+**And** startup time is reduced to image pull time only
+
+### Story 8.3: Publish Action to GitHub Marketplace
+
+As a **GitHub Actions user**,
+I want **the action listed on GitHub Marketplace**,
+So that **I can discover it when searching for AI workflow tools**.
+
+**Acceptance Criteria:**
+
+**Given** the repository on GitHub
+**When** the action is published to Marketplace
+**Then** it appears in GitHub Marketplace search results
+**And** the listing shows the action name "AI Workflow Runner"
+**And** the listing shows the description from `action.yml`
+**And** the listing shows the branding icon (play-circle, green)
+
+**Given** Marketplace listing requirements
+**When** verified
+**Then** `action.yml` has `name`, `description`, and `branding` fields
+**And** repository has a `README.md` with usage instructions
+**And** repository has a `LICENSE` file
+**And** repository is public
+
+**Given** a new release is published
+**When** the Marketplace listing is updated
+**Then** the latest version is shown on the Marketplace page

@@ -41,13 +41,13 @@ The PRD defines 38 functional requirements spanning six major capability areas:
 
 **Non-Functional Requirements:**
 
-| Category            | Key NFRs    | Target                                                                   |
-| ------------------- | ----------- | ------------------------------------------------------------------------ |
-| **Performance**     | NFR1-NFR4   | Docker build <10min, startup <30s, streaming <1s latency, shutdown <10s  |
-| **Security**        | NFR5-NFR9   | Secret masking, path traversal prevention, temp file permissions (0o600) |
-| **Reliability**     | NFR10-NFR13 | 0% runner-caused failures, signal handling, 3 reconnection attempts      |
-| **Integration**     | NFR14-NFR17 | ubuntu-latest compatibility, pinned SDK version, parseable outputs       |
-| **Maintainability** | NFR18-NFR20 | 80% test coverage, Dependabot, TypeScript strict mode                    |
+| Category            | Key NFRs    | Target                                                                         |
+| ------------------- | ----------- | ------------------------------------------------------------------------------ |
+| **Performance**     | NFR1-NFR4   | Pre-built image pull <2min, startup <30s, streaming <1s latency, shutdown <10s |
+| **Security**        | NFR5-NFR9   | Secret masking, path traversal prevention, temp file permissions (0o600)       |
+| **Reliability**     | NFR10-NFR13 | 0% runner-caused failures, signal handling, 3 reconnection attempts            |
+| **Integration**     | NFR14-NFR17 | ubuntu-latest compatibility, pinned SDK version, parseable outputs             |
+| **Maintainability** | NFR18-NFR20 | 80% test coverage, Dependabot, TypeScript strict mode                          |
 
 **Scale & Complexity:**
 
@@ -105,6 +105,8 @@ Patterns and approaches that shape the architecture.
 
 **Deferred Decisions (Phase 2+):**
 
+- Pre-built Docker image publishing to GHCR
+- GitHub Marketplace listing (basic, free)
 - Caching strategy for faster subsequent runs
 - Parallel workflow execution architecture
 - Workflow marketplace/registry integration
@@ -252,12 +254,14 @@ shutdownController (index.ts)
 
 ### Phase 2 Considerations
 
-| Feature                | Architectural Impact                     | Approach                                 |
-| ---------------------- | ---------------------------------------- | ---------------------------------------- |
-| **Caching**            | New module, storage abstraction          | Add `cache.ts` module                    |
-| **Parallel execution** | Multi-session support in OpenCodeService | Existing per-session state supports this |
-| **Workflow registry**  | External integration, new inputs         | Add optional `registry_url` input        |
-| **Metrics**            | New module, optional telemetry           | Add `metrics.ts` module, opt-in          |
+| Feature                    | Architectural Impact                     | Approach                                                                                                                                                           |
+| -------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Pre-built Docker image** | CI workflow change, `action.yml` update  | Add Docker build+push job to existing `release.yml`; change `action.yml` from `image: 'Dockerfile'` to `docker://ghcr.io/arch-playground/ai-workflow-runner:<tag>` |
+| **GitHub Marketplace**     | Metadata in `action.yml`, branding       | Already has `branding` section; ensure Marketplace requirements met (README, license, tags)                                                                        |
+| **Caching**                | New module, storage abstraction          | Add `cache.ts` module                                                                                                                                              |
+| **Parallel execution**     | Multi-session support in OpenCodeService | Existing per-session state supports this                                                                                                                           |
+| **Workflow registry**      | External integration, new inputs         | Add optional `registry_url` input                                                                                                                                  |
+| **Metrics**                | New module, optional telemetry           | Add `metrics.ts` module, opt-in                                                                                                                                    |
 
 ## Implementation Patterns & Consistency Rules
 
@@ -620,7 +624,7 @@ ai-workflow-runner/
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml                    # Build, lint, test on PR/push
-│   │   ├── release.yml               # Semver release automation
+│   │   ├── release.yml               # Semver release + Docker image publish to GHCR
 │   │   └── test-action.yml           # E2E action testing
 │   └── dependabot.yml                # Automated dependency updates
 │
@@ -750,17 +754,21 @@ ai-workflow-runner/
 | **Validation & Retry (FR17-FR26)** | `validation.ts`, `runner.ts` | `validation.spec.ts`, `runner.spec.ts` |
 | **Security (FR27-FR30)**           | `security.ts`, `config.ts`   | `security.spec.ts`, `config.spec.ts`   |
 | **Lifecycle (FR31-FR38)**          | `index.ts`, `opencode.ts`    | `index.spec.ts`, `opencode.spec.ts`    |
+| **Configuration (FR39-FR44)**      | `config.ts`, `opencode.ts`   | `config.spec.ts`, `opencode.spec.ts`   |
+| **Distribution (FR45-FR49)**       | `action.yml`, `release.yml`  | N/A (CI workflow, no app code)         |
 
 ### External Integration Boundaries
 
-| Boundary           | Direction     | Interface                              | Location                     |
-| ------------------ | ------------- | -------------------------------------- | ---------------------------- |
-| GitHub Actions     | Input         | Action inputs, env vars                | `action.yml`, `config.ts`    |
-| GitHub Actions     | Output        | `core.setOutput()`, `core.setFailed()` | `index.ts`                   |
-| OpenCode SDK       | Bidirectional | `@opencode-ai/sdk` client              | `opencode.ts`                |
-| Validation Scripts | Output        | `child_process.spawn()`                | `validation.ts`              |
-| Filesystem         | Input         | Workflow file, validation scripts      | `runner.ts`, `validation.ts` |
-| Filesystem         | Output        | Temp files (cleaned up)                | `validation.ts`              |
+| Boundary           | Direction     | Interface                              | Location                          |
+| ------------------ | ------------- | -------------------------------------- | --------------------------------- |
+| GitHub Actions     | Input         | Action inputs, env vars                | `action.yml`, `config.ts`         |
+| GitHub Actions     | Output        | `core.setOutput()`, `core.setFailed()` | `index.ts`                        |
+| GitHub Marketplace | Output        | Marketplace listing metadata           | `action.yml` (branding, metadata) |
+| GHCR               | Output        | Docker image publish                   | `release.yml`                     |
+| OpenCode SDK       | Bidirectional | `@opencode-ai/sdk` client              | `opencode.ts`                     |
+| Validation Scripts | Output        | `child_process.spawn()`                | `validation.ts`                   |
+| Filesystem         | Input         | Workflow file, validation scripts      | `runner.ts`, `validation.ts`      |
+| Filesystem         | Output        | Temp files (cleaned up)                | `validation.ts`                   |
 
 ### Data Flow
 
@@ -827,14 +835,16 @@ Project structure supports all architectural decisions:
 
 **Functional Requirements Coverage (38/38):**
 
-| FR Range                         | Count | Status | Architectural Support        |
-| -------------------------------- | ----- | ------ | ---------------------------- |
-| FR1-FR7 (Workflow Execution)     | 7     | ✅     | `runner.ts`, `config.ts`     |
-| FR8-FR12 (Session Management)    | 5     | ✅     | `opencode.ts`                |
-| FR13-FR16 (Output & Streaming)   | 4     | ✅     | `opencode.ts` event handling |
-| FR17-FR26 (Validation & Retry)   | 10    | ✅     | `validation.ts`, `runner.ts` |
-| FR27-FR30 (Security)             | 4     | ✅     | `security.ts`, `config.ts`   |
-| FR31-FR38 (Lifecycle Management) | 8     | ✅     | `index.ts`, `opencode.ts`    |
+| FR Range                         | Count | Status | Architectural Support                         |
+| -------------------------------- | ----- | ------ | --------------------------------------------- |
+| FR1-FR7 (Workflow Execution)     | 7     | ✅     | `runner.ts`, `config.ts`                      |
+| FR8-FR12 (Session Management)    | 5     | ✅     | `opencode.ts`                                 |
+| FR13-FR16 (Output & Streaming)   | 4     | ✅     | `opencode.ts` event handling                  |
+| FR17-FR26 (Validation & Retry)   | 10    | ✅     | `validation.ts`, `runner.ts`                  |
+| FR27-FR30 (Security)             | 4     | ✅     | `security.ts`, `config.ts`                    |
+| FR31-FR38 (Lifecycle Management) | 8     | ✅     | `index.ts`, `opencode.ts`                     |
+| FR39-FR44 (Configuration)        | 6     | ✅     | `config.ts`, `opencode.ts`                    |
+| FR45-FR49 (Distribution)         | 5     | 🔲     | `.github/workflows/release.yml`, `action.yml` |
 
 **Non-Functional Requirements Coverage (20/20):**
 
@@ -937,10 +947,12 @@ Project structure supports all architectural decisions:
 
 **Areas for Future Enhancement (Phase 2+):**
 
-1. Configuration file support for complex setups
-2. Metrics and telemetry for observability
-3. Caching for performance optimization
-4. Parallel execution for throughput
+1. Pre-built Docker image on GHCR (eliminates per-run build for consumers)
+2. GitHub Marketplace listing (basic, free — discoverability)
+3. Configuration file support for complex setups
+4. Metrics and telemetry for observability
+5. Caching for performance optimization
+6. Parallel execution for throughput
 
 ### Implementation Handoff
 

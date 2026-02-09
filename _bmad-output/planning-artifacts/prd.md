@@ -116,6 +116,8 @@ _Note: Pure open-source community tool with no commercial objectives._
 | Custom OpenCode configuration (config.json, auth.json) | Planned |
 | Model selection input                                  | Planned |
 | List available models feature                          | Planned |
+| Pre-built Docker image published to GHCR               | Planned |
+| GitHub Marketplace listing (basic, free)               | Planned |
 | Example workflows folder                               | Planned |
 | Workflow marketplace/registry integration              | Planned |
 | Caching for faster subsequent runs                     | Planned |
@@ -328,6 +330,14 @@ _Note: Pure open-source community tool with no commercial objectives._
 - **FR43:** System can load and pass config files to OpenCode SDK
 - **FR44:** System can query and display available models from SDK
 
+### Distribution & Publishing
+
+- **FR45:** System can publish pre-built Docker image to GitHub Container Registry (GHCR)
+- **FR46:** System can automatically build and push Docker image on release/tag
+- **FR47:** Action references pre-built GHCR image instead of building from Dockerfile at consumer runtime
+- **FR48:** Action is listed on GitHub Marketplace as a free action
+- **FR49:** System can tag Docker images with semver versions matching GitHub release tags
+
 ### Lifecycle Management
 
 - **FR31:** System can handle SIGTERM signal for graceful shutdown
@@ -346,12 +356,12 @@ _Note: Pure open-source community tool with no commercial objectives._
 
 ### Performance
 
-| NFR      | Requirement                           | Rationale                    |
-| -------- | ------------------------------------- | ---------------------------- |
-| **NFR1** | Docker image build < 10 minutes on CI | Reasonable CI pipeline time  |
-| **NFR2** | Runner startup < 30 seconds           | Fast feedback for developers |
-| **NFR3** | Console streaming latency < 1 second  | Real-time visibility         |
-| **NFR4** | Graceful shutdown < 10 seconds        | Clean CI termination         |
+| NFR      | Requirement                                   | Rationale                    |
+| -------- | --------------------------------------------- | ---------------------------- |
+| **NFR1** | Pre-built Docker image pull < 2 minutes on CI | Fast startup for consumers   |
+| **NFR2** | Runner startup < 30 seconds                   | Fast feedback for developers |
+| **NFR3** | Console streaming latency < 1 second          | Real-time visibility         |
+| **NFR4** | Graceful shutdown < 10 seconds                | Clean CI termination         |
 
 ### Security
 
@@ -391,14 +401,14 @@ _Note: Pure open-source community tool with no commercial objectives._
 
 ## Risk Mitigation
 
-| Risk                         | Impact           | Mitigation                                              |
-| ---------------------------- | ---------------- | ------------------------------------------------------- |
-| OpenCode SDK API changes     | Breaking changes | Pin SDK version, monitor releases                       |
-| Docker image size (~1GB)     | Slow startup     | Optimized Dockerfile, documented expectations           |
-| Low adoption                 | Project failure  | GitHub Marketplace visibility, BMAD Builder integration |
-| Maintenance burden           | Sustainability   | Automated CI/CD, Dependabot, clear contribution guide   |
-| AI workflow unpredictability | User frustration | Validation script + retry pattern provides guardrails   |
-| GitHub Actions limitations   | Platform lock-in | Clear documentation of supported platforms              |
+| Risk                         | Impact           | Mitigation                                                                     |
+| ---------------------------- | ---------------- | ------------------------------------------------------------------------------ |
+| OpenCode SDK API changes     | Breaking changes | Pin SDK version, monitor releases                                              |
+| Docker image size (~1GB)     | Slow startup     | Pre-built image on GHCR eliminates per-run build; documented pull expectations |
+| Low adoption                 | Project failure  | GitHub Marketplace visibility, BMAD Builder integration                        |
+| Maintenance burden           | Sustainability   | Automated CI/CD, Dependabot, clear contribution guide                          |
+| AI workflow unpredictability | User frustration | Validation script + retry pattern provides guardrails                          |
+| GitHub Actions limitations   | Platform lock-in | Clear documentation of supported platforms                                     |
 
 ## Documentation Strategy
 
