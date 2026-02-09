@@ -8,11 +8,18 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  # ─── Job 1: Code Quality (lint, format, typecheck) ───
+  quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
@@ -35,7 +42,10 @@ jobs:
         run: npm ci
 
       - name: Lint
-        run: npm run lint
+        run: |
+          mkdir -p reports
+          npm run lint
+          npm run lint:ci || true
 
       - name: Format check
         run: npm run format:check
@@ -43,8 +53,99 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Unit tests
-        run: npm run test:unit
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lint-report
+          path: reports/eslint-report.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ─── Job 2: Unit Tests ───
+  unit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit:ci
+        env:
+          JEST_JUNIT_OUTPUT_DIR: reports
+          JEST_JUNIT_OUTPUT_NAME: unit-tests.xml
+
+      - name: Unit test annotations
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Unit Tests
+          path: reports/unit-tests.xml
+          reporter: jest-junit
+          fail-on-error: false
+
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: unit-test-results
+          path: |
+            reports/unit-tests.xml
+            coverage/coverage-summary.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ─── Job 3: Security Audit ───
+  security-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security audit
+        run: npm audit --audit-level=high --omit=dev
+        continue-on-error: true
+
+  # ─── Job 4: Build + Integration Tests ───
+  build-and-integration:
+    needs: [quality, unit-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Bundle
         run: npm run bundle
@@ -59,20 +160,267 @@ jobs:
           docker run --rm --entrypoint java ai-workflow-runner:test --version
 
       - name: Integration tests
-        run: npm run test:integration
+        run: npm run test:integration:ci
         env:
           DOCKER_IMAGE: ai-workflow-runner:test
+          JEST_JUNIT_OUTPUT_DIR: reports
+          JEST_JUNIT_OUTPUT_NAME: integration-tests.xml
 
-      - name: Upload test coverage on failure
-        if: failure()
+      - name: Integration test annotations
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Integration Tests
+          path: reports/integration-tests.xml
+          reporter: jest-junit
+          fail-on-error: false
+
+      - name: Upload integration test results
+        if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: test-coverage
-          path: coverage/
+          name: integration-test-results
+          path: reports/integration-tests.xml
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Cleanup Docker
         if: always()
         run: |
           docker rmi ai-workflow-runner:test || true
           docker system prune -f || true
+
+  # ─── Job 5: E2E Action Tests ───
+  e2e-action-tests:
+    needs: [quality, unit-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 'Valid workflow'
+            workflow_path: '.github/test-fixtures/valid-workflow.md'
+            prompt: 'Test prompt. Just answer "hello world".'
+            env_vars: '{"TEST_KEY": "test_value"}'
+            should_fail: false
+
+          - name: 'Missing workflow_path'
+            workflow_path: ''
+            prompt: ''
+            env_vars: '{}'
+            should_fail: true
+
+          - name: 'Invalid env_vars JSON'
+            workflow_path: '.github/test-fixtures/valid-workflow.md'
+            prompt: ''
+            env_vars: 'not-json'
+            should_fail: true
+
+          - name: 'Non-existent workflow'
+            workflow_path: 'does/not/exist.md'
+            prompt: ''
+            env_vars: '{}'
+            should_fail: true
+
+          - name: 'Path traversal blocked'
+            workflow_path: '../../../etc/passwd'
+            prompt: ''
+            env_vars: '{}'
+            should_fail: true
+
+          - name: 'Unicode workflow path'
+            workflow_path: '.github/test-fixtures/workflow-日本語.md'
+            prompt: 'Unicode prompt: 你好. Just answer "hello world".'
+            env_vars: '{}'
+            should_fail: false
+
+          - name: 'Spaces in path'
+            workflow_path: '.github/test-fixtures/workflow with spaces.md'
+            prompt: ''
+            env_vars: '{}'
+            should_fail: false
+
+          - name: 'Secret masking in logs'
+            workflow_path: '.github/test-fixtures/valid-workflow.md'
+            prompt: 'Include secret value in output.'
+            env_vars: '{"SECRET_VALUE": "super_secret_value_12345"}'
+            should_fail: false
+            verify_masked: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Create test fixtures
+        run: |
+          mkdir -p .github/test-fixtures
+          echo "# Test Workflow. Just answer \"hello world\"." > ".github/test-fixtures/valid-workflow.md"
+          echo "# Unicode Workflow. Just answer \"hello world\"." > ".github/test-fixtures/workflow-日本語.md"
+          echo "# Spaces Workflow. Just answer \"hello world\"." > ".github/test-fixtures/workflow with spaces.md"
+
+      - name: Run action - ${{ matrix.name }}
+        id: test
+        uses: ./
+        continue-on-error: true
+        with:
+          workflow_path: ${{ matrix.workflow_path }}
+          prompt: ${{ matrix.prompt }}
+          env_vars: ${{ matrix.env_vars }}
+
+      - name: Verify outcome - ${{ matrix.name }}
+        run: |
+          OUTCOME="${{ steps.test.outcome }}"
+          SHOULD_FAIL="${{ matrix.should_fail }}"
+
+          if [ "$SHOULD_FAIL" = "true" ]; then
+            if [ "$OUTCOME" != "failure" ]; then
+              echo "Expected failure but got: $OUTCOME"
+              exit 1
+            fi
+            echo "Correctly failed as expected"
+          else
+            if [ "$OUTCOME" != "success" ]; then
+              echo "Expected success but got: $OUTCOME"
+              exit 1
+            fi
+            echo "Correctly succeeded as expected"
+          fi
+
+      - name: Verify outputs set
+        if: steps.test.outcome == 'success'
+        env:
+          STATUS: ${{ steps.test.outputs.status }}
+          RESULT: ${{ steps.test.outputs.result }}
+        run: |
+          if [ -z "$STATUS" ]; then
+            echo "status output not set"
+            exit 1
+          fi
+
+          if [ -z "$RESULT" ]; then
+            echo "result output not set"
+            exit 1
+          fi
+
+          echo "Status: $STATUS"
+          echo "Result: $RESULT"
+
+      - name: Verify secrets are masked
+        if: matrix.verify_masked == true && steps.test.outcome == 'success'
+        env:
+          RESULT: ${{ steps.test.outputs.result }}
+        run: |
+          SECRET="super_secret_value_12345"
+
+          if echo "$RESULT" | grep -q "$SECRET"; then
+            echo "ERROR: Secret value found in plain text in output!"
+            exit 1
+          fi
+
+          echo "Secret masking verified - value not exposed in output"
+
+  # ─── Job 6: Pipeline Report ───
+  report:
+    needs: [quality, unit-test, security-audit, build-and-integration, e2e-action-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v6
+        with:
+          merge-multiple: true
+          path: artifacts
+        continue-on-error: true
+
+      - name: Generate pipeline report
+        id: report
+        run: |
+          # Collect job statuses
+          QUALITY="${{ needs.quality.result }}"
+          UNIT="${{ needs.unit-test.result }}"
+          SECURITY="${{ needs.security-audit.result }}"
+          INTEGRATION="${{ needs.build-and-integration.result }}"
+          E2E="${{ needs.e2e-action-tests.result }}"
+
+          status_icon() {
+            case "$1" in
+              success) echo "✅" ;;
+              failure) echo "❌" ;;
+              cancelled) echo "⏹️" ;;
+              skipped) echo "⏭️" ;;
+              *) echo "❓" ;;
+            esac
+          }
+
+          # Parse unit test JUnit XML if available
+          UNIT_TESTS=""
+          if [ -f artifacts/unit-tests.xml ]; then
+            TESTS=$(grep -oP 'tests="\K[0-9]+' artifacts/unit-tests.xml | head -1 || echo "0")
+            FAILURES=$(grep -oP 'failures="\K[0-9]+' artifacts/unit-tests.xml | head -1 || echo "0")
+            ERRORS=$(grep -oP 'errors="\K[0-9]+' artifacts/unit-tests.xml | head -1 || echo "0")
+            UNIT_TESTS=" ($TESTS tests, $FAILURES failures, $ERRORS errors)"
+          fi
+
+          # Parse integration test JUnit XML if available
+          INT_TESTS=""
+          if [ -f artifacts/integration-tests.xml ]; then
+            TESTS=$(grep -oP 'tests="\K[0-9]+' artifacts/integration-tests.xml | head -1 || echo "0")
+            FAILURES=$(grep -oP 'failures="\K[0-9]+' artifacts/integration-tests.xml | head -1 || echo "0")
+            ERRORS=$(grep -oP 'errors="\K[0-9]+' artifacts/integration-tests.xml | head -1 || echo "0")
+            INT_TESTS=" ($TESTS tests, $FAILURES failures, $ERRORS errors)"
+          fi
+
+          # Parse coverage if available
+          COVERAGE=""
+          if [ -f artifacts/coverage-summary.json ]; then
+            LINES=$(python3 -c 'import json; data = json.load(open("artifacts/coverage-summary.json")); print(str(data["total"]["lines"]["pct"]) + "%")' 2>/dev/null || echo "N/A")
+            BRANCHES=$(python3 -c 'import json; data = json.load(open("artifacts/coverage-summary.json")); print(str(data["total"]["branches"]["pct"]) + "%")' 2>/dev/null || echo "N/A")
+            COVERAGE="| Coverage | Lines: $LINES / Branches: $BRANCHES |"
+          fi
+
+          # Determine overall status
+          if [ "$QUALITY" = "success" ] && [ "$UNIT" = "success" ] && [ "$INTEGRATION" = "success" ] && [ "$E2E" = "success" ]; then
+            OVERALL="✅ **Pipeline Passed**"
+          else
+            OVERALL="❌ **Pipeline Failed**"
+          fi
+
+          # Generate markdown report
+          {
+            echo "## CI Pipeline Report"
+            echo ""
+            echo "$OVERALL"
+            echo ""
+            echo "| Job | Status |"
+            echo "|-----|--------|"
+            echo "| Quality (lint, format, typecheck) | $(status_icon "$QUALITY") $QUALITY |"
+            echo "| Unit Tests | $(status_icon "$UNIT") $UNIT$UNIT_TESTS |"
+            echo "| Security Audit | $(status_icon "$SECURITY") $SECURITY |"
+            echo "| Build & Integration Tests | $(status_icon "$INTEGRATION") $INTEGRATION$INT_TESTS |"
+            echo "| E2E Action Tests | $(status_icon "$E2E") $E2E |"
+            if [ -n "$COVERAGE" ]; then
+              echo "$COVERAGE"
+            fi
+          } | tee pipeline-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: pipeline-report.md
+        continue-on-error: true
+
+      - name: PR status check
+        if: github.event_name == 'pull_request'
+        uses: LouisBrunner/checks-action@v1.6.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: CI Pipeline Summary
+          conclusion: ${{ (needs.quality.result == 'success' && needs.unit-test.result == 'success' && needs.build-and-integration.result == 'success' && needs.e2e-action-tests.result == 'success') && 'success' || 'failure' }}
+          output: |
+            {"summary": "Quality: ${{ needs.quality.result }}, Unit: ${{ needs.unit-test.result }}, Integration: ${{ needs.build-and-integration.result }}, E2E: ${{ needs.e2e-action-tests.result }}"}
+        continue-on-error: true
