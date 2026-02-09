@@ -482,25 +482,60 @@ jobs:
           BUILD_JSON=$(find build-reports -name 'build-metadata.json' -type f 2>/dev/null | head -1)
           AUDIT_JSON=$(find security-reports -name 'audit-results.json' -type f 2>/dev/null | head -1)
 
+          # Helper: parse JUnit XML into summary + collapsible suite breakdown
+          # Usage: parse_junit <xml_file> <section_title>
+          # Sets: _DETAIL (summary string), _SECTION (collapsible HTML)
+          parse_junit() {
+            local xml_file="$1"
+            local title="$2"
+            _DETAIL="—"
+            _SECTION=""
+
+            if [ -z "$xml_file" ]; then return; fi
+
+            local TOTAL FAILURES TIME PASSED
+            TOTAL=$(grep -o 'tests="[0-9]*"' "$xml_file" | head -1 | grep -o '[0-9]*' || echo "0")
+            FAILURES=$(grep -o 'failures="[0-9]*"' "$xml_file" | head -1 | grep -o '[0-9]*' || echo "0")
+            TIME=$(grep -o 'time="[0-9.]*"' "$xml_file" | head -1 | grep -o '[0-9.]*' || echo "0")
+            PASSED=$((TOTAL - FAILURES))
+            _DETAIL="${PASSED}/${TOTAL} passed (${TIME}s)"
+
+            # Build per-suite breakdown table
+            local SUITE_ROWS=""
+            SUITE_ROWS=$(grep -o '<testsuite[^>]*>' "$xml_file" | while IFS= read -r line; do
+              local s_name s_tests s_failures s_time s_passed s_icon
+              s_name=$(echo "$line" | grep -o 'name="[^"]*"' | head -1 | sed 's/name="//;s/"//')
+              s_tests=$(echo "$line" | grep -o 'tests="[0-9]*"' | head -1 | grep -o '[0-9]*')
+              s_failures=$(echo "$line" | grep -o 'failures="[0-9]*"' | head -1 | grep -o '[0-9]*')
+              s_time=$(echo "$line" | grep -o 'time="[0-9.]*"' | head -1 | grep -o '[0-9.]*')
+              [ -z "$s_tests" ] && continue
+              s_passed=$((s_tests - s_failures))
+              if [ "$s_failures" -eq 0 ]; then s_icon="✅"; else s_icon="❌"; fi
+              echo "| ${s_icon} | ${s_name} | ${s_passed}/${s_tests} | ${s_time}s |"
+            done)
+
+            if [ -n "$SUITE_ROWS" ]; then
+              _SECTION="
+          <details>
+          <summary><strong>${title}</strong> — ${_DETAIL}</summary>
+
+          | | Suite | Passed | Time |
+          |--|-------|--------|------|
+          ${SUITE_ROWS}
+
+          </details>"
+            fi
+          }
+
           # ── Parse unit test results ──
-          UNIT_DETAIL="—"
-          if [ -n "$UNIT_XML" ]; then
-            UT_TESTS=$(grep -o 'tests="[0-9]*"' "$UNIT_XML" | head -1 | grep -o '[0-9]*' || echo "0")
-            UT_FAILURES=$(grep -o 'failures="[0-9]*"' "$UNIT_XML" | head -1 | grep -o '[0-9]*' || echo "0")
-            UT_TIME=$(grep -o 'time="[0-9.]*"' "$UNIT_XML" | head -1 | grep -o '[0-9.]*' || echo "0")
-            UT_PASSED=$((UT_TESTS - UT_FAILURES))
-            UNIT_DETAIL="${UT_PASSED}/${UT_TESTS} passed (${UT_TIME}s)"
-          fi
+          parse_junit "$UNIT_XML" "Unit Tests"
+          UNIT_DETAIL="$_DETAIL"
+          UNIT_SECTION="$_SECTION"
 
           # ── Parse integration test results ──
-          INT_DETAIL="—"
-          if [ -n "$INT_XML" ]; then
-            IT_TESTS=$(grep -o 'tests="[0-9]*"' "$INT_XML" | head -1 | grep -o '[0-9]*' || echo "0")
-            IT_FAILURES=$(grep -o 'failures="[0-9]*"' "$INT_XML" | head -1 | grep -o '[0-9]*' || echo "0")
-            IT_TIME=$(grep -o 'time="[0-9.]*"' "$INT_XML" | head -1 | grep -o '[0-9.]*' || echo "0")
-            IT_PASSED=$((IT_TESTS - IT_FAILURES))
-            INT_DETAIL="${IT_PASSED}/${IT_TESTS} passed (${IT_TIME}s)"
-          fi
+          parse_junit "$INT_XML" "Integration Tests"
+          INT_DETAIL="$_DETAIL"
+          INT_SECTION="$_SECTION"
 
           # ── Parse security audit results ──
           AUDIT_DETAIL="—"
@@ -648,6 +683,12 @@ jobs:
             echo "| **Build** | $(status_icon "$INTEGRATION_RESULT") $INTEGRATION_RESULT | ${BUILD_DETAIL} |"
             echo "| **Integration Tests** | $(status_icon "$INTEGRATION_RESULT") $INTEGRATION_RESULT | ${INT_DETAIL} |"
             echo "| **E2E Action Tests** | $(status_icon "$E2E_RESULT") $E2E_RESULT | ${E2E_DETAIL} |"
+            if [ -n "$UNIT_SECTION" ]; then
+              echo "$UNIT_SECTION"
+            fi
+            if [ -n "$INT_SECTION" ]; then
+              echo "$INT_SECTION"
+            fi
             if [ -n "$BUILD_SECTION" ]; then
               echo "$BUILD_SECTION"
             fi
