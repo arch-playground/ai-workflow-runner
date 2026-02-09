@@ -443,6 +443,16 @@ jobs:
           name: security-reports
           path: security-reports
 
+      - name: Debug artifact structure
+        if: always()
+        run: |
+          echo "=== unit-test-reports ==="
+          find unit-test-reports -type f 2>/dev/null || echo "(empty or missing)"
+          echo "=== build-reports ==="
+          find build-reports -type f 2>/dev/null || echo "(empty or missing)"
+          echo "=== security-reports ==="
+          find security-reports -type f 2>/dev/null || echo "(empty or missing)"
+
       - name: Generate pipeline report
         id: report
         env:
@@ -465,22 +475,29 @@ jobs:
             esac
           }
 
+          # ── Locate artifact files (path varies by upload-artifact version) ──
+          UNIT_XML=$(find unit-test-reports -name 'unit-tests.xml' -type f 2>/dev/null | head -1)
+          COVERAGE_JSON=$(find unit-test-reports -name 'coverage-summary.json' -type f 2>/dev/null | head -1)
+          INT_XML=$(find build-reports -name 'integration-tests.xml' -type f 2>/dev/null | head -1)
+          BUILD_JSON=$(find build-reports -name 'build-metadata.json' -type f 2>/dev/null | head -1)
+          AUDIT_JSON=$(find security-reports -name 'audit-results.json' -type f 2>/dev/null | head -1)
+
           # ── Parse unit test results ──
           UNIT_DETAIL="—"
-          if [ -f unit-test-reports/reports/unit-tests.xml ]; then
-            UT_TESTS=$(grep -o 'tests="[0-9]*"' unit-test-reports/reports/unit-tests.xml | head -1 | grep -o '[0-9]*' || echo "0")
-            UT_FAILURES=$(grep -o 'failures="[0-9]*"' unit-test-reports/reports/unit-tests.xml | head -1 | grep -o '[0-9]*' || echo "0")
-            UT_TIME=$(grep -o 'time="[0-9.]*"' unit-test-reports/reports/unit-tests.xml | head -1 | grep -o '[0-9.]*' || echo "0")
+          if [ -n "$UNIT_XML" ]; then
+            UT_TESTS=$(grep -o 'tests="[0-9]*"' "$UNIT_XML" | head -1 | grep -o '[0-9]*' || echo "0")
+            UT_FAILURES=$(grep -o 'failures="[0-9]*"' "$UNIT_XML" | head -1 | grep -o '[0-9]*' || echo "0")
+            UT_TIME=$(grep -o 'time="[0-9.]*"' "$UNIT_XML" | head -1 | grep -o '[0-9.]*' || echo "0")
             UT_PASSED=$((UT_TESTS - UT_FAILURES))
             UNIT_DETAIL="${UT_PASSED}/${UT_TESTS} passed (${UT_TIME}s)"
           fi
 
           # ── Parse integration test results ──
           INT_DETAIL="—"
-          if [ -f build-reports/reports/integration-tests.xml ]; then
-            IT_TESTS=$(grep -o 'tests="[0-9]*"' build-reports/reports/integration-tests.xml | head -1 | grep -o '[0-9]*' || echo "0")
-            IT_FAILURES=$(grep -o 'failures="[0-9]*"' build-reports/reports/integration-tests.xml | head -1 | grep -o '[0-9]*' || echo "0")
-            IT_TIME=$(grep -o 'time="[0-9.]*"' build-reports/reports/integration-tests.xml | head -1 | grep -o '[0-9.]*' || echo "0")
+          if [ -n "$INT_XML" ]; then
+            IT_TESTS=$(grep -o 'tests="[0-9]*"' "$INT_XML" | head -1 | grep -o '[0-9]*' || echo "0")
+            IT_FAILURES=$(grep -o 'failures="[0-9]*"' "$INT_XML" | head -1 | grep -o '[0-9]*' || echo "0")
+            IT_TIME=$(grep -o 'time="[0-9.]*"' "$INT_XML" | head -1 | grep -o '[0-9.]*' || echo "0")
             IT_PASSED=$((IT_TESTS - IT_FAILURES))
             INT_DETAIL="${IT_PASSED}/${IT_TESTS} passed (${IT_TIME}s)"
           fi
@@ -488,13 +505,13 @@ jobs:
           # ── Parse security audit results ──
           AUDIT_DETAIL="—"
           AUDIT_SECTION=""
-          if [ -f security-reports/audit-results.json ]; then
-            AUDIT_TOTAL=$(jq -r '.metadata.vulnerabilities // {} | to_entries | map(.value) | add // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
-            AUDIT_CRITICAL=$(jq -r '.metadata.vulnerabilities.critical // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
-            AUDIT_HIGH=$(jq -r '.metadata.vulnerabilities.high // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
-            AUDIT_MODERATE=$(jq -r '.metadata.vulnerabilities.moderate // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
-            AUDIT_LOW=$(jq -r '.metadata.vulnerabilities.low // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
-            AUDIT_INFO=$(jq -r '.metadata.vulnerabilities.info // 0' security-reports/audit-results.json 2>/dev/null || echo "0")
+          if [ -n "$AUDIT_JSON" ]; then
+            AUDIT_TOTAL=$(jq -r '.metadata.vulnerabilities // {} | to_entries | map(.value) | add // 0' "$AUDIT_JSON" 2>/dev/null || echo "0")
+            AUDIT_CRITICAL=$(jq -r '.metadata.vulnerabilities.critical // 0' "$AUDIT_JSON" 2>/dev/null || echo "0")
+            AUDIT_HIGH=$(jq -r '.metadata.vulnerabilities.high // 0' "$AUDIT_JSON" 2>/dev/null || echo "0")
+            AUDIT_MODERATE=$(jq -r '.metadata.vulnerabilities.moderate // 0' "$AUDIT_JSON" 2>/dev/null || echo "0")
+            AUDIT_LOW=$(jq -r '.metadata.vulnerabilities.low // 0' "$AUDIT_JSON" 2>/dev/null || echo "0")
+            AUDIT_INFO=$(jq -r '.metadata.vulnerabilities.info // 0' "$AUDIT_JSON" 2>/dev/null || echo "0")
 
             if [ "$AUDIT_TOTAL" = "0" ]; then
               AUDIT_DETAIL="No vulnerabilities found"
@@ -529,14 +546,14 @@ jobs:
           # ── Build metadata ──
           BUILD_DETAIL="—"
           BUILD_SECTION=""
-          if [ -f build-reports/reports/build-metadata.json ]; then
-            BUNDLE_MB=$(jq -r '.bundle_size_mb' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
-            DOCKER_MB=$(jq -r '.docker_size_mb' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
-            DOCKER_ID=$(jq -r '.docker_image_id' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
-            DOCKER_LAYERS=$(jq -r '.docker_layers' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
-            NODE_VER=$(jq -r '.runtime_node' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
-            PYTHON_VER=$(jq -r '.runtime_python' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
-            JAVA_VER=$(jq -r '.runtime_java' build-reports/reports/build-metadata.json 2>/dev/null || echo "—")
+          if [ -n "$BUILD_JSON" ]; then
+            BUNDLE_MB=$(jq -r '.bundle_size_mb' "$BUILD_JSON" 2>/dev/null || echo "—")
+            DOCKER_MB=$(jq -r '.docker_size_mb' "$BUILD_JSON" 2>/dev/null || echo "—")
+            DOCKER_ID=$(jq -r '.docker_image_id' "$BUILD_JSON" 2>/dev/null || echo "—")
+            DOCKER_LAYERS=$(jq -r '.docker_layers' "$BUILD_JSON" 2>/dev/null || echo "—")
+            NODE_VER=$(jq -r '.runtime_node' "$BUILD_JSON" 2>/dev/null || echo "—")
+            PYTHON_VER=$(jq -r '.runtime_python' "$BUILD_JSON" 2>/dev/null || echo "—")
+            JAVA_VER=$(jq -r '.runtime_java' "$BUILD_JSON" 2>/dev/null || echo "—")
             BUILD_DETAIL="Bundle: ${BUNDLE_MB} MB, Image: ${DOCKER_MB} MB"
 
             BUILD_SECTION="
@@ -564,11 +581,11 @@ jobs:
 
           # ── Coverage report ──
           COVERAGE_SECTION=""
-          if [ -f unit-test-reports/coverage/coverage-summary.json ]; then
-            COV_LINES=$(jq -r '.total.lines.pct' unit-test-reports/coverage/coverage-summary.json 2>/dev/null || echo "—")
-            COV_BRANCHES=$(jq -r '.total.branches.pct' unit-test-reports/coverage/coverage-summary.json 2>/dev/null || echo "—")
-            COV_FUNCTIONS=$(jq -r '.total.functions.pct' unit-test-reports/coverage/coverage-summary.json 2>/dev/null || echo "—")
-            COV_STATEMENTS=$(jq -r '.total.statements.pct' unit-test-reports/coverage/coverage-summary.json 2>/dev/null || echo "—")
+          if [ -n "$COVERAGE_JSON" ]; then
+            COV_LINES=$(jq -r '.total.lines.pct' "$COVERAGE_JSON" 2>/dev/null || echo "—")
+            COV_BRANCHES=$(jq -r '.total.branches.pct' "$COVERAGE_JSON" 2>/dev/null || echo "—")
+            COV_FUNCTIONS=$(jq -r '.total.functions.pct' "$COVERAGE_JSON" 2>/dev/null || echo "—")
+            COV_STATEMENTS=$(jq -r '.total.statements.pct' "$COVERAGE_JSON" 2>/dev/null || echo "—")
 
             cov_status() {
               if [ "$1" = "—" ]; then echo "⚠️";
