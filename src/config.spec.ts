@@ -393,12 +393,24 @@ describe('config', () => {
       expect(mockValidateWorkspacePath).not.toHaveBeenCalled();
     });
 
-    it('uses GITHUB_WORKSPACE for path validation when set', () => {
-      // Arrange
-      const originalEnv = process.env.GITHUB_WORKSPACE;
-      process.env.GITHUB_WORKSPACE = '/github/workspace';
+    describe('when GITHUB_WORKSPACE is set', () => {
+      let originalWorkspace: string | undefined;
 
-      try {
+      beforeEach(() => {
+        originalWorkspace = process.env.GITHUB_WORKSPACE;
+      });
+
+      afterEach(() => {
+        if (originalWorkspace === undefined) {
+          delete process.env.GITHUB_WORKSPACE;
+        } else {
+          process.env.GITHUB_WORKSPACE = originalWorkspace;
+        }
+      });
+
+      it('uses GITHUB_WORKSPACE for path validation when set', () => {
+        // Arrange
+        process.env.GITHUB_WORKSPACE = '/github/workspace';
         mockInputs({ opencode_config: 'config/opencode.json' });
         mockValidateWorkspacePath.mockReturnValue('/github/workspace/config/opencode.json');
 
@@ -411,9 +423,7 @@ describe('config', () => {
           'config/opencode.json'
         );
         expect(inputs.opencodeConfig).toBe('/github/workspace/config/opencode.json');
-      } finally {
-        process.env.GITHUB_WORKSPACE = originalEnv;
-      }
+      });
     });
 
     it('captures model string when provided', () => {

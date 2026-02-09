@@ -1,0 +1,26 @@
+name: Run AI Workflow with Validation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run AI Workflow
+        id: ai
+        uses: owner/ai-workflow-runner@v1
+        with:
+          workflow_path: 'examples/with-validation/workflow.md'
+          validation_script: 'examples/with-validation/validate.py'
+          validation_max_retry: '3'
+          timeout_minutes: '10'
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+
+      - name: Print results
+        run: |
+          echo "Status: ${{ steps.ai.outputs.status }}"
+          echo "Result: ${{ steps.ai.outputs.result }}"

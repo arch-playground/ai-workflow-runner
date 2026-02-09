@@ -1,0 +1,30 @@
+name: Run AI Workflow (Copilot)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write auth config
+        run: echo '${{ secrets.COPILOT_AUTH }}' > auth.json
+
+      - name: Run AI Workflow
+        id: ai
+        uses: owner/ai-workflow-runner@v1
+        with:
+          workflow_path: 'examples/github-copilot/workflow.md'
+          auth_config: 'auth.json'
+          timeout_minutes: '10'
+
+      - name: Clean up auth config
+        if: always()
+        run: rm -f auth.json
+
+      - name: Print results
+        run: |
+          echo "Status: ${{ steps.ai.outputs.status }}"
+          echo "Result: ${{ steps.ai.outputs.result }}"

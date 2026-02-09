@@ -1,0 +1,33 @@
+name: Run AI Workflow (Custom Model)
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Model to use (e.g., anthropic/claude-sonnet-4-5-20250929)'
+        required: false
+        default: ''
+
+jobs:
+  run-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write config
+        if: ${{ secrets.OPENCODE_CONFIG != '' }}
+        run: echo '${{ secrets.OPENCODE_CONFIG }}' > config.json
+
+      - name: Run AI Workflow
+        id: ai
+        uses: owner/ai-workflow-runner@v1
+        with:
+          workflow_path: 'examples/custom-model/workflow.md'
+          model: '${{ github.event.inputs.model }}'
+          opencode_config: ${{ secrets.OPENCODE_CONFIG && 'config.json' || '' }}
+          timeout_minutes: '10'
+
+      - name: Print results
+        run: |
+          echo "Status: ${{ steps.ai.outputs.status }}"
+          echo "Result: ${{ steps.ai.outputs.result }}"

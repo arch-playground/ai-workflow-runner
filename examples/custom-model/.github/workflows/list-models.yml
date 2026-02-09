@@ -1,0 +1,27 @@
+name: List Available Models
+
+on:
+  workflow_dispatch:
+
+jobs:
+  list-models:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write config
+        if: ${{ secrets.OPENCODE_CONFIG != '' }}
+        run: echo '${{ secrets.OPENCODE_CONFIG }}' > config.json
+
+      - name: List models
+        id: ai
+        uses: owner/ai-workflow-runner@v1
+        with:
+          workflow_path: 'unused'
+          list_models: 'true'
+          opencode_config: ${{ secrets.OPENCODE_CONFIG && 'config.json' || '' }}
+
+      - name: Print models
+        run: |
+          echo "Status: ${{ steps.ai.outputs.status }}"
+          echo "Result: ${{ steps.ai.outputs.result }}"
