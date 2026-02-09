@@ -628,7 +628,8 @@ jobs:
             echo "| **Quality** | $(status_icon "$QUALITY_RESULT") $QUALITY_RESULT | ${QUALITY_DETAIL} |"
             echo "| **Unit Tests** | $(status_icon "$UNIT_RESULT") $UNIT_RESULT | ${UNIT_DETAIL} |"
             echo "| **Security Audit** | $(status_icon "$SECURITY_RESULT") $SECURITY_RESULT | ${AUDIT_DETAIL} |"
-            echo "| **Build & Integration** | $(status_icon "$INTEGRATION_RESULT") $INTEGRATION_RESULT | ${INT_DETAIL} |"
+            echo "| **Build** | $(status_icon "$INTEGRATION_RESULT") $INTEGRATION_RESULT | ${BUILD_DETAIL} |"
+            echo "| **Integration Tests** | $(status_icon "$INTEGRATION_RESULT") $INTEGRATION_RESULT | ${INT_DETAIL} |"
             echo "| **E2E Action Tests** | $(status_icon "$E2E_RESULT") $E2E_RESULT | ${E2E_DETAIL} |"
             if [ -n "$BUILD_SECTION" ]; then
               echo "$BUILD_SECTION"
