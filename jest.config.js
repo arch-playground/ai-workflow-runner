@@ -9,7 +9,7 @@ module.exports = {
   // and process.exit() that's effectively tested via E2E tests in CI
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.spec.ts', '!src/types.ts', '!src/index.ts'],
   coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
+  coverageReporters: ['text', 'lcov', 'html', 'json-summary'],
   coverageThreshold: {
     global: {
       // 75% branch coverage due to async timeout/abort paths that are difficult
