@@ -34,6 +34,9 @@ describe('OpenCodeService', () => {
     event: {
       subscribe: jest.Mock;
     };
+    config: {
+      providers: jest.Mock;
+    };
     postSessionIdPermissionsPermissionId: jest.Mock;
   };
   let mockServer: {
@@ -111,6 +114,9 @@ describe('OpenCodeService', () => {
       },
       event: {
         subscribe: jest.fn().mockResolvedValue({ stream: ctrl.generator }),
+      },
+      config: {
+        providers: jest.fn().mockResolvedValue({ data: { providers: [] } }),
       },
       postSessionIdPermissionsPermissionId: jest.fn().mockResolvedValue({}),
     };
@@ -316,6 +322,117 @@ describe('OpenCodeService', () => {
       await expect(target.sendFollowUp('session-123', 'test', 5000)).rejects.toThrow(
         'OpenCode service disposed - cannot send follow-up'
       );
+    });
+  });
+
+  describe('listModels()', () => {
+    async function createInitializedService(): Promise<OpenCodeService> {
+      const target = new OpenCodeService();
+      await target.initialize();
+      return target;
+    }
+
+    it('7.4-UNIT-002: calls client.config.providers() and returns transformed model data', async () => {
+      // Arrange
+      mockClient.config.providers.mockResolvedValue({
+        data: {
+          providers: [
+            {
+              id: 'anthropic',
+              name: 'Anthropic',
+              models: {
+                'claude-3-opus': {
+                  id: 'claude-3-opus',
+                  name: 'Claude 3 Opus',
+                },
+                'claude-3-sonnet': {
+                  id: 'claude-3-sonnet',
+                  name: 'Claude 3 Sonnet',
+                },
+              },
+            },
+            {
+              id: 'openai',
+              name: 'OpenAI',
+              models: {
+                'gpt-4': {
+                  id: 'gpt-4',
+                  name: 'GPT-4',
+                },
+              },
+            },
+          ],
+        },
+      });
+
+      const target = await createInitializedService();
+
+      // Act
+      const result = await target.listModels();
+
+      // Assert
+      expect(mockClient.config.providers).toHaveBeenCalledTimes(1);
+      expect(result).toHaveLength(3);
+      expect(result).toEqual(
+        expect.arrayContaining([
+          { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },
+          { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', provider: 'Anthropic' },
+          { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
+        ])
+      );
+    });
+
+    it('throws when client not initialized', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+
+      // Act & Assert
+      await expect(target.listModels()).rejects.toThrow(
+        'OpenCode client not initialized - call initialize() first'
+      );
+    });
+
+    it('throws when service is disposed', async () => {
+      // Arrange
+      const target = await createInitializedService();
+      target.dispose();
+
+      // Act & Assert
+      await expect(target.listModels()).rejects.toThrow(
+        'OpenCode service disposed - cannot list models'
+      );
+    });
+
+    it('throws when providers response has no data', async () => {
+      // Arrange
+      mockClient.config.providers.mockResolvedValue({ data: undefined });
+      const target = await createInitializedService();
+
+      // Act & Assert
+      await expect(target.listModels()).rejects.toThrow('Failed to retrieve providers');
+    });
+
+    it('throws when client.config.providers() rejects', async () => {
+      // Arrange
+      mockClient.config.providers.mockRejectedValue(new Error('Network error'));
+      const target = await createInitializedService();
+
+      // Act & Assert
+      await expect(target.listModels()).rejects.toThrow('Network error');
+    });
+
+    it('returns empty array when no providers have models', async () => {
+      // Arrange
+      mockClient.config.providers.mockResolvedValue({
+        data: { providers: [] },
+      });
+      const target = await createInitializedService();
+
+      // Act
+      const result = await target.listModels();
+
+      // Assert
+      expect(result).toEqual([]);
     });
   });
 

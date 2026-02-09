@@ -186,6 +186,24 @@ export class OpenCodeService {
     }
   }
 
+  async listModels(): Promise<Array<{ id: string; name: string; provider: string }>> {
+    if (this.isDisposed) {
+      throw new Error('OpenCode service disposed - cannot list models');
+    }
+    if (!this.client) throw new Error('OpenCode client not initialized - call initialize() first');
+
+    const response = await this.client.config.providers();
+    if (!response.data) throw new Error('Failed to retrieve providers');
+
+    const models: Array<{ id: string; name: string; provider: string }> = [];
+    for (const provider of response.data.providers) {
+      for (const model of Object.values(provider.models)) {
+        models.push({ id: model.id, name: model.name, provider: provider.name });
+      }
+    }
+    return models;
+  }
+
   async runSession(
     prompt: string,
     timeoutMs: number,

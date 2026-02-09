@@ -13,6 +13,7 @@ const mockOpenCodeService = {
   runSession: jest.fn(),
   sendFollowUp: jest.fn(),
   getLastMessage: jest.fn(),
+  listModels: jest.fn(),
   dispose: jest.fn(),
 };
 
@@ -457,6 +458,115 @@ describe('runner', () => {
 
       expect(result.success).toBe(true);
       expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('Error on attempt 1'));
+    });
+
+    // Note: runWorkflow is a module function, not a class - 'target' variable pattern N/A
+    describe('list models', () => {
+      it('7.4-UNIT-001: with listModels true does NOT call validateWorkflowFile or runSession', async () => {
+        // Arrange
+        mockOpenCodeService.listModels.mockResolvedValue([
+          { id: 'model-1', name: 'Model One', provider: 'Provider' },
+        ]);
+
+        const inputs = createValidInputs({ listModels: true });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert
+        expect(result.success).toBe(true);
+        expect(mockOpenCodeService.runSession).not.toHaveBeenCalled();
+        expect(mockOpenCodeService.sendFollowUp).not.toHaveBeenCalled();
+      });
+
+      it('7.4-UNIT-003: prints models in exact format with header, model lines, and footer', async () => {
+        // Arrange
+        mockOpenCodeService.listModels.mockResolvedValue([
+          { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },
+          { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
+        ]);
+
+        const inputs = createValidInputs({ listModels: true });
+
+        // Act
+        await runWorkflow(inputs);
+
+        // Assert
+        expect(core.info).toHaveBeenCalledWith('=== Available Models ===');
+        expect(core.info).toHaveBeenCalledWith('  - claude-3-opus: Claude 3 Opus (Anthropic)');
+        expect(core.info).toHaveBeenCalledWith('  - gpt-4: GPT-4 (OpenAI)');
+        expect(core.info).toHaveBeenCalledWith('========================');
+      });
+
+      it('7.4-UNIT-004: returns success with models JSON', async () => {
+        // Arrange
+        const models = [{ id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' }];
+        mockOpenCodeService.listModels.mockResolvedValue(models);
+
+        const inputs = createValidInputs({ listModels: true });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert
+        expect(result.success).toBe(true);
+        expect(result.output).toBe(JSON.stringify({ models }));
+        expect(result.error).toBeUndefined();
+      });
+
+      it('7.4-UNIT-005: returns failure when initialize() throws without crashing', async () => {
+        // Arrange
+        mockOpenCodeService.initialize.mockRejectedValueOnce(
+          new Error('SDK initialization failed')
+        );
+
+        const inputs = createValidInputs({ listModels: true });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('SDK initialization failed');
+        expect(result.output).toBe('');
+      });
+
+      it('returns failure when listModels() throws after successful init', async () => {
+        // Arrange
+        mockOpenCodeService.initialize.mockResolvedValue(undefined);
+        mockOpenCodeService.listModels.mockRejectedValue(new Error('Failed to fetch providers'));
+        const inputs = createValidInputs({ listModels: true });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Failed to fetch providers');
+        expect(result.output).toBe('');
+      });
+
+      it('passes config options to initialize when listing models', async () => {
+        // Arrange
+        mockOpenCodeService.listModels.mockResolvedValue([]);
+
+        const inputs = createValidInputs({
+          listModels: true,
+          opencodeConfig: '/workspace/config.json',
+          authConfig: '/workspace/auth.json',
+          model: 'claude-sonnet-4-5-20250929',
+        });
+
+        // Act
+        await runWorkflow(inputs);
+
+        // Assert
+        expect(mockOpenCodeService.initialize).toHaveBeenCalledWith({
+          opencodeConfig: '/workspace/config.json',
+          authConfig: '/workspace/auth.json',
+          model: 'claude-sonnet-4-5-20250929',
+        });
+      });
     });
   });
 });

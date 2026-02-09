@@ -6,6 +6,7 @@ import {
   validateRealPath,
   validateUtf8,
   truncateString,
+  sanitizeErrorMessage,
 } from './security.js';
 import { getOpenCodeService, OpenCodeService } from './opencode.js';
 import { executeValidationScript } from './validation.js';
@@ -17,6 +18,10 @@ export async function runWorkflow(
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
   abortSignal?: AbortSignal
 ): Promise<RunnerResult> {
+  if (inputs.listModels) {
+    return await handleListModels(inputs);
+  }
+
   const workspace = process.env['GITHUB_WORKSPACE'] || '/github/workspace';
 
   if (abortSignal?.aborted) {
@@ -110,6 +115,31 @@ export async function runWorkflow(
       output: '',
       error: errorMessage,
     };
+  }
+}
+
+async function handleListModels(inputs: ActionInputs): Promise<RunnerResult> {
+  try {
+    const opencode = getOpenCodeService();
+    await opencode.initialize({
+      opencodeConfig: inputs.opencodeConfig,
+      authConfig: inputs.authConfig,
+      model: inputs.model,
+    });
+
+    const models = await opencode.listModels();
+
+    core.info('=== Available Models ===');
+    for (const model of models) {
+      core.info(`  - ${model.id}: ${model.name} (${model.provider})`);
+    }
+    core.info('========================');
+
+    return { success: true, output: JSON.stringify({ models }) };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? sanitizeErrorMessage(error) : 'Unknown error occurred';
+    return { success: false, output: '', error: errorMessage };
   }
 }
 
