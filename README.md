@@ -49,17 +49,52 @@ jobs:
           validation_max_retry: '5'
 ```
 
+### With Custom Provider and Model
+
+```yaml
+name: Run AI Workflow with Custom Config
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  run-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write config files
+        run: |
+          echo '${{ secrets.OPENCODE_AUTH }}' > auth.json
+
+      - name: Run AI Workflow
+        uses: owner/ai-workflow-runner@v1
+        with:
+          workflow_path: 'workflow.md'
+          auth_config: 'auth.json'
+          model: 'anthropic/claude-sonnet-4-5-20250929'
+
+      - name: Cleanup
+        if: always()
+        run: rm -f auth.json
+```
+
 ## Inputs
 
-| Input                    | Description                                                  | Required | Default |
-| ------------------------ | ------------------------------------------------------------ | -------- | ------- |
-| `workflow_path`          | Path to the workflow.md file (relative to workspace root)    | Yes      | -       |
-| `prompt`                 | Input prompt to pass to the workflow (max 100KB)             | No       | `''`    |
-| `env_vars`               | JSON object of environment variables (max 64KB, 100 entries) | No       | `'{}'`  |
-| `timeout_minutes`        | Maximum execution time in minutes                            | No       | `30`    |
-| `validation_script`      | Validation script path or inline code (see below)            | No       | -       |
-| `validation_script_type` | Script type: `python` or `javascript` (auto-detected)        | No       | -       |
-| `validation_max_retry`   | Maximum validation retry attempts (1-20)                     | No       | `5`     |
+| Input                    | Description                                                                                                                            | Required | Default   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------- |
+| `workflow_path`          | Path to the workflow.md file (relative to workspace root)                                                                              | Yes      | -         |
+| `prompt`                 | Input prompt to pass to the workflow (max 100KB)                                                                                       | No       | `''`      |
+| `env_vars`               | JSON object of environment variables (max 64KB, 100 entries)                                                                           | No       | `'{}'`    |
+| `timeout_minutes`        | Maximum execution time in minutes                                                                                                      | No       | `30`      |
+| `validation_script`      | Validation script path or inline code (see below)                                                                                      | No       | `''`      |
+| `validation_script_type` | Script type: `python` or `javascript` (auto-detected)                                                                                  | No       | `''`      |
+| `validation_max_retry`   | Maximum validation retry attempts (1-20)                                                                                               | No       | `5`       |
+| `opencode_config`        | Path to OpenCode config.json file (relative to workspace). Contains provider and model settings.                                       | No       | `''`      |
+| `auth_config`            | Path to OpenCode auth.json file (relative to workspace). Contains API keys and authentication. Store in GitHub Secrets, not Variables. | No       | `''`      |
+| `model`                  | Model to use for AI execution (e.g., "anthropic/claude-3-opus"). Overrides config file default.                                        | No       | `''`      |
+| `list_models`            | If "true", print available models and exit without running workflow                                                                    | No       | `'false'` |
 
 ## Outputs
 
@@ -67,6 +102,115 @@ jobs:
 | -------- | ----------------------------------------------------------------- |
 | `status` | Execution status: `success`, `failure`, `cancelled`, or `timeout` |
 | `result` | Workflow execution result as JSON string (max 900KB)              |
+
+## Configuration
+
+### Config File Setup
+
+The action supports custom provider and model configuration through JSON config files.
+
+**config.json** — Provider and model settings (non-sensitive, can use GitHub Variables):
+
+```json
+{
+  "model": "anthropic/claude-sonnet-4-5-20250929"
+}
+```
+
+> **Important**: Do not put API keys in config.json if you plan to store it in GitHub Variables (`vars.*`). API keys belong in auth.json using GitHub Secrets.
+
+**auth.json** — API keys and authentication (sensitive, must use GitHub Secrets):
+
+```json
+{
+  "provider": {
+    "copilot": {
+      "token": "ghu_xxxxx"
+    }
+  }
+}
+```
+
+### Writing Config Files from Secrets
+
+Store your configuration in GitHub Secrets and Variables, then write them to files at runtime:
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+
+  - name: Write config files
+    run: |
+      echo '${{ vars.OPENCODE_CONFIG }}' > config.json
+      echo '${{ secrets.OPENCODE_AUTH }}' > auth.json
+
+  - name: Run AI Workflow
+    uses: owner/ai-workflow-runner@v1
+    with:
+      workflow_path: 'workflow.md'
+      opencode_config: 'config.json'
+      auth_config: 'auth.json'
+
+  - name: Cleanup config files
+    if: always()
+    run: rm -f config.json auth.json
+```
+
+> **Note**: Use `vars.*` for non-sensitive config and `secrets.*` for auth files containing API keys or tokens. Add a cleanup step with `if: always()` for self-hosted runners.
+
+### GitHub Copilot Setup
+
+To use GitHub Copilot as the AI provider:
+
+1. Generate a personal Copilot token from your GitHub settings (token starts with `ghu_`)
+2. Store the token in a GitHub Secret (e.g., `COPILOT_TOKEN`)
+3. Create an auth.json with the copilot provider:
+
+```json
+{
+  "provider": {
+    "copilot": {
+      "token": "ghu_xxxxx"
+    }
+  }
+}
+```
+
+See [`examples/github-copilot/`](examples/github-copilot/) for a complete setup guide.
+
+### Model Selection
+
+Use the `model` input to override the default model from your config file:
+
+```yaml
+- name: Run AI Workflow
+  uses: owner/ai-workflow-runner@v1
+  with:
+    workflow_path: 'workflow.md'
+    model: 'anthropic/claude-sonnet-4-5-20250929'
+```
+
+### Listing Available Models
+
+Set `list_models: 'true'` to print available models and exit without running a workflow. The `workflow_path` input is not validated when listing models.
+
+```yaml
+- name: List Available Models
+  uses: owner/ai-workflow-runner@v1
+  with:
+    workflow_path: ''
+    list_models: 'true'
+    auth_config: 'auth.json'
+```
+
+## Examples
+
+| Example                                         | Description                                         |
+| ----------------------------------------------- | --------------------------------------------------- |
+| [`basic-workflow/`](examples/basic-workflow/)   | Basic AI workflow with minimal setup                |
+| [`with-validation/`](examples/with-validation/) | Validation scripts with Python and retry mechanism  |
+| [`github-copilot/`](examples/github-copilot/)   | Using GitHub Copilot as the AI provider             |
+| [`custom-model/`](examples/custom-model/)       | Custom model selection and listing available models |
 
 ## Security
 
@@ -202,21 +346,32 @@ DOCKER_IMAGE=ai-workflow-runner:local npm run test:integration
 ```
 ai-workflow-runner/
 ├── src/
-│   ├── index.ts          # Main entry point
-│   ├── runner.ts         # Workflow runner
-│   ├── config.ts         # Input parsing and validation
-│   ├── security.ts       # Path sanitization, secret masking
-│   ├── opencode.ts       # OpenCode SDK service
-│   ├── validation.ts     # Validation script executor
-│   └── types.ts          # TypeScript types
-├── dist/                 # Compiled output (committed to git)
-├── __tests__/
-│   ├── unit/             # Unit tests
-│   └── integration/      # Docker tests
-├── .github/workflows/    # CI/CD workflows
-├── action.yml            # Action metadata
-├── Dockerfile            # Multi-runtime container
-└── entrypoint.sh         # Shell wrapper
+│   ├── index.ts              # Main entry point
+│   ├── runner.ts             # Workflow runner
+│   ├── config.ts             # Input parsing and validation
+│   ├── security.ts           # Path sanitization, secret masking
+│   ├── opencode.ts           # OpenCode SDK service
+│   ├── validation.ts         # Validation script executor
+│   ├── types.ts              # TypeScript types
+│   ├── opencode-test-helpers.ts  # OpenCode test utilities
+│   └── *.spec.ts             # Co-located unit tests
+├── test/
+│   ├── e2e/                  # End-to-end tests
+│   ├── e2e-fixtures/         # Test fixtures
+│   ├── integration/          # Docker integration tests
+│   ├── mocks/                # Shared test mocks
+│   └── action-yml.test.ts    # Action metadata tests
+├── examples/
+│   ├── basic-workflow/       # Minimal setup example
+│   ├── with-validation/      # Validation + retry example
+│   ├── github-copilot/       # Copilot provider example
+│   └── custom-model/         # Model selection example
+├── docs/                     # Project documentation
+├── dist/                     # Compiled output (committed to git)
+├── .github/workflows/        # CI/CD workflows
+├── action.yml                # Action metadata
+├── Dockerfile                # Multi-runtime container
+└── entrypoint.sh             # Shell wrapper
 ```
 
 ## Contributing
