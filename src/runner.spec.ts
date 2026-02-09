@@ -79,6 +79,63 @@ describe('runner', () => {
       expect(result.error).toBeUndefined();
     });
 
+    describe('config options pass-through', () => {
+      beforeEach(() => {
+        const workflowFile = path.join(tempDir, 'test-workflow.md');
+        fs.writeFileSync(workflowFile, '# Test');
+      });
+
+      it('7.3-UNIT-015: passes config options to initialize()', async () => {
+        // Arrange
+        const inputs = createValidInputs({
+          opencodeConfig: '/workspace/config.json',
+          authConfig: '/workspace/auth.json',
+          model: 'claude-sonnet-4-5-20250929',
+        });
+
+        // Act
+        await runWorkflow(inputs);
+
+        // Assert
+        expect(mockOpenCodeService.initialize).toHaveBeenCalledWith({
+          opencodeConfig: '/workspace/config.json',
+          authConfig: '/workspace/auth.json',
+          model: 'claude-sonnet-4-5-20250929',
+        });
+      });
+
+      it('7.3-UNIT-016: passes undefined config options when not provided', async () => {
+        // Arrange
+        const inputs = createValidInputs();
+
+        // Act
+        await runWorkflow(inputs);
+
+        // Assert
+        expect(mockOpenCodeService.initialize).toHaveBeenCalledWith({
+          opencodeConfig: undefined,
+          authConfig: undefined,
+          model: undefined,
+        });
+      });
+
+      it('7.3-UNIT-017: returns failure when initialize() throws config error', async () => {
+        // Arrange
+        mockOpenCodeService.initialize.mockRejectedValueOnce(
+          new Error('Config file not found: config.json')
+        );
+
+        const inputs = createValidInputs({ opencodeConfig: '/workspace/config.json' });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Config file not found: config.json');
+      });
+    });
+
     it('returns failure for missing workflow file', async () => {
       const inputs = createValidInputs({ workflowPath: 'nonexistent.md' });
       const result = await runWorkflow(inputs);

@@ -1,4 +1,5 @@
 import * as core from '@actions/core';
+import * as fs from 'fs';
 import { createOpencode, OpencodeClient } from '@opencode-ai/sdk';
 import {
   OpenCodeService,
@@ -9,9 +10,20 @@ import {
 
 jest.mock('@actions/core');
 jest.mock('@opencode-ai/sdk');
+jest.mock('fs', () => {
+  const actual = jest.requireActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    promises: {
+      ...actual.promises,
+      readFile: jest.fn(),
+    },
+  };
+});
 
 const mockCreateOpencode = createOpencode as jest.MockedFunction<typeof createOpencode>;
 const mockCore = core as jest.Mocked<typeof core>;
+const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
 
 describe('OpenCodeService', () => {
   let mockClient: {
@@ -132,8 +144,8 @@ describe('OpenCodeService', () => {
     });
 
     it('resetOpenCodeService() disposes existing instance before clearing', async () => {
-      const service = getOpenCodeService();
-      await service.initialize();
+      const target = getOpenCodeService();
+      await target.initialize();
       resetOpenCodeService();
       expect(mockServer.close).toHaveBeenCalled();
       expect(hasOpenCodeServiceInstance()).toBe(false);
@@ -142,8 +154,8 @@ describe('OpenCodeService', () => {
 
   describe('initialize()', () => {
     it('creates client and server', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
       expect(mockCreateOpencode).toHaveBeenCalledWith({
         hostname: '127.0.0.1',
         port: 0,
@@ -153,30 +165,30 @@ describe('OpenCodeService', () => {
     });
 
     it('is idempotent (only initializes once)', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
+      await target.initialize();
       expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
     });
 
     it('allows retry after transient failure', async () => {
       mockCreateOpencode.mockRejectedValueOnce(new Error('Network error'));
-      const service = new OpenCodeService();
+      const target = new OpenCodeService();
 
-      await expect(service.initialize()).rejects.toThrow('Network error');
+      await expect(target.initialize()).rejects.toThrow('Network error');
 
       mockCreateOpencode.mockResolvedValueOnce({
         client: mockClient as unknown as OpencodeClient,
         server: mockServer,
       });
 
-      await service.initialize();
+      await target.initialize();
       expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
     });
 
     it('logs server URL at debug level only', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
       expect(mockCore.debug).toHaveBeenCalledWith(
         expect.stringContaining('[OpenCode] Server URL:')
       );
@@ -186,10 +198,10 @@ describe('OpenCodeService', () => {
 
   describe('runSession()', () => {
     it('creates session and sends prompt', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('test prompt', 5000);
+      const sessionPromise = target.runSession('test prompt', 5000);
 
       await new Promise((resolve) => setTimeout(resolve, 10));
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
@@ -205,10 +217,10 @@ describe('OpenCodeService', () => {
     });
 
     it('accumulates message fragments correctly', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('test', 5000);
+      const sessionPromise = target.runSession('test', 5000);
 
       await new Promise((resolve) => setTimeout(resolve, 10));
       eventControl.emit({
@@ -234,19 +246,19 @@ describe('OpenCodeService', () => {
     });
 
     it('handles timeout during waitForSessionIdle', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      await expect(service.runSession('test', 50)).rejects.toThrow('timed out after 50ms');
+      await expect(target.runSession('test', 50)).rejects.toThrow('timed out after 50ms');
     });
 
     it('handles abort signal during waitForSessionIdle', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
       const abortController = new AbortController();
 
-      const sessionPromise = service.runSession('test', 5000, abortController.signal);
+      const sessionPromise = target.runSession('test', 5000, abortController.signal);
 
       await new Promise((resolve) => setTimeout(resolve, 10));
       abortController.abort();
@@ -257,15 +269,15 @@ describe('OpenCodeService', () => {
 
   describe('sendFollowUp()', () => {
     it('sends message to existing session', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('initial', 5000);
+      const sessionPromise = target.runSession('initial', 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
       await sessionPromise;
 
-      const followUpPromise = service.sendFollowUp('session-123', 'follow up', 5000);
+      const followUpPromise = target.sendFollowUp('session-123', 'follow up', 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
 
@@ -275,16 +287,16 @@ describe('OpenCodeService', () => {
     });
 
     it('truncates long messages', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('initial', 5000);
+      const sessionPromise = target.runSession('initial', 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
       await sessionPromise;
 
       const longMessage = 'x'.repeat(200_000);
-      const followUpPromise = service.sendFollowUp('session-123', longMessage, 5000);
+      const followUpPromise = target.sendFollowUp('session-123', longMessage, 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
       await followUpPromise;
@@ -297,11 +309,11 @@ describe('OpenCodeService', () => {
     });
 
     it('throws if service is disposed', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
-      service.dispose();
+      const target = new OpenCodeService();
+      await target.initialize();
+      target.dispose();
 
-      await expect(service.sendFollowUp('session-123', 'test', 5000)).rejects.toThrow(
+      await expect(target.sendFollowUp('session-123', 'test', 5000)).rejects.toThrow(
         'OpenCode service disposed - cannot send follow-up'
       );
     });
@@ -309,38 +321,38 @@ describe('OpenCodeService', () => {
 
   describe('dispose()', () => {
     it('cleans up all resources', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
-      service.dispose();
+      const target = new OpenCodeService();
+      await target.initialize();
+      target.dispose();
 
       expect(mockServer.close).toHaveBeenCalled();
       expect(mockCore.info).toHaveBeenCalledWith('[OpenCode] Shutting down server...');
     });
 
     it('aborts event loop', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
-      service.dispose();
+      const target = new OpenCodeService();
+      await target.initialize();
+      target.dispose();
 
       expect(mockServer.close).toHaveBeenCalled();
     });
 
     it('rejects pending session callbacks', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('test', 60000);
+      const sessionPromise = target.runSession('test', 60000);
       await new Promise((resolve) => setTimeout(resolve, 10));
-      service.dispose();
+      target.dispose();
 
       await expect(sessionPromise).rejects.toThrow('OpenCode service disposed');
     });
 
     it('is idempotent (safe to call multiple times)', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
-      service.dispose();
-      service.dispose();
+      const target = new OpenCodeService();
+      await target.initialize();
+      target.dispose();
+      target.dispose();
 
       expect(mockServer.close).toHaveBeenCalledTimes(1);
     });
@@ -348,10 +360,10 @@ describe('OpenCodeService', () => {
 
   describe('event handling', () => {
     it('handles permission.updated events by auto-approving', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('test', 5000);
+      const sessionPromise = target.runSession('test', 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       eventControl.emit({
@@ -375,10 +387,10 @@ describe('OpenCodeService', () => {
         new Error('Permission denied')
       );
 
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('test', 5000);
+      const sessionPromise = target.runSession('test', 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       eventControl.emit({
@@ -397,10 +409,10 @@ describe('OpenCodeService', () => {
     });
 
     it('handles session.status with error type by rejecting callback', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('test', 5000);
+      const sessionPromise = target.runSession('test', 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       eventControl.emit({
@@ -415,10 +427,10 @@ describe('OpenCodeService', () => {
     });
 
     it('handles session.status with disconnected type by rejecting callback', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('test', 5000);
+      const sessionPromise = target.runSession('test', 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       eventControl.emit({
@@ -433,10 +445,10 @@ describe('OpenCodeService', () => {
     });
 
     it('streams message content via core.info()', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('test', 5000);
+      const sessionPromise = target.runSession('test', 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       eventControl.emit({
@@ -460,10 +472,10 @@ describe('OpenCodeService', () => {
 
   describe('getLastMessage()', () => {
     it('returns message for specific session', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('test', 5000);
+      const sessionPromise = target.runSession('test', 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       eventControl.emit({
@@ -479,14 +491,14 @@ describe('OpenCodeService', () => {
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
 
       const result = await sessionPromise;
-      expect(service.getLastMessage(result.sessionId)).toBe('Response');
+      expect(target.getLastMessage(result.sessionId)).toBe('Response');
     });
 
     it('logs warning when message is truncated', async () => {
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
-      const sessionPromise = service.runSession('test', 5000);
+      const sessionPromise = target.runSession('test', 5000);
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       eventControl.emit({
@@ -504,7 +516,7 @@ describe('OpenCodeService', () => {
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
 
       const result = await sessionPromise;
-      const message = service.getLastMessage(result.sessionId);
+      const message = target.getLastMessage(result.sessionId);
 
       expect(mockCore.warning).toHaveBeenCalledWith(
         '[OpenCode] Last message truncated due to size limit'
@@ -529,8 +541,8 @@ describe('OpenCodeService', () => {
           return Promise.resolve({ stream: ctrl2.generator });
         });
 
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
       // Wait for reconnection attempt
       await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -552,8 +564,8 @@ describe('OpenCodeService', () => {
         return Promise.reject(new Error('Connection permanently lost'));
       });
 
-      const service = new OpenCodeService();
-      await service.initialize();
+      const target = new OpenCodeService();
+      await target.initialize();
 
       // Wait for all reconnection attempts (3 attempts with 1s delay each)
       await new Promise((resolve) => setTimeout(resolve, 3500));
@@ -565,5 +577,306 @@ describe('OpenCodeService', () => {
       // Verify the error message was logged (callbacks already cleared by the error handler)
       expect(mockCore.warning).toHaveBeenCalledWith(expect.stringContaining('Event loop error'));
     }, 10000);
+  });
+
+  describe('config loading', () => {
+    const DEFAULT_SERVER_OPTIONS = { hostname: '127.0.0.1', port: 0 };
+
+    beforeEach(() => {
+      mockReadFile.mockResolvedValue('{}');
+    });
+
+    it('7.3-UNIT-001: reads opencode_config file as JSON', async () => {
+      // Arrange
+      const configContent = JSON.stringify({ provider: { anthropic: { options: {} } } });
+      mockReadFile.mockResolvedValue(configContent);
+
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize({ opencodeConfig: '/workspace/config.json' });
+
+      // Assert
+      expect(mockReadFile).toHaveBeenCalledWith('/workspace/config.json', 'utf-8');
+    });
+
+    it('7.3-UNIT-002: passes config to createOpencode() options', async () => {
+      // Arrange
+      const configData = { provider: { anthropic: { options: { apiKey: 'test' } } } };
+      mockReadFile.mockResolvedValue(JSON.stringify(configData));
+
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize({ opencodeConfig: '/workspace/config.json' });
+
+      // Assert
+      expect(mockCreateOpencode).toHaveBeenCalledWith({
+        ...DEFAULT_SERVER_OPTIONS,
+        config: configData,
+      });
+    });
+
+    it('7.3-UNIT-003: reads auth_config file as JSON', async () => {
+      // Arrange
+      const authContent = JSON.stringify({
+        provider: { anthropic: { options: { apiKey: 'sk-test' } } },
+      });
+      mockReadFile.mockResolvedValue(authContent);
+
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize({ authConfig: '/workspace/auth.json' });
+
+      // Assert
+      expect(mockReadFile).toHaveBeenCalledWith('/workspace/auth.json', 'utf-8');
+    });
+
+    it('7.3-UNIT-004: passes auth to createOpencode() options merged into config', async () => {
+      // Arrange
+      const authData = { provider: { anthropic: { options: { apiKey: 'sk-test' } } } };
+      mockReadFile.mockResolvedValue(JSON.stringify(authData));
+
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize({ authConfig: '/workspace/auth.json' });
+
+      // Assert
+      expect(mockCreateOpencode).toHaveBeenCalledWith({
+        ...DEFAULT_SERVER_OPTIONS,
+        config: authData,
+      });
+    });
+
+    it('7.3-UNIT-005: sets config.model when model input provided', async () => {
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize({ model: 'claude-sonnet-4-5-20250929' });
+
+      // Assert
+      expect(mockCreateOpencode).toHaveBeenCalledWith({
+        ...DEFAULT_SERVER_OPTIONS,
+        config: { model: 'claude-sonnet-4-5-20250929' },
+      });
+    });
+
+    it('7.3-UNIT-006: throws config file not found with basename', async () => {
+      // Arrange
+      const enoent = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      mockReadFile.mockRejectedValue(enoent);
+
+      // Act & Assert
+      const target = new OpenCodeService();
+      await expect(
+        target.initialize({ opencodeConfig: '/workspace/deep/path/config.json' })
+      ).rejects.toThrow('Config file not found: config.json');
+    });
+
+    it('7.3-UNIT-007: throws auth file not found with basename', async () => {
+      // Arrange
+      const enoent = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      mockReadFile.mockRejectedValue(enoent);
+
+      // Act & Assert
+      const target = new OpenCodeService();
+      await expect(
+        target.initialize({ authConfig: '/workspace/deep/path/auth.json' })
+      ).rejects.toThrow('Auth file not found: auth.json');
+    });
+
+    it('7.3-UNIT-008: throws invalid JSON in config file with basename', async () => {
+      // Arrange
+      mockReadFile.mockResolvedValue('not valid json {{{');
+
+      // Act & Assert
+      const target = new OpenCodeService();
+      await expect(
+        target.initialize({ opencodeConfig: '/workspace/my-config.json' })
+      ).rejects.toThrow('Invalid JSON in config file: my-config.json');
+    });
+
+    it('7.3-UNIT-009: throws invalid JSON in auth file with basename', async () => {
+      // Arrange
+      mockReadFile.mockResolvedValue('broken json!!!');
+
+      // Act & Assert
+      const target = new OpenCodeService();
+      await expect(target.initialize({ authConfig: '/workspace/my-auth.json' })).rejects.toThrow(
+        'Invalid JSON in auth file: my-auth.json'
+      );
+    });
+
+    it('7.3-UNIT-010: error messages contain only basename, not absolute paths', async () => {
+      // Arrange
+      const enoent = new Error('ENOENT') as NodeJS.ErrnoException;
+      enoent.code = 'ENOENT';
+      mockReadFile.mockRejectedValue(enoent);
+      const target = new OpenCodeService();
+
+      // Act & Assert
+      const error = await target
+        .initialize({ opencodeConfig: '/very/long/secret/path/config.json' })
+        .catch((e: Error) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe('Config file not found: config.json');
+      expect((error as Error).message).not.toContain('/very/long/secret/path');
+    });
+
+    it('7.3-UNIT-011: without any config options calls createOpencode() without config', async () => {
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      // Assert
+      expect(mockCreateOpencode).toHaveBeenCalledWith(DEFAULT_SERVER_OPTIONS);
+    });
+
+    it('7.3-UNIT-012: with model only sets config.model without loading files', async () => {
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize({ model: 'gpt-4' });
+
+      // Assert
+      expect(mockReadFile).not.toHaveBeenCalled();
+      expect(mockCreateOpencode).toHaveBeenCalledWith({
+        ...DEFAULT_SERVER_OPTIONS,
+        config: { model: 'gpt-4' },
+      });
+    });
+
+    it('7.3-UNIT-013: with all three options merges correctly', async () => {
+      // Arrange
+      const configData = { setting1: 'value1', model: 'default-model' };
+      const authData = { provider: { anthropic: { options: { apiKey: 'sk-123' } } } };
+
+      mockReadFile
+        .mockResolvedValueOnce(JSON.stringify(configData))
+        .mockResolvedValueOnce(JSON.stringify(authData));
+
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize({
+        opencodeConfig: '/workspace/config.json',
+        authConfig: '/workspace/auth.json',
+        model: 'claude-opus-4-6',
+      });
+
+      // Assert
+      expect(mockCreateOpencode).toHaveBeenCalledWith({
+        ...DEFAULT_SERVER_OPTIONS,
+        config: {
+          setting1: 'value1',
+          provider: { anthropic: { options: { apiKey: 'sk-123' } } },
+          model: 'claude-opus-4-6',
+        },
+      });
+    });
+
+    it('7.3-UNIT-014: deep merges overlapping provider keys from config and auth', async () => {
+      // Arrange
+      const configData = {
+        provider: { openai: { options: { apiKey: 'sk-openai' } } },
+        model: 'gpt-4',
+      };
+      const authData = {
+        provider: { anthropic: { options: { apiKey: 'sk-anthropic' } } },
+      };
+
+      mockReadFile
+        .mockResolvedValueOnce(JSON.stringify(configData))
+        .mockResolvedValueOnce(JSON.stringify(authData));
+
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize({
+        opencodeConfig: '/workspace/config.json',
+        authConfig: '/workspace/auth.json',
+      });
+
+      // Assert
+      expect(mockCreateOpencode).toHaveBeenCalledWith({
+        ...DEFAULT_SERVER_OPTIONS,
+        config: {
+          provider: {
+            openai: { options: { apiKey: 'sk-openai' } },
+            anthropic: { options: { apiKey: 'sk-anthropic' } },
+          },
+          model: 'gpt-4',
+        },
+      });
+    });
+
+    it('7.3-UNIT-015: re-throws non-ENOENT filesystem errors', async () => {
+      // Arrange
+      const eacces = new Error('Permission denied') as NodeJS.ErrnoException;
+      eacces.code = 'EACCES';
+      mockReadFile.mockRejectedValue(eacces);
+
+      // Act & Assert
+      const target = new OpenCodeService();
+      await expect(target.initialize({ opencodeConfig: '/workspace/config.json' })).rejects.toThrow(
+        'Permission denied'
+      );
+    });
+
+    it('7.3-UNIT-016: invalid JSON error messages use basename only, not absolute paths', async () => {
+      // Arrange
+      mockReadFile.mockResolvedValue('not valid json');
+
+      // Act & Assert
+      const target = new OpenCodeService();
+      const error = await target
+        .initialize({ opencodeConfig: '/very/secret/deep/path/config.json' })
+        .catch((e: Error) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe('Invalid JSON in config file: config.json');
+      expect((error as Error).message).not.toContain('/very/secret/deep/path');
+    });
+
+    it('7.3-UNIT-017: handles non-object JSON values in config file', async () => {
+      // Arrange
+      mockReadFile.mockResolvedValue('"just a string"');
+
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize({ opencodeConfig: '/workspace/config.json' });
+
+      // Assert
+      expect(mockCreateOpencode).toHaveBeenCalledWith({
+        ...DEFAULT_SERVER_OPTIONS,
+        config: 'just a string',
+      });
+    });
+
+    it('7.3-UNIT-018: deep merges overlapping provider keys with auth taking precedence', async () => {
+      // Arrange
+      const configData = {
+        provider: { anthropic: { options: { apiKey: 'from-config', timeout: 5000 } } },
+      };
+      const authData = {
+        provider: { anthropic: { options: { apiKey: 'from-auth', org: 'test-org' } } },
+      };
+
+      mockReadFile
+        .mockResolvedValueOnce(JSON.stringify(configData))
+        .mockResolvedValueOnce(JSON.stringify(authData));
+
+      // Act
+      const target = new OpenCodeService();
+      await target.initialize({
+        opencodeConfig: '/workspace/config.json',
+        authConfig: '/workspace/auth.json',
+      });
+
+      // Assert - auth's provider object overrides config's at the provider level (one-level deep merge)
+      expect(mockCreateOpencode).toHaveBeenCalledWith({
+        ...DEFAULT_SERVER_OPTIONS,
+        config: {
+          provider: {
+            anthropic: { options: { apiKey: 'from-auth', org: 'test-org' } },
+          },
+        },
+      });
+    });
   });
 });

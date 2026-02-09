@@ -1,7 +1,15 @@
 import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk';
 import * as core from '@actions/core';
+import * as fs from 'fs';
+import * as path from 'path';
 import { OpenCodeSession, INPUT_LIMITS } from './types.js';
 import { truncateString } from './security.js';
+
+export interface InitializeOptions {
+  opencodeConfig?: string;
+  authConfig?: string;
+  model?: string;
+}
 
 const SESSION_STATUS = {
   IDLE: 'idle',
@@ -70,14 +78,14 @@ export class OpenCodeService {
   private sessionCompletionCallbacks: Map<string, SessionCallbacks> = new Map();
   private sessionMessageState: Map<string, SessionMessageState> = new Map();
 
-  async initialize(): Promise<void> {
+  async initialize(options?: InitializeOptions): Promise<void> {
     if (this.initializationError) {
       this.initializationPromise = null;
       this.initializationError = null;
     }
     if (this.isInitialized) return;
     if (this.initializationPromise) return this.initializationPromise;
-    this.initializationPromise = this.doInitialize();
+    this.initializationPromise = this.doInitialize(options);
     try {
       await this.initializationPromise;
     } catch (error) {
@@ -87,12 +95,20 @@ export class OpenCodeService {
     }
   }
 
-  private async doInitialize(): Promise<void> {
+  private async doInitialize(options?: InitializeOptions): Promise<void> {
     core.info('[OpenCode] Initializing SDK server...');
-    const opencode = await createOpencode({
+
+    const serverOptions: { hostname: string; port: number; config?: Record<string, unknown> } = {
       hostname: '127.0.0.1',
       port: 0,
-    });
+    };
+
+    const config = await this.buildSdkConfig(options);
+    if (config) {
+      serverOptions.config = config;
+    }
+
+    const opencode = await createOpencode(serverOptions);
     this.client = opencode.client;
     this.server = opencode.server;
     this.isInitialized = true;
@@ -100,6 +116,74 @@ export class OpenCodeService {
     core.debug(`[OpenCode] Server URL: ${this.server?.url ?? 'unknown'}`);
     this.eventLoopAbortController = new AbortController();
     this.startEventLoop();
+  }
+
+  private async buildSdkConfig(
+    options?: InitializeOptions
+  ): Promise<Record<string, unknown> | undefined> {
+    if (!options?.opencodeConfig && !options?.authConfig && !options?.model) {
+      return undefined;
+    }
+
+    let sdkConfig: Record<string, unknown> = {};
+
+    if (options.opencodeConfig) {
+      sdkConfig = await this.loadJsonFile(options.opencodeConfig, 'config');
+    }
+    if (options.authConfig) {
+      const authData = await this.loadJsonFile(options.authConfig, 'auth');
+      sdkConfig = this.mergeConfigs(sdkConfig, authData);
+    }
+    if (options.model) {
+      sdkConfig.model = options.model;
+    }
+
+    return sdkConfig;
+  }
+
+  private mergeConfigs(
+    base: Record<string, unknown>,
+    override: Record<string, unknown>
+  ): Record<string, unknown> {
+    const result = { ...base };
+    for (const key of Object.keys(override)) {
+      const baseVal = result[key];
+      const overrideVal = override[key];
+      if (
+        baseVal &&
+        overrideVal &&
+        typeof baseVal === 'object' &&
+        typeof overrideVal === 'object' &&
+        !Array.isArray(baseVal) &&
+        !Array.isArray(overrideVal)
+      ) {
+        result[key] = {
+          ...(baseVal as Record<string, unknown>),
+          ...(overrideVal as Record<string, unknown>),
+        };
+      } else {
+        result[key] = overrideVal;
+      }
+    }
+    return result;
+  }
+
+  private async loadJsonFile(filePath: string, label: string): Promise<Record<string, unknown>> {
+    const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+    let content: string;
+    try {
+      content = await fs.promises.readFile(filePath, 'utf-8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`${capitalizedLabel} file not found: ${path.basename(filePath)}`);
+      }
+      throw err;
+    }
+    try {
+      return JSON.parse(content) as Record<string, unknown>;
+    } catch {
+      throw new Error(`Invalid JSON in ${label} file: ${path.basename(filePath)}`);
+    }
   }
 
   async runSession(
@@ -110,8 +194,7 @@ export class OpenCodeService {
     if (this.isDisposed) {
       throw new Error('OpenCode service disposed - cannot run session');
     }
-    await this.initialize();
-    if (!this.client) throw new Error('OpenCode client not initialized');
+    if (!this.client) throw new Error('OpenCode client not initialized - call initialize() first');
 
     const sessionResponse = await this.client.session.create({ body: { title: 'AI Workflow' } });
     if (!sessionResponse.data) throw new Error('Failed to create OpenCode session');

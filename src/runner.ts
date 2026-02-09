@@ -60,6 +60,11 @@ export async function runWorkflow(
   let session: OpenCodeSession;
 
   try {
+    await opencode.initialize({
+      opencodeConfig: inputs.opencodeConfig,
+      authConfig: inputs.authConfig,
+      model: inputs.model,
+    });
     session = await opencode.runSession(fullPrompt, timeoutMs, abortSignal);
 
     if (inputs.validationScript) {
