@@ -110,10 +110,10 @@ jobs:
 
       - name: Verify outputs set
         if: steps.test.outcome == 'success'
+        env:
+          STATUS: ${{ steps.test.outputs.status }}
+          RESULT: ${{ steps.test.outputs.result }}
         run: |
-          STATUS="${{ steps.test.outputs.status }}"
-          RESULT="${{ steps.test.outputs.result }}"
-
           if [ -z "$STATUS" ]; then
             echo "status output not set"
             exit 1
@@ -129,8 +129,9 @@ jobs:
 
       - name: Verify secrets are masked
         if: matrix.verify_masked == true && steps.test.outcome == 'success'
+        env:
+          RESULT: ${{ steps.test.outputs.result }}
         run: |
-          RESULT="${{ steps.test.outputs.result }}"
           SECRET="super_secret_value_12345"
 
           if echo "$RESULT" | grep -q "$SECRET"; then
