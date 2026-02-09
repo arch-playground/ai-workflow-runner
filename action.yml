@@ -55,7 +55,7 @@ outputs:
 
 runs:
   using: 'docker'
-  image: 'Dockerfile'
+  image: 'docker://ghcr.io/arch-playground/ai-workflow-runner:1'
 
 branding:
   icon: 'play-circle'

@@ -96,6 +96,6 @@ development_status:
   # Epic 8: Distribution & Marketplace Publishing
   epic-8: 'in-progress'
   8-1-add-docker-image-build-and-push-to-release-pipeline: 'done'
-  8-2-update-action-yml-to-reference-prebuilt-ghcr-image: 'backlog'
+  8-2-update-action-yml-to-reference-prebuilt-ghcr-image: 'done'
   8-3-publish-action-to-github-marketplace: 'backlog'
   epic-8-retrospective: 'backlog'
