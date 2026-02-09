@@ -74,14 +74,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update major version tag
-        run: |
-          MAJOR="${{ needs.validate-tag.outputs.major }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -fa "$MAJOR" -m "Update $MAJOR to ${{ github.ref_name }}"
-          git push origin "$MAJOR" --force
-
   publish-image:
     needs: [validate-tag, release]
     runs-on: ubuntu-latest
@@ -117,3 +109,29 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  update-action-image:
+    needs: [validate-tag, publish-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Update action.yml to reference published image
+        run: |
+          MAJOR="${{ needs.validate-tag.outputs.major }}"
+          sed -i "s|image:.*|image: 'docker://ghcr.io/arch-playground/ai-workflow-runner:${MAJOR}'|" action.yml
+
+      - name: Update major version tag
+        run: |
+          MAJOR="${{ needs.validate-tag.outputs.major }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add action.yml
+          git commit -m "ci: update action.yml to use pre-built GHCR image ${MAJOR}"
+          git tag -fa "$MAJOR" -m "Update $MAJOR to ${{ github.ref_name }}"
+          git push origin "$MAJOR" --force

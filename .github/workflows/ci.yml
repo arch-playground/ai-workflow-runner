@@ -353,6 +353,12 @@ jobs:
           echo "# Unicode Workflow. Just answer \"hello world\"." > ".github/test-fixtures/workflow-日本語.md"
           echo "# Spaces Workflow. Just answer \"hello world\"." > ".github/test-fixtures/workflow with spaces.md"
 
+      - name: Build Docker image from Dockerfile for testing
+        run: |
+          sed -i "s|image:.*docker://.*|image: 'Dockerfile'|" action.yml
+          echo "Updated action.yml image to Dockerfile:"
+          grep "image:" action.yml
+
       - name: Run action - ${{ matrix.name }}
         id: test
         uses: ./
