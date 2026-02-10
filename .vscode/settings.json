@@ -1,0 +1,7 @@
+{
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "Follow the Conventional Commits format strictly: `<type>(<optional scope>): <description>`.\n\nAllowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.\n\nRules:\n- Header must be 100 characters or less.\n- Use imperative mood in the description (e.g., 'add' not 'added').\n- Do NOT capitalize the first letter of the description.\n- Do NOT end the description with a period.\n- Use scope when the change targets a specific component (e.g., `feat(validation): add JS support`).\n- For breaking changes, add `!` after the type/scope (e.g., `feat!: remove deprecated input`) or add a `BREAKING CHANGE:` footer.\n- Keep the description concise — focus on WHY, not WHAT.\n\nExamples:\n- feat(runner): add timeout configuration input\n- fix(security): prevent path traversal in workflow resolution\n- docs: update README with new action inputs\n- ci: add CodeQL security scanning workflow\n- chore(deps): bump @actions/core to v3.1.0\n- refactor: extract Docker metadata into helper function\n- test(validation): add edge cases for env_vars parsing"
+    }
+  ]
+}
