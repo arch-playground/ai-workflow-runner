@@ -1,0 +1,8 @@
+# Default owner for everything
+* @tannt
+
+# CI/CD and release infrastructure
+.github/ @tannt
+action.yml @tannt
+Dockerfile @tannt
+entrypoint.sh @tannt

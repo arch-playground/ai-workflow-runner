@@ -14,7 +14,9 @@ coverage/
 
 # IDE
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
 *.swp
 *.swo
 

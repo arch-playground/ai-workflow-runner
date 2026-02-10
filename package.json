@@ -17,7 +17,7 @@
     "format": "prettier --write src test",
     "format:check": "prettier --check src test",
     "typecheck": "tsc --noEmit",
-    "prepare": "husky install"
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -36,6 +36,8 @@
     "@opencode-ai/sdk": "^1.1.53"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.4.1",
+    "@commitlint/config-conventional": "^20.4.1",
     "@eslint/eslintrc": "^3.3.0",
     "@eslint/js": "^9.0.0",
     "@types/jest": "^30.0.0",
