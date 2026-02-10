@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run AI Workflow
-        uses: owner/ai-workflow-runner@v1
+        uses: arch-playground/ai-workflow-runner@v1
         with:
           workflow_path: 'workflows/my-workflow.md'
           prompt: 'Process this repository'
@@ -69,7 +69,7 @@ jobs:
           echo '${{ secrets.OPENCODE_AUTH }}' > auth.json
 
       - name: Run AI Workflow
-        uses: owner/ai-workflow-runner@v1
+        uses: arch-playground/ai-workflow-runner@v1
         with:
           workflow_path: 'workflow.md'
           auth_config: 'auth.json'
@@ -145,7 +145,7 @@ steps:
       echo '${{ secrets.OPENCODE_AUTH }}' > auth.json
 
   - name: Run AI Workflow
-    uses: owner/ai-workflow-runner@v1
+    uses: arch-playground/ai-workflow-runner@v1
     with:
       workflow_path: 'workflow.md'
       opencode_config: 'config.json'
@@ -184,7 +184,7 @@ Use the `model` input to override the default model from your config file:
 
 ```yaml
 - name: Run AI Workflow
-  uses: owner/ai-workflow-runner@v1
+  uses: arch-playground/ai-workflow-runner@v1
   with:
     workflow_path: 'workflow.md'
     model: 'anthropic/claude-sonnet-4-5-20250929'
@@ -196,7 +196,7 @@ Set `list_models: 'true'` to print available models and exit without running a w
 
 ```yaml
 - name: List Available Models
-  uses: owner/ai-workflow-runner@v1
+  uses: arch-playground/ai-workflow-runner@v1
   with:
     workflow_path: ''
     list_models: 'true'
