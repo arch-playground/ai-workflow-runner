@@ -110,7 +110,7 @@ jobs:
 
       - name: Unit test annotations
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v2
         with:
           name: Unit Tests
           path: reports/unit-tests.xml
@@ -259,7 +259,7 @@ jobs:
 
       - name: Integration test annotations
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v2
         with:
           name: Integration Tests
           path: reports/integration-tests.xml
