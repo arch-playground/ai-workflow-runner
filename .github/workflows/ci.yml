@@ -110,7 +110,7 @@ jobs:
 
       - name: Unit test annotations
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v2
         with:
           name: Unit Tests
           path: reports/unit-tests.xml
@@ -259,7 +259,7 @@ jobs:
 
       - name: Integration test annotations
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v2
         with:
           name: Integration Tests
           path: reports/integration-tests.xml
@@ -430,21 +430,21 @@ jobs:
     steps:
       - name: Download unit test reports
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: unit-test-reports
           path: unit-test-reports
 
       - name: Download build and integration reports
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: build-and-integration-reports
           path: build-reports
 
       - name: Download security reports
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: security-reports
           path: security-reports
@@ -721,7 +721,7 @@ jobs:
 
       - name: PR status check - Quality Gate
         if: always()
-        uses: LouisBrunner/checks-action@v1.6.1
+        uses: LouisBrunner/checks-action@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: Quality Gate
@@ -732,7 +732,7 @@ jobs:
 
       - name: PR status check - Test Suite
         if: always()
-        uses: LouisBrunner/checks-action@v1.6.1
+        uses: LouisBrunner/checks-action@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: Test Suite
@@ -743,7 +743,7 @@ jobs:
 
       - name: PR status check - Build & Integration
         if: always()
-        uses: LouisBrunner/checks-action@v1.6.1
+        uses: LouisBrunner/checks-action@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: Build & Integration
@@ -754,7 +754,7 @@ jobs:
 
       - name: PR status check - E2E Action Tests
         if: always()
-        uses: LouisBrunner/checks-action@v1.6.1
+        uses: LouisBrunner/checks-action@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: E2E Action Tests
@@ -765,7 +765,7 @@ jobs:
 
       - name: PR status check - Security Audit
         if: always()
-        uses: LouisBrunner/checks-action@v1.6.1
+        uses: LouisBrunner/checks-action@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: Security Audit
