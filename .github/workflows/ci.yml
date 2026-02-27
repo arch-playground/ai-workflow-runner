@@ -430,21 +430,21 @@ jobs:
     steps:
       - name: Download unit test reports
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: unit-test-reports
           path: unit-test-reports
 
       - name: Download build and integration reports
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: build-and-integration-reports
           path: build-reports
 
       - name: Download security reports
         continue-on-error: true
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: security-reports
           path: security-reports
