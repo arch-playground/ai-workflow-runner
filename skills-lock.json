@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "skill-creator": {
+      "source": "bmad-labs/skills",
+      "sourceType": "github",
+      "computedHash": "1700521c6542cc06e16fd91a7c3c7b2fe1b038d8dbcef84ce4e8626906a15e29"
+    }
+  }
+}
