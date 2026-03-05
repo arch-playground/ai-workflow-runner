@@ -34,12 +34,15 @@ Using specialized skills for testing is **MANDATORY**. You MUST call the `skill`
 
 ### When to Load Skills
 
-| Task Type                          | Required Skill                | Load Command                            |
-| ---------------------------------- | ----------------------------- | --------------------------------------- |
-| Write/review unit tests            | `typescript-unit-testing`     | `skill(name="typescript-unit-testing")` |
-| Write/review E2E/integration tests | `typescript-e2e-testing`      | `skill(name="typescript-e2e-testing")`  |
-| Debug failing tests                | Load skill matching test type | See above                               |
-| Test quality review                | Load BOTH skills              | Load both before review                 |
+| Task Type                          | Required Skill                | Load Command                                |
+| ---------------------------------- | ----------------------------- | ------------------------------------------- |
+| Write/review unit tests            | `typescript-unit-testing`     | `skill(name="typescript-unit-testing")`     |
+| Write/review E2E/integration tests | `typescript-e2e-testing`      | `skill(name="typescript-e2e-testing")`      |
+| Writing code                       | `typescript-clean-code`       | `skill(name="typescript-clean-code")`       |
+| Writing frontend code              | `vercel-react-best-practices` | `skill(name="vercel-react-best-practices")` |
+| Debug frontend code                | `agent-browser`               | `skill(name="agent-browser")`               |
+| Debug failing tests                | Load skill matching test type | See above                                   |
+| Test quality review                | Load BOTH skills              | Load both before review                     |
 
 ### Skill Loading Rules
 
@@ -97,7 +100,7 @@ When creating a story, AI agents MUST add the following as **Task 1** (before an
   - [ ] Read `.knowledge-base/technical/standards/backend/validation.md` - class-validator with ErrorCode
   - [ ] Read `.knowledge-base/technical/standards/testing/unit-testing.md` - AAA pattern, @golevelup/ts-jest
   - [ ] Read `.knowledge-base/technical/standards/testing/e2e-testing.md`
-  - [ ] (Add skill-specific loading task if the story involves testing)
+  - [ ] (Add skill-specific needed, including coding, debugging, testing, or design pattern skills)
   - [ ] (Add any other applicable standards for this story)
 ```
 

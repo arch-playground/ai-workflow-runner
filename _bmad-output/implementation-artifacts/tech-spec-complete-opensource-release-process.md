@@ -239,7 +239,7 @@ Adopt release-please for automated release management with Conventional Commits 
     1. Triggers on: `branch_protection_rule`, weekly schedule (`cron: '0 6 * * 1'`), and `push` to `main`
     2. Permissions: `security-events: write`, `id-token: write`, `contents: read`
     3. Single job `analysis`
-    4. Steps: `actions/checkout@v6` with `persist-credentials: false`, `ossf/scorecard-action@v2` with `results_file: results.sarif`, `results_format: sarif`, `publish_results: true`, then `actions/upload-artifact@v6` for the SARIF file, then `github/codeql-action/upload-sarif@v3` to integrate with GitHub Security tab
+    4. Steps: `actions/checkout@v6` with `persist-credentials: false`, `ossf/scorecard-action@v2` with `results_file: results.sarif`, `results_format: sarif`, `publish_results: true`, then `actions/upload-artifact@v7` for the SARIF file, then `github/codeql-action/upload-sarif@v3` to integrate with GitHub Security tab
   - Notes: The `publish_results: true` flag publishes the score to the OpenSSF Scorecard API, enabling the Scorecard badge.
 
 #### Phase 3 — Contributor Infrastructure
@@ -419,7 +419,7 @@ Adopt release-please for automated release management with Conventional Commits 
 - **Pre-release workflow**: To create a pre-release, the maintainer edits `release-please-config.json` to set `"prerelease": true`, pushes the change, and release-please will generate pre-release versions. After the pre-release period, set it back to `false` for stable releases.
 - **Risk: release-please changelog format** — release-please uses a different format than Keep a Changelog. The existing v1.0.0 entry will remain, but new entries will use release-please's format (grouped by Conventional Commit type). This is acceptable and standard for projects using release-please.
 - **Risk: CODEOWNERS without branch protection** — CODEOWNERS has no effect unless branch protection is enabled with "Require review from code owners". Document this dependency clearly.
-- **Action version consistency**: New workflow files (codeql.yml, scorecard.yml, dependabot-automerge.yml) must use the same action versions as the existing workflows — `actions/checkout@v6`, `actions/upload-artifact@v6`, `actions/setup-node@v6`. These are already in use in the current CI and release workflows and are verified to work. Pin all new usages to the same `@v6` versions for consistency.
+- **Action version consistency**: New workflow files (codeql.yml, scorecard.yml, dependabot-automerge.yml) must use the same action versions as the existing workflows — `actions/checkout@v6`, `actions/upload-artifact@v7`, `actions/setup-node@v6`. These are already in use in the current CI and release workflows and are verified to work. Pin all new usages to the same `@v6` versions for consistency.
 
 ## Review Notes
 

@@ -38,7 +38,7 @@ So that **I can quickly set up AI workflows in my repository**.
     - Keep it realistic but provider-agnostic
   - [x] Create `examples/basic-workflow/.github/workflows/run-ai.yml`:
     - Trigger on `workflow_dispatch` (manual trigger) for safety
-    - Uses `actions/checkout@v4`
+    - Uses `actions/checkout@v6`
     - Uses `owner/ai-workflow-runner@v1` with `workflow_path: 'examples/basic-workflow/workflow.md'`
     - Set `timeout_minutes: '10'`
     - Show output capture with `${{ steps.ai.outputs.status }}` and `${{ steps.ai.outputs.result }}`
@@ -83,7 +83,7 @@ So that **I can quickly set up AI workflows in my repository**.
     - Same or similar prompt to basic example
   - [x] Create `examples/github-copilot/.github/workflows/run-ai.yml`:
     - Trigger on `workflow_dispatch`
-    - Uses `actions/checkout@v4`
+    - Uses `actions/checkout@v6`
     - **Step 1**: Write auth.json from secret:
       ```yaml
       - name: Write auth config
@@ -104,7 +104,7 @@ So that **I can quickly set up AI workflows in my repository**.
     - Same or similar prompt to basic example
   - [x] Create `examples/custom-model/.github/workflows/run-ai.yml`:
     - Trigger on `workflow_dispatch` with an `inputs.model` parameter (user-selectable)
-    - Uses `actions/checkout@v4`
+    - Uses `actions/checkout@v6`
     - Step to optionally write config from GitHub Variable: `echo '${{ vars.OPENCODE_CONFIG }}' > config.json`
     - Run action with `model: '${{ github.event.inputs.model }}'` and `opencode_config: 'config.json'`
   - [x] Create `examples/custom-model/.github/workflows/list-models.yml`:
@@ -194,7 +194,7 @@ All example workflows MUST use these exact input names from `action.yml`:
 - All action inputs are strings — always quote values: `timeout_minutes: '10'` not `timeout_minutes: 10`
 - Use `workflow_dispatch` trigger for examples (safe for users to copy)
 - Reference action as `owner/ai-workflow-runner@v1` (placeholder — user replaces `owner`)
-- Always include `actions/checkout@v4` before the action step
+- Always include `actions/checkout@v6` before the action step
 - Use step `id` to reference outputs: `id: ai` then `${{ steps.ai.outputs.status }}`
 
 ### Validation Script Conventions
