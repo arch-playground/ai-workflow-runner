@@ -33,11 +33,12 @@
 
 ## Existing Documentation
 
-| Document                  | Description                               |
-| ------------------------- | ----------------------------------------- |
-| [README.md](../README.md) | User-facing documentation, usage examples |
-| [AGENTS.md](../AGENTS.md) | AI agent guidelines and standards         |
-| [LICENSE](../LICENSE)     | MIT license                               |
+| Document                                        | Description                                            |
+| ----------------------------------------------- | ------------------------------------------------------ |
+| [README.md](../README.md)                       | User-facing documentation, usage examples              |
+| [Workflow Creator Skill](./workflow-creator.md) | Installation and usage guide for the Claude Code skill |
+| [AGENTS.md](../AGENTS.md)                       | AI agent guidelines and standards                      |
+| [LICENSE](../LICENSE)                           | MIT license                                            |
 
 ## Source Code Reference
 
