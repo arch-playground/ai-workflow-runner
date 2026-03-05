@@ -11,6 +11,7 @@ A GitHub Action that runs AI workflows using OpenCode SDK with validation script
 - **Secure execution**: Path traversal prevention, secret masking, input validation
 - **Docker-based**: Consistent environment across all runs
 - **Configurable**: Timeout settings, environment variables, input prompts
+- **Workflow Creator Skill**: Claude Code skill that guides you through creating multi-job workflows ([docs](docs/workflow-creator.md))
 
 ## Platform Support
 
@@ -345,6 +346,8 @@ DOCKER_IMAGE=ai-workflow-runner:local npm run test:integration
 
 ```
 ai-workflow-runner/
+├── skills/
+│   └── workflow-creator/     # Claude Code skill (see "Claude Code Skill" section)
 ├── src/
 │   ├── index.ts              # Main entry point
 │   ├── runner.ts             # Workflow runner
