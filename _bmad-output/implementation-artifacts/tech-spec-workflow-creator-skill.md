@@ -5,18 +5,19 @@ created: '2026-03-05'
 status: 'Completed'
 stepsCompleted: [1, 2, 3, 4]
 tech_stack: ['markdown', 'yaml', 'github-actions']
-files_to_modify: [
-  'skills/workflow-creator/SKILL.md',
-  'skills/workflow-creator/workflow.md',
-  'skills/workflow-creator/steps/step-01-discover.md',
-  'skills/workflow-creator/steps/step-02-dependencies.md',
-  'skills/workflow-creator/steps/step-03-prompts.md',
-  'skills/workflow-creator/steps/step-04-generate.md',
-  'skills/workflow-creator/knowledge/action-schema.md',
-  'skills/workflow-creator/knowledge/auth-patterns.md',
-  'skills/workflow-creator/knowledge/prompt-quality-guide.md',
-  'skills/workflow-creator/checklists/output-checklist.md'
-]
+files_to_modify:
+  [
+    'skills/workflow-creator/SKILL.md',
+    'skills/workflow-creator/workflow.md',
+    'skills/workflow-creator/steps/step-01-discover.md',
+    'skills/workflow-creator/steps/step-02-dependencies.md',
+    'skills/workflow-creator/steps/step-03-prompts.md',
+    'skills/workflow-creator/steps/step-04-generate.md',
+    'skills/workflow-creator/knowledge/action-schema.md',
+    'skills/workflow-creator/knowledge/auth-patterns.md',
+    'skills/workflow-creator/knowledge/prompt-quality-guide.md',
+    'skills/workflow-creator/checklists/output-checklist.md',
+  ]
 # Note: Task 10a modifies step-02, step-03, step-04 (adding load instructions) — included above
 code_patterns: ['step-file-architecture', 'SKILL.md-frontmatter', 'stepsCompleted-tracking']
 test_patterns: []
@@ -39,6 +40,7 @@ A Claude Code skill (`workflow-creator`) that guides users through a short disco
 ### Scope
 
 **In Scope:**
+
 - Skill definition file (`SKILL.md`) with trigger descriptions and usage guidance
 - Step-file workflow architecture (modeled after BMAD quick-spec): step-01 through step-04
 - Step 01: Discover — gather workflow name, trigger, steps, and high-level objective per step
@@ -53,6 +55,7 @@ A Claude Code skill (`workflow-creator`) that guides users through a short disco
 - Passing data between jobs (GitHub Actions `outputs`, artifact upload/download)
 
 **Out of Scope:**
+
 - Actually running or testing the generated workflow
 - BMAD agent mode (no persona, no menu system) — this is a Claude Code skill, not a BMAD agent
 - Non-Linux runners (Windows/macOS not supported by the action)
@@ -67,6 +70,7 @@ A Claude Code skill (`workflow-creator`) that guides users through a short disco
 **Confirmed Clean Slate** — `skills/workflow-creator/` does not exist yet. No legacy constraints.
 
 **Skill structure** (derived from `find-skills` global skill and BMAD step-file pattern):
+
 - Skills live in `skills/<skill-name>/` (project-level, relative to repo root)
 - Entry point: `SKILL.md` with YAML frontmatter `name:` and `description:` fields — Claude activates the skill based on these
 - Step-file architecture: `SKILL.md` describes the skill + entry workflow → `workflow.md` → `steps/step-01.md`, `step-02.md`, etc.
@@ -77,33 +81,35 @@ A Claude Code skill (`workflow-creator`) that guides users through a short disco
 
 **action.yml inputs (complete, authoritative):**
 
-| Input | Required | Default | Notes |
-| ----- | -------- | ------- | ----- |
-| `workflow_path` | yes | — | Path to `.md` prompt file, relative to workspace root |
-| `prompt` | no | `''` | Additional prompt text, max 100KB |
-| `env_vars` | no | `'{}'` | JSON object of env vars, max 64KB / 100 entries |
-| `timeout_minutes` | no | `30` | Max execution time |
-| `validation_script` | no | `''` | File path (`.py`/`.js`) or inline (`python:...` / `js:...`) |
-| `validation_script_type` | no | `''` | Only needed for inline scripts without prefix |
-| `validation_max_retry` | no | `5` | Max retries, range 1–20 |
-| `opencode_config` | no | `''` | Path to `config.json` (non-sensitive provider/model config) |
-| `auth_config` | no | `''` | Path to `auth.json` (sensitive API keys — use GitHub Secrets) |
-| `model` | no | `''` | Override model, e.g. `anthropic/claude-sonnet-4-5-20250929` |
-| `list_models` | no | `'false'` | Print models and exit |
+| Input                    | Required | Default   | Notes                                                         |
+| ------------------------ | -------- | --------- | ------------------------------------------------------------- |
+| `workflow_path`          | yes      | —         | Path to `.md` prompt file, relative to workspace root         |
+| `prompt`                 | no       | `''`      | Additional prompt text, max 100KB                             |
+| `env_vars`               | no       | `'{}'`    | JSON object of env vars, max 64KB / 100 entries               |
+| `timeout_minutes`        | no       | `30`      | Max execution time                                            |
+| `validation_script`      | no       | `''`      | File path (`.py`/`.js`) or inline (`python:...` / `js:...`)   |
+| `validation_script_type` | no       | `''`      | Only needed for inline scripts without prefix                 |
+| `validation_max_retry`   | no       | `5`       | Max retries, range 1–20                                       |
+| `opencode_config`        | no       | `''`      | Path to `config.json` (non-sensitive provider/model config)   |
+| `auth_config`            | no       | `''`      | Path to `auth.json` (sensitive API keys — use GitHub Secrets) |
+| `model`                  | no       | `''`      | Override model, e.g. `anthropic/claude-sonnet-4-5-20250929`   |
+| `list_models`            | no       | `'false'` | Print models and exit                                         |
 
 **action.yml outputs:**
 
-| Output | Description |
-| ------ | ----------- |
+| Output   | Description                                     |
+| -------- | ----------------------------------------------- |
 | `status` | `success` / `failure` / `cancelled` / `timeout` |
-| `result` | AI last message as JSON string, max 900KB |
+| `result` | AI last message as JSON string, max 900KB       |
 
 **Auth patterns (from examples):**
+
 - Anthropic API key: `env: OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}`
 - Copilot token: write `auth.json` from secret, pass `auth_config: 'auth.json'`, cleanup `if: always()`
 - Custom model: `model` input or `opencode_config` pointing to `config.json`
 
 **Validation script contract:**
+
 - Receives `AI_LAST_MESSAGE` env var (AI's last response, ~100KB)
 - Returns empty or `"true"` → success; any other string → used as retry feedback to AI
 - Timeout: 60 seconds per script execution
@@ -113,6 +119,7 @@ A Claude Code skill (`workflow-creator`) that guides users through a short disco
 This is an example of a complex real-world workflow with 16 steps (`document-repo` from microservice-swarm). Key patterns to adopt in the skill's guidance and generated output (do NOT copy its format or structure):
 
 **Key lesson for workflow-creator**: A 16-step workflow translates to 16 GitHub Actions jobs. The skill must help users:
+
 1. Identify which steps are truly independent (can run in parallel) vs which need upstream outputs
 2. Understand that each job runs in isolation — data between steps must be passed explicitly via outputs or artifacts
 3. Write prompt files that are self-contained (no reliance on in-memory state from prior steps)
@@ -131,16 +138,16 @@ step-01-init → step-02-scan → step-03-overview
 
 ### Files to Reference
 
-| File | Purpose |
-| ---- | ------- |
-| `action.yml` | Authoritative action input/output schema |
-| `README.md` | Full reference with examples, security, limits |
-| `examples/basic-workflow/.github/workflows/run-ai.yml` | Simplest single-job pattern |
-| `examples/with-validation/.github/workflows/run-ai.yml` | Validation + retry pattern |
-| `examples/github-copilot/.github/workflows/run-ai.yml` | Auth config (Copilot) pattern |
-| `examples/custom-model/.github/workflows/run-ai.yml` | Model override + opencode_config pattern |
-| `examples/with-validation/validate.py` | Example validation script |
-| `~/.agents/skills/find-skills/SKILL.md` | Reference for SKILL.md format and frontmatter structure |
+| File                                                    | Purpose                                                 |
+| ------------------------------------------------------- | ------------------------------------------------------- |
+| `action.yml`                                            | Authoritative action input/output schema                |
+| `README.md`                                             | Full reference with examples, security, limits          |
+| `examples/basic-workflow/.github/workflows/run-ai.yml`  | Simplest single-job pattern                             |
+| `examples/with-validation/.github/workflows/run-ai.yml` | Validation + retry pattern                              |
+| `examples/github-copilot/.github/workflows/run-ai.yml`  | Auth config (Copilot) pattern                           |
+| `examples/custom-model/.github/workflows/run-ai.yml`    | Model override + opencode_config pattern                |
+| `examples/with-validation/validate.py`                  | Example validation script                               |
+| `~/.agents/skills/find-skills/SKILL.md`                 | Reference for SKILL.md format and frontmatter structure |
 
 ### Technical Decisions
 
@@ -172,17 +179,17 @@ jobs:
     steps: [...]
 
   step-b:
-    needs: step-a        # sequential dependency
+    needs: step-a # sequential dependency
     runs-on: ubuntu-latest
     steps: [...]
 
   step-c:
-    needs: step-a        # same parent = runs parallel with step-b
+    needs: step-a # same parent = runs parallel with step-b
     runs-on: ubuntu-latest
     steps: [...]
 
   step-d:
-    needs: [step-b, step-c]  # fan-in after parallel steps
+    needs: [step-b, step-c] # fan-in after parallel steps
     runs-on: ubuntu-latest
     steps: [...]
 ```
@@ -190,6 +197,7 @@ jobs:
 #### Core Structural Principle
 
 Each workflow step = one focused AI task with:
+
 - A clear `.md` prompt file (explicit objective, constraints, expected output format)
 - Clear inputs via `env_vars` (pass context from previous steps)
 - A validation script that enforces the expected output format and triggers retry if not met
@@ -203,6 +211,7 @@ These principles were extracted from deep reading of the installed BMAD codebase
 #### 1. Core Execution Engine Pattern
 
 BMAD separates configuration from logic:
+
 - `workflow.yaml` = pure configuration (variables, paths, metadata)
 - `instructions.xml` or step `.md` files = the actual logic
 - Apply to this skill: `SKILL.md` holds identity/triggers; step files hold all execution logic
@@ -217,19 +226,20 @@ This skill uses Pattern B (markdown step-file), consistent with quick-spec and b
 
 #### 3. Seven BMAD Design Principles (apply to both the skill and the generated workflows)
 
-| Principle | Application to workflow-creator |
-| --------- | ------------------------------- |
-| **Single Responsibility** | Each generated GitHub Actions job = one focused AI task = one `.md` prompt file |
-| **Exhaustive but Lazy Loading** | Skill loads user's existing workflow file only when editing; reads it completely |
-| **State Tracking via Files** | Progress tracked in WIP frontmatter `stepsCompleted`; generated workflow state tracked in the `.yml` |
-| **Strict Sequential Execution** | Step files execute in order; never skip or preload next step |
-| **Validation Gates** | Skill validates generated YAML against a checklist before handing to user; each AI job can have a validation script |
-| **User Collaboration** | Show Mermaid dependency graph and prompt file previews before writing; user confirms each |
-| **Context Propagation** | Auth config, model, timeout defaults set once at workflow level, inherited by all jobs |
+| Principle                       | Application to workflow-creator                                                                                     |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Single Responsibility**       | Each generated GitHub Actions job = one focused AI task = one `.md` prompt file                                     |
+| **Exhaustive but Lazy Loading** | Skill loads user's existing workflow file only when editing; reads it completely                                    |
+| **State Tracking via Files**    | Progress tracked in WIP frontmatter `stepsCompleted`; generated workflow state tracked in the `.yml`                |
+| **Strict Sequential Execution** | Step files execute in order; never skip or preload next step                                                        |
+| **Validation Gates**            | Skill validates generated YAML against a checklist before handing to user; each AI job can have a validation script |
+| **User Collaboration**          | Show Mermaid dependency graph and prompt file previews before writing; user confirms each                           |
+| **Context Propagation**         | Auth config, model, timeout defaults set once at workflow level, inherited by all jobs                              |
 
 #### 4. High-Quality Workflow Step Principles
 
 Apply these when guiding users to write AI prompt files (`.md`):
+
 - **Machine-enforceable instructions**: prompt files must state the objective explicitly, with constraints and expected output format — not vague goals
 - **No ambiguity**: every step prompt must specify what "done" looks like
 - **Explicit failure paths**: if the AI step can fail, a validation script should catch it and return actionable feedback for retry
@@ -245,6 +255,7 @@ Sequential chain:                      needs: previous-job
 ```
 
 Data passing between jobs:
+
 - Small values (strings, paths): GitHub Actions `outputs` + `needs.<job>.outputs.<key>`
 - Files/artifacts: `actions/upload-artifact` → `actions/download-artifact`
 - Warning: no filesystem state persists between jobs — must be explicit
@@ -307,7 +318,7 @@ Tasks are ordered by dependency — foundational knowledge files first, then ent
     2. Generate each `.md` prompt file to `workflows/<step-slug>.md`.
     3. Generate each validation script (if requested) to `workflows/validation/<step-slug>.py` or `.js`.
     4. Generate auth setup from `knowledge/auth-patterns.md`: emit the correct write-auth step (if Copilot/custom) before the first AI job and cleanup step with `if: always()` after the last AI job.
-    5. For each dependency edge marked as file-transfer in WIP: emit `actions/upload-artifact@v4` in the upstream job's steps and `actions/download-artifact@v4` in the downstream job's steps before the AI step.
+    5. For each dependency edge marked as file-transfer in WIP: emit `actions/upload-artifact@v7` in the upstream job's steps and `actions/download-artifact@v8` in the downstream job's steps before the AI step.
     6. Generate `.github/workflows/<workflow-name>.yml` with full multi-job structure, `needs:` graph, auth, and artifact steps, using the action reference from WIP (default: `arch-playground/ai-workflow-runner@v1`).
     7. Check `npx` availability: if available, run `npx action-validator .github/workflows/<workflow-name>.yml`. If errors: regenerate the entire YAML (not partial sections) with corrections applied, rewrite, re-run — up to 3 iterations. If still failing after 3 attempts, HALT and show raw errors. If `npx` not available, log warning and skip.
     8. Show final file tree. Update WIP `stepsCompleted` and status to `done`.
@@ -325,7 +336,7 @@ Tasks are ordered by dependency — foundational knowledge files first, then ent
 
 - [x] AC5: Given a user requests a validation script for a step, when Step 04 generates the files, then a `.py` or `.js` validation script is created that checks `AI_LAST_MESSAGE` and the generated job includes `validation_script:` and `validation_max_retry:` inputs.
 
-- [x] AC6: Given Step 02 asks about data passing for a dependency edge and the user describes "the output is a generated report file", when Step 04 generates the `.yml`, then the upstream job includes `actions/upload-artifact@v4` and the downstream job includes `actions/download-artifact@v4` before the AI step. Conversely, if the user describes "just a status string", then GitHub Actions `outputs` are used instead.
+- [x] AC6: Given Step 02 asks about data passing for a dependency edge and the user describes "the output is a generated report file", when Step 04 generates the `.yml`, then the upstream job includes `actions/upload-artifact@v7` and the downstream job includes `actions/download-artifact@v8` before the AI step. Conversely, if the user describes "just a status string", then GitHub Actions `outputs` are used instead.
 
 - [x] AC7: Given a user invokes the skill with an existing workflow path ("edit my workflow"), when `workflow.md` initializes, then it reads the existing YAML, maps each job to its prompt file via `workflow_path:`, reports any unmapped jobs for user clarification, and in Step 03 only presents new or changed steps for editing — unchanged steps are shown as a summary list only.
 
@@ -354,7 +365,7 @@ Tasks are ordered by dependency — foundational knowledge files first, then ent
 - No new npm packages to install in this repo — this is a markdown/text skill only
 - The skill itself has no runtime dependencies; it's pure instructions for Claude
 - **`action-validator`** (npm): invoked via `npx action-validator <file>` — no global install required; validates workflow YAML against GitHub Actions JSON schema. Source: https://github.com/mpalmer/action-validator
-- `actions/upload-artifact@v4` and `actions/download-artifact@v4` are GitHub-provided actions referenced in generated YAML — no installation needed
+- `actions/upload-artifact@v7` and `actions/download-artifact@v8` are GitHub-provided actions referenced in generated YAML — no installation needed
 
 ### Testing Strategy
 

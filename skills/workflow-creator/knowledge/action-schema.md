@@ -16,42 +16,42 @@ uses: arch-playground/ai-workflow-runner@v1
 
 ## Inputs
 
-| Input | Required | Default | Notes |
-| ----- | -------- | ------- | ----- |
-| `workflow_path` | **yes** | — | Path to `.md` prompt file, relative to workspace root |
-| `prompt` | no | `''` | Additional prompt text appended to `workflow_path` content, max 100KB |
-| `env_vars` | no | `'{}'` | JSON object of env vars passed to AI context, max 64KB / 100 entries |
-| `timeout_minutes` | no | `'30'` | Max execution time in minutes |
-| `validation_script` | no | `''` | File path (`.py` / `.js`) or inline (`python:...` / `js:...`) |
-| `validation_script_type` | no | `''` | Only needed for inline scripts without prefix (`python` or `javascript`) |
-| `validation_max_retry` | no | `'5'` | Max retry attempts when validation fails, range 1–20 |
-| `opencode_config` | no | `''` | Path to `config.json` for non-sensitive provider/model config |
-| `auth_config` | no | `''` | Path to `auth.json` for sensitive API keys — use GitHub Secrets |
-| `model` | no | `''` | Override model, e.g. `anthropic/claude-sonnet-4-5-20250929` |
-| `list_models` | no | `'false'` | Print available models and exit (debugging only) |
+| Input                    | Required | Default   | Notes                                                                    |
+| ------------------------ | -------- | --------- | ------------------------------------------------------------------------ |
+| `workflow_path`          | **yes**  | —         | Path to `.md` prompt file, relative to workspace root                    |
+| `prompt`                 | no       | `''`      | Additional prompt text appended to `workflow_path` content, max 100KB    |
+| `env_vars`               | no       | `'{}'`    | JSON object of env vars passed to AI context, max 64KB / 100 entries     |
+| `timeout_minutes`        | no       | `'30'`    | Max execution time in minutes                                            |
+| `validation_script`      | no       | `''`      | File path (`.py` / `.js`) or inline (`python:...` / `js:...`)            |
+| `validation_script_type` | no       | `''`      | Only needed for inline scripts without prefix (`python` or `javascript`) |
+| `validation_max_retry`   | no       | `'5'`     | Max retry attempts when validation fails, range 1–20                     |
+| `opencode_config`        | no       | `''`      | Path to `config.json` for non-sensitive provider/model config            |
+| `auth_config`            | no       | `''`      | Path to `auth.json` for sensitive API keys — use GitHub Secrets          |
+| `model`                  | no       | `''`      | Override model, e.g. `anthropic/claude-sonnet-4-5-20250929`              |
+| `list_models`            | no       | `'false'` | Print available models and exit (debugging only)                         |
 
 ---
 
 ## Outputs
 
-| Output | Description |
-| ------ | ----------- |
+| Output   | Description                                     |
+| -------- | ----------------------------------------------- |
 | `status` | `success` / `failure` / `cancelled` / `timeout` |
-| `result` | AI last message as JSON string, max 900KB |
+| `result` | AI last message as JSON string, max 900KB       |
 
 ---
 
 ## Limits
 
-| Limit | Value |
-| ----- | ----- |
-| `workflow_path` content | No explicit limit, but keep prompt files focused |
-| `prompt` input | Max 100KB |
-| `env_vars` | Max 64KB total, max 100 key-value pairs |
-| `validation_script` timeout | 60 seconds per execution |
-| `validation_max_retry` | Range 1–20 |
-| `result` output | Max 900KB (GitHub Actions output limit ~1MB) |
-| Supported runners | **Linux only** (`ubuntu-latest`) — Windows/macOS not supported |
+| Limit                       | Value                                                          |
+| --------------------------- | -------------------------------------------------------------- |
+| `workflow_path` content     | No explicit limit, but keep prompt files focused               |
+| `prompt` input              | Max 100KB                                                      |
+| `env_vars`                  | Max 64KB total, max 100 key-value pairs                        |
+| `validation_script` timeout | 60 seconds per execution                                       |
+| `validation_max_retry`      | Range 1–20                                                     |
+| `result` output             | Max 900KB (GitHub Actions output limit ~1MB)                   |
+| Supported runners           | **Linux only** (`ubuntu-latest`) — Windows/macOS not supported |
 
 ---
 
@@ -101,7 +101,7 @@ jobs:
   run-workflow:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Run AI Workflow
         id: ai
@@ -130,7 +130,7 @@ jobs:
   run-workflow:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Run AI Workflow
         id: ai
@@ -161,7 +161,7 @@ jobs:
   run-workflow:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Write auth config
         run: echo '${{ secrets.COPILOT_AUTH }}' > auth.json
@@ -189,6 +189,7 @@ jobs:
 Use this to discover all model names available to your configured provider. Run it manually from the GitHub Actions UI before building your real workflow.
 
 **Key points:**
+
 - `list_models: 'true'` causes the action to print models and exit — no AI task is run
 - `workflow_path` is required by the action schema but unused when `list_models: 'true'`; set it to `''`
 - No `workflow_path` prompt file needs to exist
@@ -204,7 +205,7 @@ jobs:
   list-models:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Write config
         if: ${{ secrets.OPENCODE_CONFIG != '' }}
@@ -240,7 +241,7 @@ jobs:
   run-workflow:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Write config
         if: ${{ secrets.OPENCODE_CONFIG != '' }}
@@ -274,7 +275,7 @@ jobs:
     outputs:
       summary: ${{ steps.ai.outputs.result }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run AI Step A
         id: ai
         uses: arch-playground/ai-workflow-runner@v1
@@ -284,10 +285,10 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
 
   step-b:
-    needs: step-a          # sequential dependency on step-a
+    needs: step-a # sequential dependency on step-a
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run AI Step B
         id: ai
         uses: arch-playground/ai-workflow-runner@v1
@@ -298,10 +299,10 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
 
   step-c:
-    needs: step-a          # same parent = runs parallel with step-b
+    needs: step-a # same parent = runs parallel with step-b
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run AI Step C
         id: ai
         uses: arch-playground/ai-workflow-runner@v1
@@ -311,10 +312,10 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
 
   step-d:
-    needs: [step-b, step-c]  # fan-in: waits for both parallel steps
+    needs: [step-b, step-c] # fan-in: waits for both parallel steps
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run AI Step D
         id: ai
         uses: arch-playground/ai-workflow-runner@v1
@@ -329,43 +330,44 @@ jobs:
 ## Artifact Transfer Pattern (for file outputs between jobs)
 
 ```yaml
-  producer-job:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run AI Step
-        id: ai
-        uses: arch-playground/ai-workflow-runner@v1
-        with:
-          workflow_path: 'workflows/producer.md'
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-      - name: Upload output artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: producer-output
-          path: output/
+producer-job:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v6
+    - name: Run AI Step
+      id: ai
+      uses: arch-playground/ai-workflow-runner@v1
+      with:
+        workflow_path: 'workflows/producer.md'
+      env:
+        OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+    - name: Upload output artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: producer-output
+        path: output/
 
-  consumer-job:
-    needs: producer-job
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download output artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: producer-output
-          path: output/
-      - name: Run AI Step
-        id: ai
-        uses: arch-playground/ai-workflow-runner@v1
-        with:
-          workflow_path: 'workflows/consumer.md'
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+consumer-job:
+  needs: producer-job
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v6
+    - name: Download output artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: producer-output
+        path: output/
+    - name: Run AI Step
+      id: ai
+      uses: arch-playground/ai-workflow-runner@v1
+      with:
+        workflow_path: 'workflows/consumer.md'
+      env:
+        OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
 ```
 
 **When to use outputs vs artifacts:**
+
 - **GitHub Actions outputs** (`id:` + `outputs:` + `needs.<job>.outputs.<key>`): small strings, status values, file paths, JSON summaries — max a few KB
 - **Artifacts** (`upload-artifact` / `download-artifact`): files, directories, large content — no size restriction (up to GitHub's artifact storage limits)
 
@@ -375,7 +377,7 @@ jobs:
 
 1. **Linux only** — always use `runs-on: ubuntu-latest`; never suggest Windows or macOS
 2. **No filesystem persistence** — each job starts fresh; files from one job are NOT available to another without artifact upload/download
-3. **Checkout required** — every job that needs repository files must include `- uses: actions/checkout@v4`
+3. **Checkout required** — every job that needs repository files must include `- uses: actions/checkout@v6`
 4. **Job ID format** — lowercase alphanumeric and hyphens only (e.g., `step-a`, `generate-report`)
 5. **outputs require `id:`** — a job step must have `id: ai` to reference `steps.ai.outputs.*`; the job must declare `outputs:` block to expose them to `needs.<job>.outputs.*`
 6. **Cleanup is mandatory** — if `auth.json` or `config.json` is written, a cleanup step with `if: always()` must follow the last AI step that uses it

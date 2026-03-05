@@ -50,7 +50,7 @@ So that **code quality is enforced before merging**.
   - [x] Verify timeout-minutes is set (15 minutes)
 
 - [x] **Task 3: Verify Build Steps** (AC: 1)
-  - [x] Confirm checkout with actions/checkout@v4
+  - [x] Confirm checkout with actions/checkout@v6
   - [x] Confirm Node.js 20 setup with npm caching
   - [x] Verify lockfile sync check exists
   - [x] Confirm `npm ci` for dependency installation
@@ -108,8 +108,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
