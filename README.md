@@ -36,7 +36,7 @@ jobs:
   run-workflow:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Run AI Workflow
         uses: arch-playground/ai-workflow-runner@v1
@@ -62,7 +62,7 @@ jobs:
   run-workflow:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Write config files
         run: |
@@ -137,7 +137,7 @@ Store your configuration in GitHub Secrets and Variables, then write them to fil
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@v6
 
   - name: Write config files
     run: |
