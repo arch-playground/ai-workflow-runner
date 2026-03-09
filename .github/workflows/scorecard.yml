@@ -6,16 +6,18 @@ on:
     - cron: '0 6 * * 1'
   push:
     branches: [main]
+  workflow_dispatch:
 
-permissions:
-  security-events: write
-  id-token: write
-  contents: read
+permissions: read-all
 
 jobs:
   analysis:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      security-events: read
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout
@@ -36,6 +38,17 @@ jobs:
           name: scorecard-results
           path: results.sarif
           retention-days: 7
+
+  upload-sarif:
+    needs: analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - name: Download Scorecard results
+        uses: actions/download-artifact@v4
+        with:
+          name: scorecard-results
 
       - name: Upload to code-scanning
         uses: github/codeql-action/upload-sarif@v4
