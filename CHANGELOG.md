@@ -5,6 +5,20 @@ All notable changes to AI Workflow Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.0.0...v1.1.0) (2026-03-09)
+
+
+### Features
+
+* add workflow-creator skill for ai-workflow-runner ([185c11b](https://github.com/arch-playground/ai-workflow-runner/commit/185c11b930ee316ac96c096c4838d48214b9f5d2))
+* **docs:** add Workflow Creator Skill documentation and installation guide ([743e537](https://github.com/arch-playground/ai-workflow-runner/commit/743e53782cf34ab9e39fb7f225fb838dc367d226))
+* **docs:** add Workflow Creator Skill documentation and installation… ([c2b3c75](https://github.com/arch-playground/ai-workflow-runner/commit/c2b3c752eb2ebcfbd489ac9bb82609dfa7c46e78))
+
+
+### Bug Fixes
+
+* update action reference from owner to arch-playground in README.md ([3bfeb17](https://github.com/arch-playground/ai-workflow-runner/commit/3bfeb172b4b5a0309da71fbb1b8a1c7e173eb8ad))
+
 ## [1.0.0] - 2026-02-09
 
 ### Initial Release
