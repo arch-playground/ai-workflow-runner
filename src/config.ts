@@ -114,7 +114,7 @@ function parseValidationMaxRetry(maxValidationRetriesRaw: string): number {
 }
 
 export function getInputs(): ActionInputs {
-  const workflowPath = core.getInput('workflow_path', { required: true });
+  const workflowPath = core.getInput('workflow_path') || '';
   const prompt = core.getInput('prompt') || '';
   const envVarsRaw = core.getInput('env_vars') || '{}';
   const timeoutMinutesRaw = core.getInput('timeout_minutes') || '';
@@ -177,6 +177,10 @@ export function getInputs(): ActionInputs {
 
 export function validateInputs(inputs: ActionInputs): ValidationResult {
   const errors: string[] = [];
+
+  if (inputs.listModels) {
+    return { valid: true, errors: [] };
+  }
 
   if (!inputs.workflowPath || inputs.workflowPath.trim() === '') {
     errors.push('workflow_path is required and cannot be empty');

@@ -4,8 +4,9 @@ author: 'TanNT'
 
 inputs:
   workflow_path:
-    description: 'Path to the workflow.md file (relative to workspace root)'
-    required: true
+    description: 'Path to the workflow.md file (relative to workspace root). Required unless list_models is true.'
+    required: false
+    default: ''
   prompt:
     description: 'Input prompt to pass to the workflow (max 100KB)'
     required: false
