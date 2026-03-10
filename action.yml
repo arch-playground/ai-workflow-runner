@@ -32,11 +32,11 @@ inputs:
     required: false
     default: '5'
   opencode_config:
-    description: 'Path to OpenCode config.json file (relative to workspace). Contains provider and model settings.'
+    description: 'Path to OpenCode config.json file (relative to workspace, or absolute under runner.temp/tmp). Contains provider and model settings.'
     required: false
     default: ''
   auth_config:
-    description: 'Path to OpenCode auth.json file (relative to workspace). Contains API keys and authentication. Store in GitHub Secrets, not Variables.'
+    description: 'Path to OpenCode auth.json file (relative to workspace, or absolute under runner.temp/tmp). Contains API keys and authentication. Store in GitHub Secrets, not Variables.'
     required: false
     default: ''
   model:

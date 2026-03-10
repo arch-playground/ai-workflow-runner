@@ -164,19 +164,19 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Write auth config
-        run: echo '${{ secrets.COPILOT_AUTH }}' > auth.json
+        run: echo '${{ secrets.COPILOT_AUTH }}' > ${{ runner.temp }}/auth.json
 
       - name: Run AI Workflow
         id: ai
         uses: arch-playground/ai-workflow-runner@v1
         with:
           workflow_path: 'workflows/my-step.md'
-          auth_config: 'auth.json'
+          auth_config: '${{ runner.temp }}/auth.json'
           timeout_minutes: '10'
 
       - name: Clean up auth config
         if: always()
-        run: rm -f auth.json
+        run: rm -f ${{ runner.temp }}/auth.json
 
       - name: Print results
         run: |
@@ -209,14 +209,14 @@ jobs:
 
       - name: Write config
         if: ${{ secrets.OPENCODE_CONFIG != '' }}
-        run: echo '${{ secrets.OPENCODE_CONFIG }}' > config.json
+        run: echo '${{ secrets.OPENCODE_CONFIG }}' > ${{ runner.temp }}/config.json
 
       - name: List models
         id: ai
         uses: arch-playground/ai-workflow-runner@v1
         with:
           list_models: 'true'
-          opencode_config: ${{ secrets.OPENCODE_CONFIG && 'config.json' || '' }}
+          opencode_config: ${{ secrets.OPENCODE_CONFIG && format('{0}/config.json', runner.temp) || '' }}
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
 
@@ -248,7 +248,7 @@ jobs:
 
       - name: Write config
         if: ${{ secrets.OPENCODE_CONFIG != '' }}
-        run: echo '${{ secrets.OPENCODE_CONFIG }}' > config.json
+        run: echo '${{ secrets.OPENCODE_CONFIG }}' > ${{ runner.temp }}/config.json
 
       - name: Run AI Workflow
         id: ai
@@ -256,7 +256,7 @@ jobs:
         with:
           workflow_path: 'workflows/my-step.md'
           model: 'anthropic/claude-sonnet-4-5-20250929'
-          opencode_config: ${{ secrets.OPENCODE_CONFIG && 'config.json' || '' }}
+          opencode_config: ${{ secrets.OPENCODE_CONFIG && format('{0}/config.json', runner.temp) || '' }}
           timeout_minutes: '10'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -383,4 +383,4 @@ consumer-job:
 3. **Checkout required** — every job that needs repository files must include `- uses: actions/checkout@v6`
 4. **Job ID format** — lowercase alphanumeric and hyphens only (e.g., `step-a`, `generate-report`)
 5. **outputs require `id:`** — a job step must have `id: ai` to reference `steps.ai.outputs.*`; the job must declare `outputs:` block to expose them to `needs.<job>.outputs.*`
-6. **Cleanup is mandatory** — if `auth.json` or `config.json` is written, a cleanup step with `if: always()` must follow the last AI step that uses it
+6. **Cleanup is mandatory** — if `${{ runner.temp }}/auth.json` or `${{ runner.temp }}/config.json` is written, a cleanup step with `if: always()` must follow the last AI step that uses it

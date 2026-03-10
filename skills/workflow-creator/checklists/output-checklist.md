@@ -1,6 +1,7 @@
 # output-checklist.md — Pre-Generation Validation Checklist
 
 > **PHASE SPLIT — CRITICAL:**
+>
 > - **Items 1–7**: Run BEFORE writing any files. All must pass before a single file is written.
 > - **Item 8**: Run AFTER all files are written. This is the final quality gate.
 >
@@ -17,6 +18,7 @@
 **Failure condition:** Any step missing a runner assignment, or any step assigned to `windows-*` or `macos-*`.
 
 **HALT message if failing:**
+
 > "Item 1 FAILED: Step '[step-name]' has no runner assigned (or has a non-Linux runner). The action only supports `ubuntu-latest`. Fix: assign `runs-on: ubuntu-latest` to all jobs before generating."
 
 ---
@@ -28,6 +30,7 @@
 **Failure condition:** A step exists in the dependency graph but has no prompt content in the WIP (never reviewed in Step 03).
 
 **HALT message if failing:**
+
 > "Item 2 FAILED: Step '[step-name]' has no prompt file defined. Return to Step 03 to complete prompt authoring for this step before generating."
 
 ---
@@ -39,6 +42,7 @@
 **Failure condition:** Any cycle exists in the `needs:` relationships.
 
 **HALT message if failing:**
+
 > "Item 3 FAILED: Circular dependency detected: [step-A] → [step-B] → [step-A]. A GitHub Actions job cannot depend on itself (directly or transitively). Fix the dependency graph before generating."
 
 ---
@@ -50,6 +54,7 @@
 **Failure condition:** A dependency edge is marked as file-transfer but no artifact upload/download pair is recorded in the WIP.
 
 **HALT message if failing:**
+
 > "Item 4 FAILED: Step '[consumer-step]' depends on '[producer-step]' for file output, but no artifact upload/download strategy was recorded. Return to Step 02 to confirm the data-passing strategy for this edge."
 
 ---
@@ -57,6 +62,7 @@
 ### Item 5: Auth Setup Present and Correct
 
 **Check:** If the user selected an auth method in Step 02:
+
 - **Anthropic API key**: Every AI job's step will include `env: OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}`
 - **Copilot auth.json**: Every job using the AI action will have a write step before the AI step AND a cleanup step with `if: always()` after it
 - **Custom opencode_config**: Write step present before first AI step in each job that uses it; cleanup step present if the config is sensitive
@@ -64,6 +70,7 @@
 **Failure condition:** Auth method selected but no auth pattern recorded in WIP, OR auth.json pattern selected but missing cleanup tracking.
 
 **HALT message if failing:**
+
 > "Item 5 FAILED: Auth method '[method]' was selected but no auth configuration was recorded in the WIP. Return to Step 02 to confirm auth setup."
 
 ---
@@ -77,13 +84,14 @@
 **Failure condition (requires HALT):** A dependency edge is marked as `strategy: output` but no `outputKey` was recorded in the WIP — the YAML cannot be generated without a key name.
 
 **HALT message if failing:**
+
 > "Item 6 FAILED: Step '[producer-step]' is marked to pass a string output to '[consumer-step]', but no output key name was recorded in Step 02. Return to Step 02 to specify the output key (e.g., `summary`, `result`, `filepath`)."
 
 ---
 
-### Item 7: Cleanup Step Present When `auth.json` Is Written
+### Item 7: Cleanup Step Present When Auth/Config Files Are Written to `${{ runner.temp }}`
 
-**Check:** If the Copilot auth pattern is selected, every job that writes `auth.json` must have a cleanup step recorded.
+**Check:** If the Copilot auth pattern is selected, every job that writes `${{ runner.temp }}/auth.json` must have a cleanup step recorded.
 
 **Failure condition:** Copilot auth selected but cleanup step tracking is missing for any affected job.
 
@@ -92,18 +100,21 @@
 **Failure condition (requires HALT):** Only relevant in edit mode — if an existing job uses `auth_config:` but its YAML has no cleanup step and the user declined to regenerate that job.
 
 **HALT message if failing (edit mode only):**
-> "Item 7 FAILED: Job '[job-name]' uses `auth_config: auth.json` but has no cleanup step with `if: always()`. This is a security risk — the auth file will persist on the runner if the job fails. Add the cleanup step manually or regenerate this job."
+
+> "Item 7 FAILED: Job '[job-name]' uses `auth_config: '${{ runner.temp }}/auth.json'` but has no cleanup step with `if: always()`. This is a security risk — the auth file will persist on the runner if the job fails. Add the cleanup step manually or regenerate this job."
 
 ---
 
 ## Item 8: action-validator Passes With Zero Errors (Post-Generation)
 
 **Check:** After all files are written, run:
+
 ```
 npx action-validator .github/workflows/<workflow-name>.yml
 ```
 
 **Pre-check:** Verify `npx` is available by running `npx --version`. If not available:
+
 - Log: "WARNING: `npx` not found. Skipping action-validator. After installing Node.js, run: `npx action-validator .github/workflows/<name>.yml` manually."
 - Skip this item and mark generation as complete.
 
@@ -112,6 +123,7 @@ npx action-validator .github/workflows/<workflow-name>.yml
 **Failure condition:** `action-validator` reports one or more errors.
 
 **Fix loop (max 3 iterations):**
+
 1. Analyze the reported errors
 2. Regenerate the entire `.yml` file (not partial sections) with corrections applied
 3. Rewrite the file
@@ -119,6 +131,7 @@ npx action-validator .github/workflows/<workflow-name>.yml
 5. If errors persist, go back to step 1 (up to 3 total attempts)
 
 **HALT after 3 failed attempts:**
+
 > "Item 8 FAILED after 3 regeneration attempts. Raw action-validator errors:
 > [paste raw errors here]
 >
@@ -131,13 +144,15 @@ npx action-validator .github/workflows/<workflow-name>.yml
 ## Checklist Summary (for Step 04 tracking)
 
 Run before writing files:
+
 - [ ] Item 1: All jobs use `ubuntu-latest`
 - [ ] Item 2: All steps have prompt files defined
 - [ ] Item 3: `needs:` graph is acyclic
 - [ ] Item 4: File-transfer edges have artifact upload/download strategy
 - [ ] Item 5: Auth setup is present and correct
 - [ ] Item 6: `id: ai` set on steps that expose outputs
-- [ ] Item 7: Cleanup steps present for auth.json patterns
+- [ ] Item 7: Cleanup steps present for auth/config files written to `${{ runner.temp }}`
 
 Run after writing files:
+
 - [ ] Item 8: `npx action-validator` passes with zero errors (or skipped with warning if npx unavailable)

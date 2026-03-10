@@ -10,19 +10,19 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Write auth config
-        run: echo '${{ secrets.COPILOT_AUTH }}' > auth.json
+        run: echo '${{ secrets.COPILOT_AUTH }}' > ${{ runner.temp }}/auth.json
 
       - name: Run AI Workflow
         id: ai
         uses: owner/ai-workflow-runner@v1
         with:
           workflow_path: 'examples/github-copilot/workflow.md'
-          auth_config: 'auth.json'
+          auth_config: '${{ runner.temp }}/auth.json'
           timeout_minutes: '10'
 
       - name: Clean up auth config
         if: always()
-        run: rm -f auth.json
+        run: rm -f ${{ runner.temp }}/auth.json
 
       - name: Print results
         run: |
