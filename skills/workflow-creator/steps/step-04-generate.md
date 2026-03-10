@@ -112,7 +112,7 @@ Using `knowledge/auth-patterns.md`, prepare the auth step snippets for insertion
 - `"anthropic-api-key"`: Every AI step gets `env: OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}`
 - `"anthropic-api-key-with-model"`: Same as above plus `model: '[model]'` in `with:`
 - `"copilot-auth-json"`: Every job gets: write-auth step before AI step + cleanup step with `if: always()` after AI step
-- `"custom-opencode-config"`: Every job gets: write-config step before AI step + `opencode_config: config.json` in `with:` + cleanup step with `if: always()` after AI step
+- `"custom-opencode-config"`: Every job gets: write-config step before AI step + `opencode_config:` with `format('{0}/config.json', runner.temp)` conditional in `with:` + cleanup step with `if: always()` after AI step
 
 ---
 
@@ -160,12 +160,12 @@ jobs:
 
         # EMIT ONLY IF authMethod is copilot-auth-json:
         - name: Write auth config
-          run: echo '${{ secrets.COPILOT_AUTH }}' > auth.json
+          run: echo '${{ secrets.COPILOT_AUTH }}' > ${{ runner.temp }}/auth.json
 
         # EMIT ONLY IF authMethod is custom-opencode-config:
         - name: Write config
           if: ${{ secrets.OPENCODE_CONFIG != '' }}
-          run: echo '${{ secrets.OPENCODE_CONFIG }}' > config.json
+          run: echo '${{ secrets.OPENCODE_CONFIG }}' > ${{ runner.temp }}/config.json
 
         - name: Run [step-name]
           id: ai
@@ -181,9 +181,9 @@ jobs:
             # EMIT ONLY IF authMethod is anthropic-api-key-with-model:
             model: '[model]'
             # EMIT ONLY IF authMethod is copilot-auth-json:
-            auth_config: 'auth.json'
+            auth_config: '${{ runner.temp }}/auth.json'
             # EMIT ONLY IF authMethod is custom-opencode-config:
-            opencode_config: ${{ secrets.OPENCODE_CONFIG && 'config.json' || '' }}
+            opencode_config: ${{ secrets.OPENCODE_CONFIG && format('{0}/config.json', runner.temp) || '' }}
           # EMIT ONLY IF authMethod is anthropic-api-key or anthropic-api-key-with-model:
           env:
             OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -191,12 +191,12 @@ jobs:
         # EMIT ONLY IF authMethod is copilot-auth-json:
         - name: Clean up auth config
           if: always()
-          run: rm -f auth.json
+          run: rm -f ${{ runner.temp }}/auth.json
 
         # EMIT ONLY IF authMethod is custom-opencode-config:
         - name: Clean up config
           if: always()
-          run: rm -f config.json
+          run: rm -f ${{ runner.temp }}/config.json
 
         # EMIT ONLY IF artifact upload needed for this job:
         - name: Upload [artifact-name] artifact
@@ -313,12 +313,12 @@ HALT and wait for selection.
 
         # EMIT ONLY IF authMethod is copilot-auth-json:
         - name: Write auth config
-          run: echo '${{ secrets.COPILOT_AUTH }}' > auth.json
+          run: echo '${{ secrets.COPILOT_AUTH }}' > ${{ runner.temp }}/auth.json
 
         # EMIT ONLY IF authMethod is custom-opencode-config:
         - name: Write config
           if: ${{ secrets.OPENCODE_CONFIG != '' }}
-          run: echo '${{ secrets.OPENCODE_CONFIG }}' > config.json
+          run: echo '${{ secrets.OPENCODE_CONFIG }}' > ${{ runner.temp }}/config.json
 
         - name: List models
           id: ai
@@ -326,9 +326,9 @@ HALT and wait for selection.
           with:
             list_models: 'true'
             # EMIT ONLY IF authMethod is copilot-auth-json:
-            auth_config: 'auth.json'
+            auth_config: '${{ runner.temp }}/auth.json'
             # EMIT ONLY IF authMethod is custom-opencode-config:
-            opencode_config: ${{ secrets.OPENCODE_CONFIG && 'config.json' || '' }}
+            opencode_config: ${{ secrets.OPENCODE_CONFIG && format('{0}/config.json', runner.temp) || '' }}
           # EMIT ONLY IF authMethod is anthropic-api-key or anthropic-api-key-with-model:
           env:
             OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -336,12 +336,12 @@ HALT and wait for selection.
         # EMIT ONLY IF authMethod is copilot-auth-json:
         - name: Clean up auth config
           if: always()
-          run: rm -f auth.json
+          run: rm -f ${{ runner.temp }}/auth.json
 
         # EMIT ONLY IF authMethod is custom-opencode-config:
         - name: Clean up config
           if: always()
-          run: rm -f config.json
+          run: rm -f ${{ runner.temp }}/config.json
 
         - name: Print models
           run: |

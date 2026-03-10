@@ -25,6 +25,47 @@ export function validateWorkspacePath(workspacePath: string, relativePath: strin
   return absolutePath;
 }
 
+const SAFE_ABSOLUTE_PREFIXES = ['/tmp/', '/github/runner_temp/'];
+const DOCKER_RUNNER_TEMP = '/github/runner_temp';
+
+/**
+ * Validates a config file path (auth_config, opencode_config).
+ * Accepts workspace-relative paths OR absolute paths under safe directories
+ * (RUNNER_TEMP, /tmp, /github/runner_temp). This allows writing config files
+ * outside the workspace to avoid interference with the AI action's working directory.
+ *
+ * For Docker container actions, GitHub Actions mounts the host RUNNER_TEMP directory
+ * to /github/runner_temp inside the container. When the workflow passes a host path
+ * like /home/runner/_work/_temp/auth.json, this function translates it to the
+ * container-mapped path /github/runner_temp/auth.json.
+ */
+export function validateConfigPath(workspacePath: string, configPath: string): string {
+  if (path.isAbsolute(configPath)) {
+    const normalized = path.normalize(configPath);
+    const safePrefixes = [...SAFE_ABSOLUTE_PREFIXES];
+    const runnerTemp = process.env.RUNNER_TEMP;
+    if (runnerTemp) {
+      safePrefixes.push(path.normalize(runnerTemp) + path.sep);
+    }
+
+    const isSafe = safePrefixes.some((prefix) => normalized.startsWith(prefix));
+    if (!isSafe) {
+      throw new Error(
+        'Invalid config path: absolute paths are only allowed under runner temp or /tmp'
+      );
+    }
+
+    // Translate host RUNNER_TEMP path to Docker container-mapped path.
+    // GitHub mounts host RUNNER_TEMP to /github/runner_temp inside the container.
+    if (runnerTemp && normalized.startsWith(path.normalize(runnerTemp) + path.sep)) {
+      const relativePart = normalized.slice(path.normalize(runnerTemp).length);
+      return DOCKER_RUNNER_TEMP + relativePart;
+    }
+    return normalized;
+  }
+  return validateWorkspacePath(workspacePath, configPath);
+}
+
 /**
  * Validates the REAL path of a file (following symlinks) is within workspace.
  * Call this AFTER confirming the file exists.
