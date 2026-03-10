@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -30,14 +31,54 @@ jobs:
         with:
           release-type: node
 
+  resolve-version:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_created: 'true'
+      tag_name: ${{ steps.version.outputs.tag_name }}
+      version: ${{ steps.version.outputs.version }}
+      major: ${{ steps.version.outputs.major }}
+      minor: ${{ steps.version.outputs.minor }}
+      patch: ${{ steps.version.outputs.patch }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Extract version from package.json
+        id: version
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag_name=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major=$MAJOR" >> "$GITHUB_OUTPUT"
+          echo "minor=$MINOR" >> "$GITHUB_OUTPUT"
+          echo "patch=$PATCH" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION (v$VERSION)"
+
   publish-image:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: [release-please, resolve-version]
+    if: |
+      always() &&
+      (needs.release-please.outputs.release_created == 'true' || needs.resolve-version.outputs.release_created == 'true') &&
+      !failure() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
       packages: write
+    env:
+      VERSION: ${{ needs.release-please.outputs.version || needs.resolve-version.outputs.version }}
+      TAG_NAME: ${{ needs.release-please.outputs.tag_name || needs.resolve-version.outputs.tag_name }}
+      MAJOR: ${{ needs.release-please.outputs.major || needs.resolve-version.outputs.major }}
+      MINOR: ${{ needs.release-please.outputs.minor || needs.resolve-version.outputs.minor }}
+      PATCH: ${{ needs.release-please.outputs.patch || needs.resolve-version.outputs.patch }}
 
     steps:
       - name: Checkout
@@ -58,13 +99,13 @@ jobs:
         with:
           images: ghcr.io/arch-playground/ai-workflow-runner
           tags: |
-            type=raw,value=${{ needs.release-please.outputs.version }}
-            type=raw,value=v${{ needs.release-please.outputs.version }}
-            type=raw,value=${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }},enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
-            type=raw,value=v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }},enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
-            type=raw,value=${{ needs.release-please.outputs.major }},enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
-            type=raw,value=v${{ needs.release-please.outputs.major }},enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
-            type=raw,value=latest,enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
+            type=raw,value=${{ env.VERSION }}
+            type=raw,value=v${{ env.VERSION }}
+            type=raw,value=${{ env.MAJOR }}.${{ env.MINOR }},enable=${{ !contains(env.TAG_NAME, '-') }}
+            type=raw,value=v${{ env.MAJOR }}.${{ env.MINOR }},enable=${{ !contains(env.TAG_NAME, '-') }}
+            type=raw,value=${{ env.MAJOR }},enable=${{ !contains(env.TAG_NAME, '-') }}
+            type=raw,value=v${{ env.MAJOR }},enable=${{ !contains(env.TAG_NAME, '-') }}
+            type=raw,value=latest,enable=${{ !contains(env.TAG_NAME, '-') }}
             type=sha,prefix=sha-,format=short
 
       - name: Build and push Docker image
@@ -76,8 +117,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   update-major-tag:
-    needs: [release-please, publish-image]
-    if: needs.release-please.outputs.release_created == 'true' && !contains(needs.release-please.outputs.tag_name, '-')
+    needs: [release-please, resolve-version, publish-image]
+    if: |
+      always() &&
+      (needs.release-please.outputs.release_created == 'true' || needs.resolve-version.outputs.release_created == 'true') &&
+      !contains(needs.release-please.outputs.tag_name || needs.resolve-version.outputs.tag_name, '-') &&
+      needs.publish-image.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -91,11 +136,11 @@ jobs:
 
       - name: Update major version tag
         env:
-          MAJOR: ${{ needs.release-please.outputs.major }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
+          MAJOR: ${{ needs.release-please.outputs.major || needs.resolve-version.outputs.major }}
+          TAG: ${{ needs.release-please.outputs.tag_name || needs.resolve-version.outputs.tag_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          RELEASE_SHA=$(git rev-list -n 1 "${TAG}")
+          RELEASE_SHA=$(git rev-list -n 1 "${TAG}" 2>/dev/null || echo "${{ github.sha }}")
           git tag -fa "v${MAJOR}" "${RELEASE_SHA}" -m "Update v${MAJOR} to ${TAG}"
           git push origin "v${MAJOR}" --force
