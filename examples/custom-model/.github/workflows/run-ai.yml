@@ -16,7 +16,7 @@ jobs:
 
       - name: Write config
         if: ${{ secrets.OPENCODE_CONFIG != '' }}
-        run: echo '${{ secrets.OPENCODE_CONFIG }}' > config.json
+        run: echo '${{ secrets.OPENCODE_CONFIG }}' > ${{ runner.temp }}/config.json
 
       - name: Run AI Workflow
         id: ai
@@ -24,7 +24,7 @@ jobs:
         with:
           workflow_path: 'examples/custom-model/workflow.md'
           model: '${{ github.event.inputs.model }}'
-          opencode_config: ${{ secrets.OPENCODE_CONFIG && 'config.json' || '' }}
+          opencode_config: ${{ secrets.OPENCODE_CONFIG && format('{0}/config.json', runner.temp) || '' }}
           timeout_minutes: '10'
 
       - name: Print results

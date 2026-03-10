@@ -67,18 +67,18 @@ jobs:
 
       - name: Write config files
         run: |
-          echo '${{ secrets.OPENCODE_AUTH }}' > auth.json
+          echo '${{ secrets.OPENCODE_AUTH }}' > ${{ runner.temp }}/auth.json
 
       - name: Run AI Workflow
         uses: arch-playground/ai-workflow-runner@v1
         with:
           workflow_path: 'workflow.md'
-          auth_config: 'auth.json'
+          auth_config: '${{ runner.temp }}/auth.json'
           model: 'anthropic/claude-sonnet-4-5-20250929'
 
       - name: Cleanup
         if: always()
-        run: rm -f auth.json
+        run: rm -f ${{ runner.temp }}/auth.json
 ```
 
 ## Inputs
@@ -142,19 +142,19 @@ steps:
 
   - name: Write config files
     run: |
-      echo '${{ vars.OPENCODE_CONFIG }}' > config.json
-      echo '${{ secrets.OPENCODE_AUTH }}' > auth.json
+      echo '${{ vars.OPENCODE_CONFIG }}' > ${{ runner.temp }}/config.json
+      echo '${{ secrets.OPENCODE_AUTH }}' > ${{ runner.temp }}/auth.json
 
   - name: Run AI Workflow
     uses: arch-playground/ai-workflow-runner@v1
     with:
       workflow_path: 'workflow.md'
-      opencode_config: 'config.json'
-      auth_config: 'auth.json'
+      opencode_config: '${{ runner.temp }}/config.json'
+      auth_config: '${{ runner.temp }}/auth.json'
 
   - name: Cleanup config files
     if: always()
-    run: rm -f config.json auth.json
+    run: rm -f ${{ runner.temp }}/config.json ${{ runner.temp }}/auth.json
 ```
 
 > **Note**: Use `vars.*` for non-sensitive config and `secrets.*` for auth files containing API keys or tokens. Add a cleanup step with `if: always()` for self-hosted runners.
@@ -200,7 +200,7 @@ Set `list_models: 'true'` to print available models and exit without running a w
   uses: arch-playground/ai-workflow-runner@v1
   with:
     list_models: 'true'
-    auth_config: 'auth.json'
+    auth_config: '${{ runner.temp }}/auth.json'
 ```
 
 ## Examples

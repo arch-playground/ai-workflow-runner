@@ -4,16 +4,14 @@ import * as yaml from 'js-yaml';
 import * as core from '@actions/core';
 import { getInputs, validateInputs } from './config';
 import { INPUT_LIMITS } from './types';
-import { maskSecrets, validateWorkspacePath } from './security';
+import { maskSecrets, validateConfigPath } from './security';
 
 jest.mock('@actions/core');
 jest.mock('./security');
 
 const mockCore = core as jest.Mocked<typeof core>;
 const mockMaskSecrets = maskSecrets as jest.MockedFunction<typeof maskSecrets>;
-const mockValidateWorkspacePath = validateWorkspacePath as jest.MockedFunction<
-  typeof validateWorkspacePath
->;
+const mockValidateConfigPath = validateConfigPath as jest.MockedFunction<typeof validateConfigPath>;
 
 function mockInputs(overrides: Record<string, string> = {}): void {
   const defaults: Record<string, string> = { workflow_path: 'test.md' };
@@ -307,13 +305,13 @@ describe('config', () => {
     it('validates opencode_config within workspace (7.2-UNIT-001, 7.2-UNIT-002)', () => {
       // Arrange
       mockInputs({ opencode_config: 'config/opencode.json' });
-      mockValidateWorkspacePath.mockReturnValue('/workspace/config/opencode.json');
+      mockValidateConfigPath.mockReturnValue('/workspace/config/opencode.json');
 
       // Act
       const inputs = getInputs();
 
       // Assert
-      expect(mockValidateWorkspacePath).toHaveBeenCalledWith(process.cwd(), 'config/opencode.json');
+      expect(mockValidateConfigPath).toHaveBeenCalledWith(process.cwd(), 'config/opencode.json');
       expect(inputs.opencodeConfig).toBe('/workspace/config/opencode.json');
     });
 
@@ -331,7 +329,7 @@ describe('config', () => {
     it('rejects opencode_config with path traversal (7.2-UNIT-003)', () => {
       // Arrange
       mockInputs({ opencode_config: '../../../etc/secrets' });
-      mockValidateWorkspacePath.mockImplementation(() => {
+      mockValidateConfigPath.mockImplementation(() => {
         throw new Error(
           'Invalid workflow path: absolute paths and parent directory references are not allowed'
         );
@@ -346,13 +344,13 @@ describe('config', () => {
     it('validates auth_config within workspace (7.2-UNIT-004, 7.2-UNIT-005)', () => {
       // Arrange
       mockInputs({ auth_config: 'config/auth.json' });
-      mockValidateWorkspacePath.mockReturnValue('/workspace/config/auth.json');
+      mockValidateConfigPath.mockReturnValue('/workspace/config/auth.json');
 
       // Act
       const inputs = getInputs();
 
       // Assert
-      expect(mockValidateWorkspacePath).toHaveBeenCalledWith(process.cwd(), 'config/auth.json');
+      expect(mockValidateConfigPath).toHaveBeenCalledWith(process.cwd(), 'config/auth.json');
       expect(inputs.authConfig).toBe('/workspace/config/auth.json');
     });
 
@@ -370,7 +368,7 @@ describe('config', () => {
     it('rejects auth_config with path traversal (7.2-UNIT-006)', () => {
       // Arrange
       mockInputs({ auth_config: '../../../etc/passwd' });
-      mockValidateWorkspacePath.mockImplementation(() => {
+      mockValidateConfigPath.mockImplementation(() => {
         throw new Error(
           'Invalid workflow path: absolute paths and parent directory references are not allowed'
         );
@@ -382,7 +380,33 @@ describe('config', () => {
       );
     });
 
-    it('does not call validateWorkspacePath when configs are empty', () => {
+    it('accepts auth_config with absolute path under runner temp (7.2-UNIT-007)', () => {
+      // Arrange
+      mockInputs({ auth_config: '/tmp/auth.json' });
+      mockValidateConfigPath.mockReturnValue('/tmp/auth.json');
+
+      // Act
+      const inputs = getInputs();
+
+      // Assert
+      expect(mockValidateConfigPath).toHaveBeenCalledWith(process.cwd(), '/tmp/auth.json');
+      expect(inputs.authConfig).toBe('/tmp/auth.json');
+    });
+
+    it('accepts opencode_config with absolute path under runner temp (7.2-UNIT-008)', () => {
+      // Arrange
+      mockInputs({ opencode_config: '/tmp/config.json' });
+      mockValidateConfigPath.mockReturnValue('/tmp/config.json');
+
+      // Act
+      const inputs = getInputs();
+
+      // Assert
+      expect(mockValidateConfigPath).toHaveBeenCalledWith(process.cwd(), '/tmp/config.json');
+      expect(inputs.opencodeConfig).toBe('/tmp/config.json');
+    });
+
+    it('does not call validateConfigPath when configs are empty', () => {
       // Arrange
       mockInputs();
 
@@ -390,7 +414,7 @@ describe('config', () => {
       getInputs();
 
       // Assert
-      expect(mockValidateWorkspacePath).not.toHaveBeenCalled();
+      expect(mockValidateConfigPath).not.toHaveBeenCalled();
     });
 
     describe('when GITHUB_WORKSPACE is set', () => {
@@ -412,13 +436,13 @@ describe('config', () => {
         // Arrange
         process.env.GITHUB_WORKSPACE = '/github/workspace';
         mockInputs({ opencode_config: 'config/opencode.json' });
-        mockValidateWorkspacePath.mockReturnValue('/github/workspace/config/opencode.json');
+        mockValidateConfigPath.mockReturnValue('/github/workspace/config/opencode.json');
 
         // Act
         const inputs = getInputs();
 
         // Assert
-        expect(mockValidateWorkspacePath).toHaveBeenCalledWith(
+        expect(mockValidateConfigPath).toHaveBeenCalledWith(
           '/github/workspace',
           'config/opencode.json'
         );
