@@ -13,8 +13,8 @@ inputDocuments:
   - 'docs/index.md'
   - '_bmad-output/implementation-artifacts/tech-spec-opencode-sdk-runner.md'
   - '_bmad-output/implementation-artifacts/tech-spec-ai-workflow-runner-init.md'
-implementationStatus: 'MVP Complete - Epic 7 (Configuration Customization) and Epic 8 (Distribution & Marketplace) pending'
-lastUpdated: '2026-02-09'
+implementationStatus: 'MVP Complete - Epic 7 (Stories 7.1-7.4 done, 7.5-7.6 pending) and Epic 8 (Stories 8.1-8.2 done, 8.3 pending)'
+lastUpdated: '2026-03-10'
 ---
 
 # AI Workflow Runner - Epic Breakdown
@@ -23,7 +23,7 @@ lastUpdated: '2026-02-09'
 
 This document provides the complete epic and story breakdown for AI Workflow Runner, decomposing the requirements from the PRD, Architecture, and Tech Specs into implementable stories.
 
-**Implementation Status:** MVP Complete (Epics 1-6). Epic 7 (Configuration Customization & Examples) and Epic 8 (Distribution & Marketplace Publishing) pending.
+**Implementation Status:** MVP Complete (Epics 1-6). Epic 7: Stories 7.1-7.4 done, 7.5-7.6 pending. Epic 8: Stories 8.1-8.2 done, 8.3 pending.
 
 ## Requirements Inventory
 
@@ -998,9 +998,11 @@ So that **build time and image size are minimized**.
 
 **Given** Dockerfile
 **When** built
-**Then** builder stage installs all packages
-**And** runtime stage copies only necessary files
+**Then** bundler stage (`node:20-bookworm-slim`) builds `dist/index.js` from TypeScript source
+**And** builder stage installs system runtimes (Node.js, Python, Java, OpenCode CLI)
+**And** runtime stage copies from both bundler and builder
 **And** final image is smaller than single-stage build
+**And** `dist/` is not committed to git (Docker builds from source)
 
 ### Story 5.2: Install Node.js 20+
 
@@ -1130,15 +1132,20 @@ So that **publishing is consistent and reliable**.
 
 **Acceptance Criteria:**
 
-**Given** tag pushed matching v*.*.\* pattern
+**Given** push to main branch
 **When** release workflow runs
-**Then** build and tests are run
-**And** GitHub Release is created with auto-generated notes
-**And** major version tag (v1) is updated
+**Then** `release-please` creates/updates a release PR via `googleapis/release-please-action@v4`
+**And** when PR is merged, GitHub Release is created with auto-generated notes
 
-**Given** invalid tag (e.g., vfoo)
-**When** pushed
-**Then** release workflow does not trigger
+**Given** `workflow_dispatch` trigger
+**When** release workflow runs
+**Then** `resolve-version` extracts version from `package.json`
+**And** downstream `publish-image` and `update-major-tag` jobs proceed
+
+**Given** a successful release (from either path)
+**When** `publish-image` runs
+**Then** Docker image is pushed to GHCR with v-prefixed and non-prefixed tags
+**And** `update-major-tag` force-updates the `v{MAJOR}` floating git tag
 
 **Given** concurrent releases
 **When** triggered
@@ -1270,11 +1277,11 @@ So that **users can customize provider settings**.
 **Given** auth_config path provided
 **When** OpenCodeService.initialize() is called
 **Then** auth file is read as JSON
-**And** auth is passed to createOpencode() options
+**And** each provider entry is passed to `client.auth.set()` API after SDK initialization
 
 **Given** model input provided
-**When** session is created
-**Then** model is passed to session options
+**When** initialize() is called
+**Then** model is set in config object (`config.model`) passed to `createOpencode()`
 
 **Given** config file does not exist
 **When** initialize() is called
@@ -1380,19 +1387,17 @@ So that **consumers pull a pre-built image instead of building from Dockerfile**
 
 **Acceptance Criteria:**
 
-**Given** a release tag matching `v*.*.*` is pushed
-**When** the release workflow runs
+**Given** a release is created (via release-please or workflow_dispatch)
+**When** the release workflow's `publish-image` job runs
 **Then** it authenticates to GHCR using `GITHUB_TOKEN`
-**And** it builds the Docker image from `Dockerfile`
+**And** it builds the Docker image from `Dockerfile` (3-stage: bundler + builder + runtime)
 **And** it pushes the image to `ghcr.io/arch-playground/ai-workflow-runner`
-**And** the image is tagged with the full semver version (e.g., `1.2.3`)
-**And** the image is tagged with the major version (e.g., `1`)
-**And** the image is tagged with `latest`
+**And** the image is tagged with both v-prefixed and non-prefixed variants: `1.2.3`, `v1.2.3`, `1.2`, `v1.2`, `1`, `v1`, `latest`, `sha-{short}`
 
-**Given** the release workflow already has build and test jobs
+**Given** the release workflow has `release-please` and `resolve-version` jobs
 **When** the Docker publish job runs
-**Then** it runs after the existing build/test jobs succeed
-**And** it requires `packages: write` permission
+**Then** it runs after either upstream job creates a release
+**And** it requires `packages: write` permission (job-level)
 
 **Given** the Docker build fails
 **When** the release workflow runs
@@ -1409,8 +1414,8 @@ So that **my workflows start faster without building the image**.
 
 **Given** `action.yml` file
 **When** updated
-**Then** `runs.image` is changed from `'Dockerfile'` to `'docker://ghcr.io/arch-playground/ai-workflow-runner:1'`
-**And** the major version tag is used (not `latest`) for stability
+**Then** `runs.image` is changed from `'Dockerfile'` to `'docker://ghcr.io/arch-playground/ai-workflow-runner:v1'`
+**And** the `v`-prefixed major version tag is used (not `latest`) for stability and consistency with `@v1` convention
 **And** all existing inputs and outputs remain unchanged
 
 **Given** a consumer uses `arch-playground/ai-workflow-runner@v1`

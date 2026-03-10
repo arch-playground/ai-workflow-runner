@@ -11,8 +11,8 @@ so that **consumers pull a pre-built image instead of building from Dockerfile e
 ## Acceptance Criteria
 
 1. **Given** a release tag matching `v*.*.*` is pushed, **When** the release workflow runs, **Then** it builds the Docker image from `Dockerfile` and pushes it to `ghcr.io/arch-playground/ai-workflow-runner`
-2. **Given** a release tag like `v1.2.3`, **When** the Docker image is pushed, **Then** it is tagged with `1.2.3` (full semver without `v` prefix), `1` (major version), and `latest`
-3. **Given** the release workflow already has `validate-tag` and `release` jobs, **When** the Docker publish job runs, **Then** it runs after the existing `release` job succeeds (depends on `release`)
+2. **Given** a release tag like `v1.2.3`, **When** the Docker image is pushed, **Then** it is tagged with `1.2.3`, `v1.2.3`, `1.2`, `v1.2`, `1`, `v1`, `latest`, and `sha-{short}` (pre-release tags skip minor/major/latest)
+3. **Given** the release workflow has `release-please` and `resolve-version` jobs, **When** the Docker publish job runs, **Then** it runs after either upstream job creates a release (depends on both with `always()` condition)
 4. **Given** the Docker publish job, **When** it runs, **Then** it requires `packages: write` permission for GHCR push
 5. **Given** the Docker build fails, **When** the release workflow runs, **Then** the GitHub Release is still created (Docker publish is a separate job, not blocking `release`)
 6. **Given** the image is pushed to GHCR, **When** inspected, **Then** it has OCI labels: `org.opencontainers.image.source`, `org.opencontainers.image.description`, and `org.opencontainers.image.version`
@@ -25,14 +25,19 @@ so that **consumers pull a pre-built image instead of building from Dockerfile e
 
 - [x] **Task 2: Add Docker Build & Push Job to release.yml** (AC: 1, 2, 3, 4, 5, 6)
   - [x] Add a new `publish-image` job to `.github/workflows/release.yml`
-  - [x] Set `needs: [validate-tag, release]` so it runs after the release is created
+  - [x] Set `needs: [release-please, resolve-version]` with `always()` condition so it runs after either upstream job creates a release
   - [x] Add `permissions: packages: write` at the job level
   - [x] Add checkout step with `actions/checkout@v6`
   - [x] Add GHCR login step using `docker/login-action@v3` with `registry: ghcr.io`, `username: ${{ github.actor }}`, `password: ${{ secrets.GITHUB_TOKEN }}`
   - [x] Add Docker metadata step using `docker/metadata-action@v5` to generate tags:
-    - `type=semver,pattern={{version}}` (e.g., `1.2.3`)
-    - `type=semver,pattern={{major}}` (e.g., `1`)
-    - `type=raw,value=latest`
+    - `type=raw,value=$VERSION` (e.g., `1.2.3`)
+    - `type=raw,value=v$VERSION` (e.g., `v1.2.3`)
+    - `type=raw,value=$MAJOR.$MINOR` (e.g., `1.2`, non-prerelease only)
+    - `type=raw,value=v$MAJOR.$MINOR` (e.g., `v1.2`, non-prerelease only)
+    - `type=raw,value=$MAJOR` (e.g., `1`, non-prerelease only)
+    - `type=raw,value=v$MAJOR` (e.g., `v1`, non-prerelease only)
+    - `type=raw,value=latest` (non-prerelease only)
+    - `type=sha,prefix=sha-,format=short`
   - [x] Add Docker build & push step using `docker/build-push-action@v6` with `push: true`, `tags` and `labels` from metadata step
   - [x] Ensure the existing `validate-tag` and `release` jobs are NOT modified (only add the new job)
 
@@ -61,13 +66,12 @@ This story modifies ONLY `.github/workflows/release.yml`. No TypeScript source c
 
 The existing workflow has:
 
-- **Trigger:** `push.tags: 'v[0-9]+.[0-9]+.[0-9]+'`
-- **Permissions:** `contents: write` (workflow-level)
+- **Triggers:** `push.branches: [main]` (release-please) and `workflow_dispatch` (manual)
 - **Concurrency:** `group: release, cancel-in-progress: false`
-- **Job 1: `validate-tag`** — Validates semver format, extracts major version
-- **Job 2: `release`** — Checks out, installs deps, runs lint/format/typecheck/test, bundles, creates GitHub Release, updates major version tag
-
-The new `publish-image` job will be added AFTER the existing `release` job.
+- **Job 1: `release-please`** — Automated releases via googleapis/release-please-action@v4
+- **Job 2: `resolve-version`** — Manual releases extracting version from package.json
+- **Job 3: `publish-image`** — Docker build & push to GHCR (depends on either upstream job)
+- **Job 4: `update-major-tag`** — Force-updates `v{MAJOR}` git tag (depends on publish-image success)
 
 ### Docker Actions to Use
 
@@ -83,8 +87,13 @@ Use official Docker GitHub Actions (already used widely in the ecosystem):
 - Image: `ghcr.io/arch-playground/ai-workflow-runner`
 - Tags for `v1.2.3` release:
   - `ghcr.io/arch-playground/ai-workflow-runner:1.2.3`
+  - `ghcr.io/arch-playground/ai-workflow-runner:v1.2.3`
+  - `ghcr.io/arch-playground/ai-workflow-runner:1.2`
+  - `ghcr.io/arch-playground/ai-workflow-runner:v1.2`
   - `ghcr.io/arch-playground/ai-workflow-runner:1`
+  - `ghcr.io/arch-playground/ai-workflow-runner:v1`
   - `ghcr.io/arch-playground/ai-workflow-runner:latest`
+  - `ghcr.io/arch-playground/ai-workflow-runner:sha-abc1234`
 
 ### OCI Labels
 
@@ -147,12 +156,12 @@ No issues encountered.
 
 - Added `publish-image` job to `.github/workflows/release.yml` that builds and pushes Docker image to GHCR on release
 - Used official Docker GitHub Actions: `docker/login-action@v3`, `docker/metadata-action@v5`, `docker/build-push-action@v6`
-- Image tagged with semver (`1.2.3`), major version (`1`), and `latest` via `metadata-action`
+- Image tagged with both v-prefixed and non-prefixed variants: `1.2.3`, `v1.2.3`, `1.2`, `v1.2`, `1`, `v1`, `latest`, `sha-{short}`
 - OCI labels (`source`, `description`) already present in Dockerfile; `version` label auto-generated by `metadata-action`
 - Moved `packages: write` to job-level permissions on `publish-image` only (least privilege; review fix)
 - `contents: write` remains at workflow level for `release` job
-- `publish-image` depends on `[validate-tag, release]` — runs after release is created, does not block it
-- Existing `validate-tag` and `release` jobs completely untouched (verified via git diff)
+- `publish-image` depends on `[release-please, resolve-version]` with `always()` condition — runs after either upstream creates a release
+- Release workflow restructured from tag-triggered to release-please + workflow_dispatch dual paths (see story 6.3)
 - All 230 unit tests pass with no regressions
 - Lint, format, and typecheck all clean
 
@@ -160,6 +169,7 @@ No issues encountered.
 
 - 2026-02-09: Added Docker image build & push job (`publish-image`) to release pipeline with GHCR publishing
 - 2026-02-09: [AI-Review] Added `timeout-minutes: 30` to `publish-image` job; moved `packages: write` to job-level permissions (least privilege)
+- 2026-03-10: Correct-course alignment — Updated tag matrix to include v-prefixed variants (`v1.2.3`, `v1.2`, `v1`), minor version tags, and SHA tags. Updated dependencies from `[validate-tag, release]` to `[release-please, resolve-version]` per release workflow restructure.
 
 ### File List
 

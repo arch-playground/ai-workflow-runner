@@ -10,8 +10,8 @@ so that **my workflows start faster without building the Docker image on every r
 
 ## Acceptance Criteria
 
-1. **Given** `action.yml` file, **When** updated, **Then** `runs.image` is changed from `'Dockerfile'` to `'docker://ghcr.io/arch-playground/ai-workflow-runner:1'`
-2. **Given** the image reference, **When** inspected, **Then** it uses the major version tag (`1`) not `latest`, for stability across consumer workflows
+1. **Given** `action.yml` file, **When** updated, **Then** `runs.image` is changed from `'Dockerfile'` to `'docker://ghcr.io/arch-playground/ai-workflow-runner:v1'`
+2. **Given** the image reference, **When** inspected, **Then** it uses the `v`-prefixed major version tag (`v1`) not `latest`, for stability and consistency with GitHub Actions `@v1` convention
 3. **Given** the updated `action.yml`, **When** inspected, **Then** all existing inputs (`workflow_path`, `prompt`, `env_vars`, `timeout_minutes`, `validation_script`, `validation_script_type`, `validation_max_retry`, `opencode_config`, `auth_config`, `model`, `list_models`) remain unchanged
 4. **Given** the updated `action.yml`, **When** inspected, **Then** all existing outputs (`status`, `result`) remain unchanged
 5. **Given** the updated `action.yml`, **When** inspected, **Then** `name`, `description`, `author`, and `branding` fields remain unchanged
@@ -24,9 +24,9 @@ so that **my workflows start faster without building the Docker image on every r
   - [x] Read `.knowledge-base/technical/standards/global/conventions.md` - Project structure, version control
 
 - [x] **Task 2: Update `runs.image` in action.yml** (AC: 1, 2)
-  - [x] Change `image: 'Dockerfile'` to `image: 'docker://ghcr.io/arch-playground/ai-workflow-runner:1'` in the `runs` section
+  - [x] Change `image: 'Dockerfile'` to `image: 'docker://ghcr.io/arch-playground/ai-workflow-runner:v1'` in the `runs` section
   - [x] Verify the `using: 'docker'` field remains unchanged
-  - [x] Verify the image reference uses the major version tag `:1` (not `:latest` or full semver)
+  - [x] Verify the image reference uses the `v`-prefixed major version tag `:v1` (not `:1`, `:latest`, or full semver)
 
 - [x] **Task 3: Verify no other fields changed** (AC: 3, 4, 5)
   - [x] Verify all 11 inputs remain exactly as before (names, descriptions, defaults, required flags)
@@ -55,15 +55,15 @@ runs:
 # AFTER:
 runs:
   using: 'docker'
-  image: 'docker://ghcr.io/arch-playground/ai-workflow-runner:1'
+  image: 'docker://ghcr.io/arch-playground/ai-workflow-runner:v1'
 ```
 
 ### Why Major Version Tag `:1`
 
 - `:latest` is unstable and can break consumers on any push
 - Full semver (`:1.2.3`) forces consumers to update action.yml on every release
-- `:1` auto-resolves to the latest `1.x.x` release, matching the `@v1` action reference consumers use
-- The `publish-image` job in `release.yml` (story 8-1) already tags images with `{{major}}` via `docker/metadata-action`
+- `:v1` auto-resolves to the latest `1.x.x` release, matching the `@v1` action reference consumers use
+- The `publish-image` job in `release.yml` (story 8-1) tags images with both `v{major}` and `{major}` via `docker/metadata-action`
 
 ### GHCR Image Reference Format
 
@@ -73,14 +73,14 @@ GitHub Actions Docker container actions support `docker://` prefix for pre-built
 docker://<registry>/<owner>/<image>:<tag>
 ```
 
-For this project: `docker://ghcr.io/arch-playground/ai-workflow-runner:1`
+For this project: `docker://ghcr.io/arch-playground/ai-workflow-runner:v1`
 
 ### Previous Story (8-1) Context
 
 Story 8-1 added the `publish-image` job to `release.yml` that:
 
 - Builds and pushes Docker images to `ghcr.io/arch-playground/ai-workflow-runner`
-- Tags with semver (`1.2.3`), major version (`1`), and `latest`
+- Tags with both v-prefixed and non-prefixed variants (`1.2.3`, `v1.2.3`, `1`, `v1`, `latest`, etc.)
 - Runs after the `release` job (non-blocking)
 - Uses `docker/metadata-action@v5` for tag generation
 
@@ -121,10 +121,10 @@ No debug issues encountered.
 
 ### Completion Notes List
 
-- Updated `action.yml` line 58: changed `image: 'Dockerfile'` to `image: 'docker://ghcr.io/arch-playground/ai-workflow-runner:1'`
+- Updated `action.yml` line 59: changed `image: 'Dockerfile'` to `image: 'docker://ghcr.io/arch-playground/ai-workflow-runner:v1'`
 - Single line change only; all inputs (11), outputs (2), metadata, and branding fields verified unchanged
 - `using: 'docker'` confirmed unchanged
-- Major version tag `:1` used for stability (not `:latest` or full semver)
+- `v`-prefixed major version tag `:v1` used for stability and consistency with `@v1` action reference convention
 - All quality checks passed: lint, format, typecheck
 - All tests passed (267/267 across 12 suites); action-yml schema test passed
 - No TypeScript source code modified, no new files created
@@ -132,6 +132,7 @@ No debug issues encountered.
 ### Change Log
 
 - 2026-02-09: Updated `runs.image` in `action.yml` from `'Dockerfile'` to `'docker://ghcr.io/arch-playground/ai-workflow-runner:1'` to reference pre-built GHCR image
+- 2026-03-10: Correct-course alignment — Changed image tag from `:1` to `:v1` for consistency with `@v1` action reference convention and v-prefixed Docker tag matrix
 
 ### File List
 

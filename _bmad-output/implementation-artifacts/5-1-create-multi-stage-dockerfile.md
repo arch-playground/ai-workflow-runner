@@ -12,8 +12,9 @@ So that **build time and image size are minimized while maintaining all required
 
 1. **Given** a Dockerfile
    **When** built
-   **Then** it uses a builder stage that installs all packages
-   **And** it uses a runtime stage that copies only necessary files
+   **Then** it uses a bundler stage (`node:20-bookworm-slim`) that runs `npm ci` and `npm run bundle` to produce `dist/index.js` from TypeScript source
+   **And** it uses a builder stage (`debian:bookworm-slim`) that installs system runtimes (Node.js, Python, Java, OpenCode CLI)
+   **And** it uses a runtime stage that copies from both bundler and builder
    **And** the final image is smaller than a single-stage build
 
 2. **Given** the builder stage
@@ -40,13 +41,21 @@ So that **build time and image size are minimized while maintaining all required
   - [x] Read `.knowledge-base/technical/standards/global/security.md` - Security practices
   - [x] Review existing Dockerfile implementation at `Dockerfile`
 
-- [x] **Task 2: Create Builder Stage** (AC: 1, 2)
+- [x] **Task 2: Create Bundler Stage** (AC: 1)
+  - [x] Use `node:20-bookworm-slim` as base image
+  - [x] Copy `package.json`, `package-lock.json`, `tsconfig.json`
+  - [x] Run `npm ci` for dependency installation
+  - [x] Copy `src/` directory
+  - [x] Run `npm run bundle` to produce `dist/index.js`
+  - [x] `dist/` no longer committed to git — Docker builds from source
+
+- [x] **Task 3: Create Builder Stage** (AC: 1, 2)
   - [x] Use `debian:bookworm-slim` as base image
   - [x] Set `DEBIAN_FRONTEND=noninteractive` to prevent interactive prompts
   - [x] Install build dependencies: curl, ca-certificates, gnupg
   - [x] Add GPG keyrings directory for secure package verification
 
-- [x] **Task 3: Create Runtime Stage** (AC: 1, 3)
+- [x] **Task 4: Create Runtime Stage** (AC: 1, 3)
   - [x] Use fresh `debian:bookworm-slim` as base (not FROM builder)
   - [x] Add OCI labels for image metadata
   - [x] Install only runtime dependencies (ca-certificates, python3.11)
@@ -70,37 +79,45 @@ So that **build time and image size are minimized while maintaining all required
 
 ### Architecture Requirements
 
-- Base image: `debian:bookworm-slim` for glibc compatibility and minimal footprint
-- Multi-stage build reduces final image size by excluding build tools
+- Three-stage build: bundler → builder → runtime
+- **Bundler stage:** `node:20-bookworm-slim` — builds `dist/index.js` from TypeScript source via `npm run bundle`
+- **Builder stage:** `debian:bookworm-slim` — installs system runtimes (Node.js, Python 3.11, Java 21, OpenCode CLI)
+- **Runtime stage:** `debian:bookworm-slim` — copies from both bundler (dist/) and builder (runtimes)
+- `dist/` added to `.gitignore` — Docker builds from source, eliminating stale bundle issues
+- `.dockerignore` updated to allow `src/` and `tsconfig.json` through for bundler stage
 - GitHub Actions mounts workspace at `/github/workspace`
 
 ### Implementation Reference
 
-The existing implementation in `Dockerfile` already follows these patterns:
-
-- Builder stage with all build dependencies
-- Runtime stage with minimal dependencies
-- Proper cleanup of apt cache and temp files
-
-### Key Patterns
+The Dockerfile uses three stages:
 
 ```dockerfile
-# Builder stage pattern
+# Stage 1: Bundler - build application from source
+FROM node:20-bookworm-slim AS bundler
+WORKDIR /build
+COPY package.json package-lock.json tsconfig.json ./
+RUN npm ci
+COPY src/ src/
+RUN npm run bundle
+
+# Stage 2: Builder - install system runtimes
 FROM debian:bookworm-slim AS builder
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends ...
 
-# Runtime stage pattern
+# Stage 3: Runtime - minimal image
 FROM debian:bookworm-slim AS runtime
-COPY --from=builder /path/to/runtime /destination/
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+COPY --from=bundler /build/dist/ /app/dist/
+COPY --from=builder /usr/bin/node /usr/bin/node
+# ... copies runtimes from builder
 ```
 
 ### Project Structure Notes
 
 - Dockerfile location: Repository root
 - entrypoint.sh location: Repository root
-- Application bundle: `dist/index.js`
+- Application bundle: `dist/index.js` (built by Docker, not committed to git)
+- `.dockerignore` allows: `src/`, `tsconfig.json`, `package.json`, `package-lock.json`
 
 ### References
 
@@ -116,9 +133,16 @@ Code Review Agent (Claude Opus 4.5)
 
 ### Completion Notes List
 
-- Implementation already exists in Dockerfile
-- Story created for documentation purposes
+- Implementation updated with bundler stage that builds from TypeScript source
+- `dist/` removed from git (added to `.gitignore`) — Docker builds from source, eliminating stale bundle issues
+- `.dockerignore` updated to allow `src/` and `tsconfig.json` through for bundler stage
 
 ### File List
 
-- `Dockerfile` - Main Dockerfile with multi-stage build
+- `Dockerfile` - Main Dockerfile with 3-stage build (bundler + builder + runtime)
+- `.gitignore` - Added `dist/` exclusion
+- `.dockerignore` - Updated to allow source files for bundler stage
+
+### Change Log
+
+- 2026-03-10: Correct-course alignment — Added bundler stage to Dockerfile (3-stage build), removed `dist/` from git, updated `.dockerignore`

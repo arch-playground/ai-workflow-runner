@@ -11,6 +11,9 @@ export interface MockClient {
   config: {
     providers: jest.Mock;
   };
+  auth: {
+    set: jest.Mock;
+  };
   postSessionIdPermissionsPermissionId: jest.Mock;
 }
 
@@ -88,6 +91,9 @@ export function createMockClient(): MockClient {
     },
     config: {
       providers: jest.fn().mockResolvedValue({ data: { providers: [] } }),
+    },
+    auth: {
+      set: jest.fn().mockResolvedValue({ data: {} }),
     },
     postSessionIdPermissionsPermissionId: jest.fn().mockResolvedValue({}),
   };
