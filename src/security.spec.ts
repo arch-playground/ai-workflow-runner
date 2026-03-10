@@ -90,15 +90,20 @@ describe('security', () => {
       expect(result).toBe('/tmp/runner/auth.json');
     });
 
-    it('accepts absolute paths under RUNNER_TEMP', () => {
+    it('accepts absolute paths under RUNNER_TEMP and translates to Docker mount', () => {
       const originalEnv = process.env.RUNNER_TEMP;
       process.env.RUNNER_TEMP = '/home/runner/work/_temp';
       try {
         const result = validateConfigPath(tempDir, '/home/runner/work/_temp/auth.json');
-        expect(result).toBe('/home/runner/work/_temp/auth.json');
+        expect(result).toBe('/github/runner_temp/auth.json');
       } finally {
         process.env.RUNNER_TEMP = originalEnv;
       }
+    });
+
+    it('accepts absolute paths under /github/runner_temp/', () => {
+      const result = validateConfigPath(tempDir, '/github/runner_temp/config.json');
+      expect(result).toBe('/github/runner_temp/config.json');
     });
 
     it('rejects absolute paths to unsafe locations', () => {
