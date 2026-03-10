@@ -25,6 +25,34 @@ export function validateWorkspacePath(workspacePath: string, relativePath: strin
   return absolutePath;
 }
 
+const SAFE_ABSOLUTE_PREFIXES = ['/tmp/'];
+
+/**
+ * Validates a config file path (auth_config, opencode_config).
+ * Accepts workspace-relative paths OR absolute paths under safe directories
+ * (RUNNER_TEMP, /tmp). This allows writing config files outside the workspace
+ * to avoid interference with the AI action's working directory.
+ */
+export function validateConfigPath(workspacePath: string, configPath: string): string {
+  if (path.isAbsolute(configPath)) {
+    const normalized = path.normalize(configPath);
+    const safePrefixes = [...SAFE_ABSOLUTE_PREFIXES];
+    const runnerTemp = process.env.RUNNER_TEMP;
+    if (runnerTemp) {
+      safePrefixes.push(path.normalize(runnerTemp) + path.sep);
+    }
+
+    const isSafe = safePrefixes.some((prefix) => normalized.startsWith(prefix));
+    if (!isSafe) {
+      throw new Error(
+        'Invalid config path: absolute paths are only allowed under runner temp or /tmp'
+      );
+    }
+    return normalized;
+  }
+  return validateWorkspacePath(workspacePath, configPath);
+}
+
 /**
  * Validates the REAL path of a file (following symlinks) is within workspace.
  * Call this AFTER confirming the file exists.

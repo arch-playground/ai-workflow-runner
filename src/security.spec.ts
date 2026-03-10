@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import {
   validateWorkspacePath,
+  validateConfigPath,
   validateRealPath,
   maskSecrets,
   sanitizeErrorMessage,
@@ -65,6 +66,63 @@ describe('security', () => {
     it('normalizes paths with ./', () => {
       const result = validateWorkspacePath(tempDir, './workflows/test.md');
       expect(result).toBe(path.join(realTempDir, 'workflows/test.md'));
+    });
+  });
+
+  describe('validateConfigPath', () => {
+    it('accepts workspace-relative paths (delegates to validateWorkspacePath)', () => {
+      const result = validateConfigPath(tempDir, 'config.json');
+      expect(result).toBe(path.join(realTempDir, 'config.json'));
+    });
+
+    it('accepts relative paths with subdirectories', () => {
+      const result = validateConfigPath(tempDir, 'configs/auth.json');
+      expect(result).toBe(path.join(realTempDir, 'configs/auth.json'));
+    });
+
+    it('accepts absolute paths under /tmp/', () => {
+      const result = validateConfigPath(tempDir, '/tmp/auth.json');
+      expect(result).toBe('/tmp/auth.json');
+    });
+
+    it('accepts absolute paths under /tmp/ with subdirectories', () => {
+      const result = validateConfigPath(tempDir, '/tmp/runner/auth.json');
+      expect(result).toBe('/tmp/runner/auth.json');
+    });
+
+    it('accepts absolute paths under RUNNER_TEMP', () => {
+      const originalEnv = process.env.RUNNER_TEMP;
+      process.env.RUNNER_TEMP = '/home/runner/work/_temp';
+      try {
+        const result = validateConfigPath(tempDir, '/home/runner/work/_temp/auth.json');
+        expect(result).toBe('/home/runner/work/_temp/auth.json');
+      } finally {
+        process.env.RUNNER_TEMP = originalEnv;
+      }
+    });
+
+    it('rejects absolute paths to unsafe locations', () => {
+      expect(() => validateConfigPath(tempDir, '/etc/passwd')).toThrow(
+        'absolute paths are only allowed under runner temp or /tmp'
+      );
+    });
+
+    it('rejects absolute paths to home directories', () => {
+      expect(() => validateConfigPath(tempDir, '/home/user/secrets.json')).toThrow(
+        'absolute paths are only allowed under runner temp or /tmp'
+      );
+    });
+
+    it('rejects path traversal escaping safe directory', () => {
+      expect(() => validateConfigPath(tempDir, '/tmp/../../etc/passwd')).toThrow(
+        'absolute paths are only allowed under runner temp or /tmp'
+      );
+    });
+
+    it('rejects relative path traversal (delegates to validateWorkspacePath)', () => {
+      expect(() => validateConfigPath(tempDir, '../outside.json')).toThrow(
+        'absolute paths and parent directory references are not allowed'
+      );
     });
   });
 

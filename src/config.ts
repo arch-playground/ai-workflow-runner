@@ -5,7 +5,7 @@ import {
   INPUT_LIMITS,
   type ValidationScriptType,
 } from './types.js';
-import { maskSecrets, validateWorkspacePath } from './security.js';
+import { maskSecrets, validateConfigPath } from './security.js';
 
 const RESERVED_ENV_VARS = new Set([
   'PATH',
@@ -154,11 +154,9 @@ export function getInputs(): ActionInputs {
 
   const workspacePath = process.env.GITHUB_WORKSPACE || process.cwd();
   const opencodeConfig = opencodeConfigRaw
-    ? validateWorkspacePath(workspacePath, opencodeConfigRaw)
+    ? validateConfigPath(workspacePath, opencodeConfigRaw)
     : undefined;
-  const authConfig = authConfigRaw
-    ? validateWorkspacePath(workspacePath, authConfigRaw)
-    : undefined;
+  const authConfig = authConfigRaw ? validateConfigPath(workspacePath, authConfigRaw) : undefined;
 
   return {
     workflowPath,
