@@ -5,6 +5,14 @@ All notable changes to AI Workflow Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4](https://github.com/arch-playground/ai-workflow-runner/compare/v1.1.3...v1.1.4) (2026-03-10)
+
+
+### Bug Fixes
+
+* add commit message and PR description templates for Conventional Commits format ([4f2e19a](https://github.com/arch-playground/ai-workflow-runner/commit/4f2e19a77678f7b8216402674cf59eb95090f43c))
+* add commit message and PR description templates for Conventional… ([aa8641e](https://github.com/arch-playground/ai-workflow-runner/commit/aa8641eaa8d60b2a98d6c7eda5bd633710981a55))
+
 ## [1.1.1](https://github.com/arch-playground/ai-workflow-runner/compare/v1.1.0...v1.1.1) (2026-03-10)
 
 
