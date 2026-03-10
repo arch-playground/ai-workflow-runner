@@ -51,7 +51,7 @@ The output will show models in this format:
 ========================
 ```
 
-> **Note:** `workflow_path` is ignored when `list_models` is `'true'`. The action lists models and exits without running any workflow.
+> **Note:** `workflow_path` is not required when `list_models` is `'true'`. The action lists models and exits without running any workflow.
 
 ## Running with a Specific Model
 

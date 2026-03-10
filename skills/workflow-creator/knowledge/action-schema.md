@@ -16,19 +16,19 @@ uses: arch-playground/ai-workflow-runner@v1
 
 ## Inputs
 
-| Input                    | Required | Default   | Notes                                                                    |
-| ------------------------ | -------- | --------- | ------------------------------------------------------------------------ |
-| `workflow_path`          | **yes**  | —         | Path to `.md` prompt file, relative to workspace root                    |
-| `prompt`                 | no       | `''`      | Additional prompt text appended to `workflow_path` content, max 100KB    |
-| `env_vars`               | no       | `'{}'`    | JSON object of env vars passed to AI context, max 64KB / 100 entries     |
-| `timeout_minutes`        | no       | `'30'`    | Max execution time in minutes                                            |
-| `validation_script`      | no       | `''`      | File path (`.py` / `.js`) or inline (`python:...` / `js:...`)            |
-| `validation_script_type` | no       | `''`      | Only needed for inline scripts without prefix (`python` or `javascript`) |
-| `validation_max_retry`   | no       | `'5'`     | Max retry attempts when validation fails, range 1–20                     |
-| `opencode_config`        | no       | `''`      | Path to `config.json` for non-sensitive provider/model config            |
-| `auth_config`            | no       | `''`      | Path to `auth.json` for sensitive API keys — use GitHub Secrets          |
-| `model`                  | no       | `''`      | Override model, e.g. `anthropic/claude-sonnet-4-5-20250929`              |
-| `list_models`            | no       | `'false'` | Print available models and exit (debugging only)                         |
+| Input                    | Required | Default   | Notes                                                                                             |
+| ------------------------ | -------- | --------- | ------------------------------------------------------------------------------------------------- |
+| `workflow_path`          | no       | `''`      | Path to `.md` prompt file, relative to workspace root. Required unless `list_models` is `'true'`. |
+| `prompt`                 | no       | `''`      | Additional prompt text appended to `workflow_path` content, max 100KB                             |
+| `env_vars`               | no       | `'{}'`    | JSON object of env vars passed to AI context, max 64KB / 100 entries                              |
+| `timeout_minutes`        | no       | `'30'`    | Max execution time in minutes                                                                     |
+| `validation_script`      | no       | `''`      | File path (`.py` / `.js`) or inline (`python:...` / `js:...`)                                     |
+| `validation_script_type` | no       | `''`      | Only needed for inline scripts without prefix (`python` or `javascript`)                          |
+| `validation_max_retry`   | no       | `'5'`     | Max retry attempts when validation fails, range 1–20                                              |
+| `opencode_config`        | no       | `''`      | Path to `config.json` for non-sensitive provider/model config                                     |
+| `auth_config`            | no       | `''`      | Path to `auth.json` for sensitive API keys — use GitHub Secrets                                   |
+| `model`                  | no       | `''`      | Override model, e.g. `anthropic/claude-sonnet-4-5-20250929`                                       |
+| `list_models`            | no       | `'false'` | Print available models and exit (debugging only)                                                  |
 
 ---
 
@@ -191,7 +191,7 @@ Use this to discover all model names available to your configured provider. Run 
 **Key points:**
 
 - `list_models: 'true'` causes the action to print models and exit — no AI task is run
-- `workflow_path` is required by the action schema but unused when `list_models: 'true'`; set it to `''`
+- `workflow_path` is optional when `list_models: 'true'` — no need to provide it
 - No `workflow_path` prompt file needs to exist
 - Use the same auth setup as your real workflow
 
@@ -215,7 +215,6 @@ jobs:
         id: ai
         uses: arch-playground/ai-workflow-runner@v1
         with:
-          workflow_path: ''
           list_models: 'true'
           opencode_config: ${{ secrets.OPENCODE_CONFIG && 'config.json' || '' }}
         env:

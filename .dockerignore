@@ -8,10 +8,8 @@ __tests__
 .env*
 .eslint*
 .prettier*
-tsconfig.json
 jest.config.js
 .husky
-src
 _bmad
 _bmad-output
 .knowledge-base
@@ -19,3 +17,6 @@ _bmad-output
 .agents
 .opencode
 docs
+test
+examples
+skills
