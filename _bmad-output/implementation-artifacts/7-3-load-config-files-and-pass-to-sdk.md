@@ -12,7 +12,7 @@ So that **users can customize provider settings, authentication, and model selec
 
 1. **Given** `opencodeConfig` path provided in ActionInputs, **When** `OpenCodeService.initialize()` is called, **Then** the config file is read and parsed as JSON, and passed as `config` in `createOpencode()` ServerOptions.
 
-2. **Given** `authConfig` path provided in ActionInputs, **When** `OpenCodeService.initialize()` is called, **Then** the auth file is read and parsed as JSON, and its contents are merged into the config object's `provider` section before passing to `createOpencode()`.
+2. **Given** `authConfig` path provided in ActionInputs, **When** `OpenCodeService.initialize()` is called, **Then** the auth file is read and parsed as JSON, and each provider entry is passed to `client.auth.set()` API after SDK initialization (auth is applied post-init, not merged into config).
 
 3. **Given** `model` input provided in ActionInputs, **When** `OpenCodeService.initialize()` is called, **Then** `model` is set in the config object (`config.model`) passed to `createOpencode()`.
 
@@ -51,7 +51,7 @@ So that **users can customize provider settings, authentication, and model selec
 
 - [x] **Task 4: Build SDK config and pass to `createOpencode()`** (AC: 1, 2, 3, 8)
   - [x] If `opencodeConfig` path provided: load JSON via `loadJsonFile()`, use as base config
-  - [x] If `authConfig` path provided: load JSON via `loadJsonFile()`, merge into config (spread into config object — the auth.json contains provider auth that maps directly to `Config.provider` entries)
+  - [x] If `authConfig` path provided: load JSON via `loadJsonFile()`, apply via `client.auth.set()` per provider entry AFTER `createOpencode()` completes (auth requires a running client)
   - [x] If `model` provided: set `config.model = model`
   - [x] Pass assembled config to `createOpencode({ hostname, port, config })` via `ServerOptions.config`
   - [x] If none provided: call `createOpencode({ hostname, port })` without config (preserves current behavior)
@@ -64,7 +64,7 @@ So that **users can customize provider settings, authentication, and model selec
   - [x] 7.3-UNIT-001: `initialize()` reads opencode_config file as JSON
   - [x] 7.3-UNIT-002: `initialize()` passes config to `createOpencode()` options
   - [x] 7.3-UNIT-003: `initialize()` reads auth_config file as JSON
-  - [x] 7.3-UNIT-004: `initialize()` passes auth to `createOpencode()` options (merged into config)
+  - [x] 7.3-UNIT-004: `initialize()` calls `client.auth.set()` for each provider in auth_config
   - [x] 7.3-UNIT-005: `initialize()` sets `config.model` when model input provided
   - [x] 7.3-UNIT-006: `initialize()` throws `'Config file not found: {basename}'` for missing file
   - [x] 7.3-UNIT-007: `initialize()` throws `'Auth file not found: {basename}'` for missing file
@@ -73,7 +73,12 @@ So that **users can customize provider settings, authentication, and model selec
   - [x] 7.3-UNIT-010: Error messages contain only basename, not absolute paths
   - [x] 7.3-UNIT-011: `initialize()` without any config options calls `createOpencode()` without config (backward compat)
   - [x] 7.3-UNIT-012: `initialize()` with model only sets `config.model` without loading files
-  - [x] 7.3-UNIT-013: `initialize()` with all three options (config + auth + model) merges correctly
+  - [x] 7.3-UNIT-013: `initialize()` with all three options passes config+model to createOpencode and auth via auth.set()
+  - [x] 7.3-UNIT-014: `initialize()` calls auth.set() for each provider in auth_config (multiple providers)
+  - [x] 7.3-UNIT-015: `initialize()` re-throws non-ENOENT filesystem errors
+  - [x] 7.3-UNIT-016: invalid JSON error messages use basename only
+  - [x] 7.3-UNIT-017: handles non-object JSON values in config file
+  - [x] 7.3-UNIT-018: auth.set() error throws with provider name
 
 - [x] **Final Task: Quality Checks**
   - [x] Run `npm run lint` - Fix any linting issues
@@ -102,47 +107,53 @@ type ServerOptions = {
 
 **Model is NOT passed at session creation.** The Session.create() API only accepts `title`, `directory`, `parentID`, and `permission`. Model must be set in `Config.model` before SDK initialization.
 
-**Auth is part of Config.** There is no separate auth parameter. Provider credentials go into:
+**Auth is NOT part of Config.** The SDK `Config` type has no auth/provider field. Auth must be set via the `client.auth.set()` REST API endpoint per provider, after the SDK server is running.
 
 ```typescript
-config.provider = {
-  anthropic: { options: { apiKey: 'sk-...' } },
-  copilot: { options: { apiKey: '...' } },
-};
+// Auth is applied AFTER createOpencode() via client API
+await client.auth.set({
+  path: { id: 'anthropic' },
+  body: { type: 'api', key: 'sk-...' },
+});
 ```
 
-**Therefore:** Both config.json and auth.json content should be merged into a single `Config` object passed to `createOpencode()`.
+**Therefore:** Config and auth are handled separately — config goes to `createOpencode()`, auth is applied post-init via `client.auth.set()`.
 
-### Config Merging Strategy
+### Auth Strategy
 
 ```typescript
-// Pseudo-code for config assembly
+// Pseudo-code for config + auth assembly
 let sdkConfig: Record<string, unknown> = {};
 
 if (opencodeConfig) {
   sdkConfig = await loadJsonFile(opencodeConfig, 'config');
 }
-if (authConfig) {
-  const authData = await loadJsonFile(authConfig, 'auth');
-  sdkConfig = { ...sdkConfig, ...authData };
-}
 if (model) {
   sdkConfig.model = model;
 }
 
-// Pass to SDK
-await createOpencode({ hostname: '127.0.0.1', port: 0, config: sdkConfig });
+// Pass config to SDK (no auth here)
+const { client } = await createOpencode({ hostname: '127.0.0.1', port: 0, config: sdkConfig });
+
+// Apply auth AFTER server starts (requires running client)
+if (authConfig) {
+  const authData = await loadJsonFile(authConfig, 'auth');
+  for (const [providerId, credentials] of Object.entries(authData)) {
+    await client.auth.set({ path: { id: providerId }, body: credentials });
+  }
+}
 ```
 
-**Model override precedence:** If both config.json contains a `model` field AND the `model` input is provided, the input takes precedence (applied last via spread).
+**Model override precedence:** If both config.json contains a `model` field AND the `model` input is provided, the input takes precedence (applied last).
 
 ### Files to Modify
 
-| File                   | Change                                                                                                                       |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `src/opencode.ts`      | Add `loadJsonFile()` helper, update `initialize()` to accept and process config options, pass `config` to `createOpencode()` |
-| `src/runner.ts`        | Pass `inputs.opencodeConfig`, `inputs.authConfig`, `inputs.model` to `opencode.initialize()`                                 |
-| `src/opencode.spec.ts` | Add 13 new unit tests for config loading scenarios                                                                           |
+| File                           | Change                                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/opencode.ts`              | Add `loadJsonFile()`, `buildSdkConfig()`, `applyAuth()` methods; update `initialize()` to accept config options, apply auth via `client.auth.set()` post-init |
+| `src/runner.ts`                | Pass `inputs.opencodeConfig`, `inputs.authConfig`, `inputs.model` to `opencode.initialize()`                                                                  |
+| `src/opencode-config.spec.ts`  | 18 unit tests for config loading scenarios (7.3-UNIT-001 through 7.3-UNIT-018)                                                                                |
+| `src/opencode-test-helpers.ts` | Shared mock factories for `MockClient` (with `auth.set`), `MockServer`, `EventControl`                                                                        |
 
 ### Files NOT to Modify
 
@@ -223,22 +234,26 @@ None required - implementation was clean with no debugging needed.
 
 - Added `InitializeOptions` interface and updated `initialize()` to accept optional config options
 - Implemented `loadJsonFile()` private method for reading and parsing JSON config/auth files with proper error handling (ENOENT catch, JSON parse validation, basename-only error messages)
-- Implemented `buildSdkConfig()` private method that assembles the SDK config object by deep-merging config file, auth file, and model input with correct precedence (model input overrides config file's model)
-- Added `mergeConfigs()` private method for one-level deep merge of object keys (preserves overlapping provider entries)
+- Implemented `buildSdkConfig()` private method that assembles SDK config from opencodeConfig file + model input (no auth — auth is separate)
+- Implemented `applyAuth()` private method that calls `client.auth.set()` per provider entry after SDK initialization
+- Removed `mergeConfigs()` — auth is no longer merged into config object (SDK Config type has no auth field)
+- Auth applied AFTER `createOpencode()` since it requires a running client instance
 - Updated `runner.ts` to explicitly call `opencode.initialize()` with config options before `runSession()`
-- Added 14 unit tests (7.3-UNIT-001 through 7.3-UNIT-014) covering all 9 acceptance criteria plus deep merge
+- Config tests extracted to `src/opencode-config.spec.ts` with shared helpers in `src/opencode-test-helpers.ts`
+- Added 18 unit tests (7.3-UNIT-001 through 7.3-UNIT-018) covering all 9 acceptance criteria plus auth.set() error handling
 - Added 3 runner tests for config pass-through verification
-- All 219 unit/integration tests pass across 8 test suites (42 opencode tests, 28 runner tests, rest unchanged)
-- Lint, format, and typecheck all pass clean (only pre-existing js-yaml type error)
+- Lint, format, and typecheck all pass clean
 
 ### File List
 
-- `src/opencode.ts` - Added `InitializeOptions` interface, `fs`/`path` imports, `loadJsonFile()`, `buildSdkConfig()`, `mergeConfigs()`, updated `initialize()` and `doInitialize()` signatures, removed redundant `initialize()` call from `runSession()`
+- `src/opencode.ts` - Added `InitializeOptions` interface, `fs`/`path` imports, `loadJsonFile()`, `buildSdkConfig()`, `applyAuth()` (replaced `mergeConfigs()`), updated `initialize()` and `doInitialize()` signatures
 - `src/runner.ts` - Added explicit `opencode.initialize()` call with config options in `runWorkflow()`
-- `src/opencode.spec.ts` - Added `fs` mock setup, `mockReadFile` reference, 14 config loading unit tests
+- `src/opencode-config.spec.ts` - 18 config loading unit tests (extracted from opencode.spec.ts for separation of concerns)
+- `src/opencode-test-helpers.ts` - Shared mock factories: `MockClient` (with `auth.set`), `MockServer`, `EventControl`, `createEventGenerator()`
 - `src/runner.spec.ts` - Added 3 tests for config options pass-through and initialize error handling
 
 ### Change Log
 
 - 2026-02-06: Implemented story 7-3 - config file loading and SDK config assembly with 13 unit tests
 - 2026-02-06: Code review fixes (claude-opus-4-6) - H1: removed redundant initialize() in runSession(), H2: added 3 runner config pass-through tests, H3: replaced shallow spread with deep merge for provider keys (added mergeConfigs + UNIT-014), M1: restored accidentally deleted UPPERCASE.PY fixture, M2: replaced existsSync TOCTOU with async readFile ENOENT catch
+- 2026-03-10: Correct-course alignment — Refactored auth from config merge to `client.auth.set()` API per provider (SDK Config type has no auth field). Removed `mergeConfigs()`, added `applyAuth()`. Tests extracted to `opencode-config.spec.ts` with shared helpers. 18 total unit tests (UNIT-001 through UNIT-018).

@@ -42,6 +42,8 @@ So that **I can choose the right model for my workflow**.
 - [x] **Task 3: Add list models handling in `runWorkflow()`** (AC: 1, 2)
   - [x] In `src/runner.ts`, add early return branch at the top of `runWorkflow()`: `if (inputs.listModels) { return await handleListModels(inputs); }`
   - [x] Place this check BEFORE the `validateWorkflowFile()` call so workflow_path is not required when listing models
+  - [x] `workflow_path` made `required: false` in `action.yml` (GitHub Actions enforces `required: true` at runner level)
+  - [x] `validateInputs()` in `config.ts` returns early with `{ valid: true }` when `listModels` is true
   - [x] Create private `handleListModels(inputs: ActionInputs)` function returning `Promise<RunnerResult>`
   - [x] Initialize SDK: `const opencode = getOpenCodeService(); await opencode.initialize({ opencodeConfig: inputs.opencodeConfig, authConfig: inputs.authConfig, model: inputs.model });`
   - [x] Call `opencode.listModels()` to get the model list
@@ -75,7 +77,9 @@ So that **I can choose the right model for my workflow**.
 
 - `src/opencode.ts` - Add `listModels()` method (SDK integration, data transformation)
 - `src/runner.ts` - Add `handleListModels()` function and branch in `runWorkflow()` (orchestration, output formatting)
-- No changes needed to `src/types.ts`, `src/config.ts`, `src/index.ts`, or `action.yml` - all already support `listModels`
+- `action.yml` updated: `workflow_path` changed to `required: false` with `default: ''` (GitHub Actions enforces `required: true` at runner level before code executes)
+- `src/config.ts` updated: `getInput('workflow_path')` no longer uses `{ required: true }`, and `validateInputs()` returns early with `{ valid: true }` when `listModels` is true
+- No changes needed to `src/types.ts` or `src/index.ts`
 
 **SDK API to Use:** `client.config.providers()` (NOT `client.provider.list()`)
 
@@ -212,3 +216,4 @@ No debug issues encountered.
 
 - 2026-02-09: Implemented Story 7.4 - List Models Feature. Added `listModels()` to OpenCodeService and `handleListModels()` to runner. 9 new unit tests covering all acceptance criteria.
 - 2026-02-09: Code Review (AI) - Added 2 tests: response.data null check and SDK providers() throw. M2 (dispose on error) verified as non-issue - index.ts .finally() handles cleanup. 11 total new tests, 85/85 pass.
+- 2026-03-10: Correct-course alignment — Documented that `workflow_path` was made `required: false` in `action.yml` and `validateInputs()` returns early when `listModels` is true (GitHub Actions enforces required at runner level).

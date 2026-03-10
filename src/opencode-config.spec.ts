@@ -139,7 +139,7 @@ describe('OpenCodeService - config & reconnection', () => {
     it('7.3-UNIT-003: reads auth_config file as JSON', async () => {
       // Arrange
       const authContent = JSON.stringify({
-        provider: { anthropic: { options: { apiKey: 'sk-test' } } },
+        'github-copilot': { type: 'oauth', access: 'gho_test', refresh: 'gho_test', expires: 0 },
       });
       mockReadFile.mockResolvedValue(authContent);
 
@@ -151,9 +151,11 @@ describe('OpenCodeService - config & reconnection', () => {
       expect(mockReadFile).toHaveBeenCalledWith('/workspace/auth.json', 'utf-8');
     });
 
-    it('7.3-UNIT-004: passes auth to createOpencode() options merged into config', async () => {
+    it('7.3-UNIT-004: calls auth.set() for each provider in auth_config', async () => {
       // Arrange
-      const authData = { provider: { anthropic: { options: { apiKey: 'sk-test' } } } };
+      const authData = {
+        'github-copilot': { type: 'oauth', access: 'gho_test', refresh: 'gho_test', expires: 0 },
+      };
       mockReadFile.mockResolvedValue(JSON.stringify(authData));
 
       // Act
@@ -161,9 +163,10 @@ describe('OpenCodeService - config & reconnection', () => {
       await target.initialize({ authConfig: '/workspace/auth.json' });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith({
-        ...DEFAULT_SERVER_OPTIONS,
-        config: authData,
+      expect(mockCreateOpencode).toHaveBeenCalledWith(DEFAULT_SERVER_OPTIONS);
+      expect(mockClient.auth.set).toHaveBeenCalledWith({
+        path: { id: 'github-copilot' },
+        body: authData['github-copilot'],
       });
     });
 
@@ -265,10 +268,10 @@ describe('OpenCodeService - config & reconnection', () => {
       });
     });
 
-    it('7.3-UNIT-013: with all three options merges correctly', async () => {
+    it('7.3-UNIT-013: with all three options passes config and model to createOpencode and auth via auth.set()', async () => {
       // Arrange
       const configData = { setting1: 'value1', model: 'default-model' };
-      const authData = { provider: { anthropic: { options: { apiKey: 'sk-123' } } } };
+      const authData = { anthropic: { type: 'api', key: 'sk-123' } };
 
       mockReadFile
         .mockResolvedValueOnce(JSON.stringify(configData))
@@ -287,43 +290,40 @@ describe('OpenCodeService - config & reconnection', () => {
         ...DEFAULT_SERVER_OPTIONS,
         config: {
           setting1: 'value1',
-          provider: { anthropic: { options: { apiKey: 'sk-123' } } },
           model: 'claude-opus-4-6',
         },
       });
+      expect(mockClient.auth.set).toHaveBeenCalledWith({
+        path: { id: 'anthropic' },
+        body: { type: 'api', key: 'sk-123' },
+      });
     });
 
-    it('7.3-UNIT-014: deep merges overlapping provider keys from config and auth', async () => {
+    it('7.3-UNIT-014: calls auth.set() for each provider in auth_config', async () => {
       // Arrange
-      const configData = {
-        provider: { openai: { options: { apiKey: 'sk-openai' } } },
-        model: 'gpt-4',
-      };
       const authData = {
-        provider: { anthropic: { options: { apiKey: 'sk-anthropic' } } },
+        anthropic: { type: 'api', key: 'sk-anthropic' },
+        'github-copilot': { type: 'oauth', access: 'gho_test', refresh: 'gho_test', expires: 0 },
       };
 
-      mockReadFile
-        .mockResolvedValueOnce(JSON.stringify(configData))
-        .mockResolvedValueOnce(JSON.stringify(authData));
+      mockReadFile.mockResolvedValueOnce(JSON.stringify(authData));
 
       // Act
       const target = new OpenCodeService();
       await target.initialize({
-        opencodeConfig: '/workspace/config.json',
         authConfig: '/workspace/auth.json',
       });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith({
-        ...DEFAULT_SERVER_OPTIONS,
-        config: {
-          provider: {
-            openai: { options: { apiKey: 'sk-openai' } },
-            anthropic: { options: { apiKey: 'sk-anthropic' } },
-          },
-          model: 'gpt-4',
-        },
+      expect(mockCreateOpencode).toHaveBeenCalledWith(DEFAULT_SERVER_OPTIONS);
+      expect(mockClient.auth.set).toHaveBeenCalledTimes(2);
+      expect(mockClient.auth.set).toHaveBeenCalledWith({
+        path: { id: 'anthropic' },
+        body: { type: 'api', key: 'sk-anthropic' },
+      });
+      expect(mockClient.auth.set).toHaveBeenCalledWith({
+        path: { id: 'github-copilot' },
+        body: { type: 'oauth', access: 'gho_test', refresh: 'gho_test', expires: 0 },
       });
     });
 
@@ -369,35 +369,17 @@ describe('OpenCodeService - config & reconnection', () => {
       });
     });
 
-    it('7.3-UNIT-018: deep merges overlapping provider keys with auth taking precedence', async () => {
+    it('7.3-UNIT-018: auth.set() error throws with provider name', async () => {
       // Arrange
-      const configData = {
-        provider: { anthropic: { options: { apiKey: 'from-config', timeout: 5000 } } },
-      };
-      const authData = {
-        provider: { anthropic: { options: { apiKey: 'from-auth', org: 'test-org' } } },
-      };
+      const authData = { anthropic: { type: 'api', key: 'sk-bad' } };
+      mockReadFile.mockResolvedValueOnce(JSON.stringify(authData));
+      mockClient.auth.set.mockResolvedValueOnce({ error: { message: 'Invalid credentials' } });
 
-      mockReadFile
-        .mockResolvedValueOnce(JSON.stringify(configData))
-        .mockResolvedValueOnce(JSON.stringify(authData));
-
-      // Act
+      // Act & Assert
       const target = new OpenCodeService();
-      await target.initialize({
-        opencodeConfig: '/workspace/config.json',
-        authConfig: '/workspace/auth.json',
-      });
-
-      // Assert - auth's provider object overrides config's at the provider level (one-level deep merge)
-      expect(mockCreateOpencode).toHaveBeenCalledWith({
-        ...DEFAULT_SERVER_OPTIONS,
-        config: {
-          provider: {
-            anthropic: { options: { apiKey: 'from-auth', org: 'test-org' } },
-          },
-        },
-      });
+      await expect(target.initialize({ authConfig: '/workspace/auth.json' })).rejects.toThrow(
+        'Failed to set auth for provider anthropic'
+      );
     });
   });
 });

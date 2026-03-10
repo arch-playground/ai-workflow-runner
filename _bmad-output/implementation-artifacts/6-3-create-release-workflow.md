@@ -5,35 +5,22 @@ Status: done
 ## Story
 
 As a **maintainer**,
-I want **automated releases triggered by version tags**,
-So that **publishing is consistent, reliable, and follows semver**.
+I want **automated releases via release-please with manual dispatch fallback**,
+So that **publishing is consistent, reliable, and follows semver with the ability to manually trigger releases**.
 
 ## Acceptance Criteria
 
-1. **Given** tag pushed matching `v*.*.*` pattern (e.g., v1.0.0)
-   **When** release workflow runs
-   **Then** build and tests are run
-   **And** GitHub Release is created with auto-generated notes
-   **And** major version tag (e.g., v1) is updated
+1. **Given** push to main branch, **When** release workflow runs, **Then** `release-please` job creates/updates a release PR via `googleapis/release-please-action@v4` **And** when PR is merged, creates a GitHub Release with auto-generated notes.
 
-2. **Given** invalid tag (e.g., vfoo, v1.2, v1.2.3.4)
-   **When** pushed
-   **Then** release workflow does not trigger
+2. **Given** `workflow_dispatch` trigger, **When** release workflow runs, **Then** `resolve-version` job extracts version from `package.json` **And** downstream jobs proceed as if release-please created a release.
 
-3. **Given** concurrent releases
-   **When** triggered
-   **Then** concurrency group prevents race conditions
-   **And** jobs do not cancel in progress (cancel-in-progress: false)
+3. **Given** either trigger path creates a release, **When** `publish-image` job runs, **Then** Docker image is built and pushed to GHCR with `v`-prefixed and non-prefixed tags.
 
-4. **Given** semver tag validation
-   **When** tag is parsed
-   **Then** major version is extracted correctly (v1.2.3 -> v1)
-   **And** major tag points to latest patch release
+4. **Given** a successful Docker image publish, **When** `update-major-tag` job runs, **Then** the `v{major}` floating git tag is force-updated to point to the release SHA.
 
-5. **Given** release workflow
-   **When** permissions are set
-   **Then** contents: write is enabled for tag updates
-   **And** GitHub token is used for release creation
+5. **Given** concurrent releases, **When** triggered, **Then** concurrency group prevents race conditions (cancel-in-progress: false).
+
+6. **Given** release workflow, **When** permissions are set, **Then** `contents: write` for release-please and tag updates, `pull-requests: write` for release-please PRs, `packages: write` for Docker push (job-level).
 
 ## Tasks / Subtasks
 
@@ -42,34 +29,35 @@ So that **publishing is consistent, reliable, and follows semver**.
   - [x] Read `.knowledge-base/technical/standards/global/security.md` - Security practices
   - [x] Review existing `.github/workflows/release.yml` implementation
 
-- [x] **Task 2: Verify Trigger Configuration** (AC: 1, 2)
-  - [x] Confirm trigger on push tags matching `v[0-9]+.[0-9]+.[0-9]+`
-  - [x] Verify regex properly validates semver format
-  - [x] Confirm invalid tags are filtered out
+- [x] **Task 2: Configure Dual Triggers** (AC: 1, 2)
+  - [x] `on.push.branches: [main]` for release-please automated path
+  - [x] `on.workflow_dispatch` for manual release path
 
-- [x] **Task 3: Verify Tag Validation Job** (AC: 4)
-  - [x] Confirm validate-tag job runs first
-  - [x] Verify semver regex validation in step
-  - [x] Confirm major version extraction (e.g., v1 from v1.2.3)
-  - [x] Verify major version is passed as output
+- [x] **Task 3: Implement release-please Job** (AC: 1)
+  - [x] Conditional on `github.event_name == 'push'`
+  - [x] Uses `googleapis/release-please-action@v4` with `release-type: node`
+  - [x] Outputs: `release_created`, `tag_name`, `version`, `major`, `minor`, `patch`
+  - [x] Permissions: `contents: write`, `pull-requests: write`
 
-- [x] **Task 4: Verify Release Job** (AC: 1, 5)
-  - [x] Confirm needs: validate-tag dependency
-  - [x] Verify checkout with fetch-depth: 0 for full history
-  - [x] Verify Node.js setup with caching
-  - [x] Confirm npm ci, lint, format:check, typecheck, test:unit runs
-  - [x] Verify bundle creation
-  - [x] Confirm bundle existence check
-  - [x] Verify GitHub Release creation with auto notes
-  - [x] Confirm GITHUB_TOKEN is used
-  - [x] Verify bundle artifact is attached to release
+- [x] **Task 4: Implement resolve-version Job** (AC: 2)
+  - [x] Conditional on `github.event_name == 'workflow_dispatch'`
+  - [x] Extracts version from `package.json` using `jq`
+  - [x] Outputs match release-please interface: `release_created: 'true'`, `tag_name`, `version`, `major`, `minor`, `patch`
+  - [x] Permissions: `contents: read`
 
-- [x] **Task 5: Verify Major Tag Update** (AC: 1, 4)
-  - [x] Confirm git config for github-actions[bot]
-  - [x] Verify force tag creation: `git tag -fa "$MAJOR" -m "..."`
-  - [x] Confirm force push to origin: `git push origin "$MAJOR" --force`
+- [x] **Task 5: Implement publish-image Job** (AC: 3)
+  - [x] `needs: [release-please, resolve-version]` with `always()` condition
+  - [x] Resolves version from whichever upstream job ran
+  - [x] Docker tags: `VERSION`, `vVERSION`, `MAJOR.MINOR`, `vMAJOR.MINOR`, `MAJOR`, `vMAJOR`, `latest`, `sha-SHORT`
+  - [x] Pre-release tags skip minor/major/latest
+  - [x] Permissions: `packages: write` (job-level)
 
-- [x] **Task 6: Verify Concurrency** (AC: 3)
+- [x] **Task 6: Implement update-major-tag Job** (AC: 4)
+  - [x] Depends on `publish-image` success
+  - [x] Force-updates `v{MAJOR}` tag to release SHA
+  - [x] Permissions: `contents: write`
+
+- [x] **Task 7: Verify Concurrency** (AC: 5)
   - [x] Confirm concurrency group is set to `release`
   - [x] Verify cancel-in-progress: false
 
@@ -82,66 +70,74 @@ So that **publishing is consistent, reliable, and follows semver**.
 
 ### Architecture Requirements
 
-- Release workflow triggered by semver tags (v1.0.0 format)
-- Creates GitHub Release with auto-generated notes
-- Updates major version tag (v1) to point to latest release
+- Release workflow supports two trigger paths: automated (release-please on push to main) and manual (workflow_dispatch)
+- Both paths feed the same downstream `publish-image` and `update-major-tag` jobs via unified output interface
+- Docker images pushed to GHCR with both `v`-prefixed and non-prefixed tags
+- Major version git tag (`v{MAJOR}`) force-updated after successful Docker publish
 - Uses concurrency control to prevent race conditions
 
 ### Implementation Reference
 
 The release workflow exists at `.github/workflows/release.yml`:
 
-- Two-job structure: validate-tag and release
-- Validates semver format before creating release
-- Updates major version tag for user convenience
-- Attaches dist/index.js bundle to release
+- Four-job structure: `release-please` | `resolve-version` → `publish-image` → `update-major-tag`
+- `release-please`: automated releases via googleapis/release-please-action@v4
+- `resolve-version`: manual releases extracting version from package.json
+- `publish-image`: Docker build & push to GHCR with comprehensive tag matrix
+- `update-major-tag`: force-updates floating `v{MAJOR}` git tag
 
 ### Key Patterns
 
 ```yaml
-# Release workflow structure
 name: Release
 on:
   push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-
-permissions:
-  contents: write
+    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  validate-tag:
-    # Validate semver and extract major version
-  release:
-    needs: validate-tag
-    # Build, test, release, update major tag
+  release-please:
+    if: github.event_name == 'push'
+    # Uses googleapis/release-please-action@v4
+  resolve-version:
+    if: github.event_name == 'workflow_dispatch'
+    # Extracts version from package.json
+  publish-image:
+    needs: [release-please, resolve-version]
+    if: always() && (release_created from either job) && !failure() && !cancelled()
+    # Docker build & push with v-prefixed tags
+  update-major-tag:
+    needs: [release-please, resolve-version, publish-image]
+    # Force-updates v{MAJOR} tag
 ```
 
-### Semver Tag Pattern
+### Docker Tag Matrix
 
-```bash
-# Tag regex: v[0-9]+.[0-9]+.[0-9]+
-# Valid: v1.0.0, v2.1.3, v10.20.30
-# Invalid: vfoo, v1.2, v1.2.3.4, v1.2.3-beta
-```
+For release `v1.2.3`:
+
+- `1.2.3`, `v1.2.3` (full semver)
+- `1.2`, `v1.2` (minor, non-prerelease only)
+- `1`, `v1` (major, non-prerelease only)
+- `latest` (non-prerelease only)
+- `sha-abc1234` (commit SHA)
 
 ### Major Version Tag Update
 
 ```bash
-# For v1.2.3, update v1 tag
-git tag -fa "v1" -m "Update v1 to v1.2.3"
-git push origin "v1" --force
+RELEASE_SHA=$(git rev-list -n 1 "${TAG}" 2>/dev/null || echo "${GITHUB_SHA}")
+git tag -fa "v${MAJOR}" "${RELEASE_SHA}" -m "Update v${MAJOR} to ${TAG}"
+git push origin "v${MAJOR}" --force
 ```
 
 ### Project Structure Notes
 
 - Release workflow: `.github/workflows/release.yml`
-- Bundle output: `dist/index.js`
-- Uses softprops/action-gh-release@v2 for release creation
+- Bundle output: `dist/index.js` (built by Docker bundler stage, not committed to git)
+- Uses `googleapis/release-please-action@v4` for automated releases
 
 ### References
 
@@ -165,16 +161,22 @@ N/A - Verification task only
 - Added format:check step to release workflow (Issue #4 fix)
 - Updated to softprops/action-gh-release@v2 (Issue #10 fix)
 - Added dist/index.js as release artifact (Issue #5 fix)
+- Restructured from tag-triggered 2-job pipeline to release-please + workflow_dispatch 4-job pipeline
+- Docker image publishing integrated into release pipeline with v-prefixed tag matrix
+- Major version tag update depends on successful Docker publish
 
 ### File List
 
-- `.github/workflows/release.yml` - Release automation workflow (verified + enhanced)
+- `.github/workflows/release.yml` - Release automation workflow (completely restructured)
 
 ### Change Log
 
-| Date       | Change                                                            | Author          |
-| ---------- | ----------------------------------------------------------------- | --------------- |
-| 2026-02-05 | Code review completed, all tasks verified, status updated to done | Claude Opus 4.5 |
-| 2026-02-05 | Added format:check step before release                            | Claude Opus 4.5 |
-| 2026-02-05 | Updated action-gh-release from v1 to v2                           | Claude Opus 4.5 |
-| 2026-02-05 | Added bundle artifact to release                                  | Claude Opus 4.5 |
+| Date       | Change                                                                                      | Author            |
+| ---------- | ------------------------------------------------------------------------------------------- | ----------------- |
+| 2026-02-05 | Code review completed, all tasks verified, status updated to done                           | Claude Opus 4.5   |
+| 2026-02-05 | Added format:check step before release                                                      | Claude Opus 4.5   |
+| 2026-02-05 | Updated action-gh-release from v1 to v2                                                     | Claude Opus 4.5   |
+| 2026-02-05 | Added bundle artifact to release                                                            | Claude Opus 4.5   |
+| 2026-03-10 | Correct-course: Restructured to release-please + workflow_dispatch dual-path 4-job pipeline | Correct-course WF |
+| 2026-03-10 | Integrated Docker publish-image job with v-prefixed tag matrix                              | Correct-course WF |
+| 2026-03-10 | Added update-major-tag job dependent on successful Docker publish                           | Correct-course WF |

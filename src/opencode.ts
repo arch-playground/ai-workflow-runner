@@ -114,14 +114,37 @@ export class OpenCodeService {
     this.isInitialized = true;
     core.info('[OpenCode] Server started on localhost');
     core.debug(`[OpenCode] Server URL: ${this.server?.url ?? 'unknown'}`);
+
+    if (options?.authConfig) {
+      await this.applyAuth(options.authConfig);
+    }
+
     this.eventLoopAbortController = new AbortController();
     this.startEventLoop();
+  }
+
+  private async applyAuth(authConfigPath: string): Promise<void> {
+    const authData = await this.loadJsonFile(authConfigPath, 'auth');
+    if (!this.client) throw new Error('OpenCode client not initialized');
+
+    for (const [providerId, credentials] of Object.entries(authData)) {
+      core.info(`[OpenCode] Setting auth for provider: ${providerId}`);
+      const response = await this.client.auth.set({
+        path: { id: providerId },
+        body: credentials as Parameters<typeof this.client.auth.set>[0]['body'],
+      });
+      if (response.error) {
+        throw new Error(
+          `Failed to set auth for provider ${providerId}: ${JSON.stringify(response.error)}`
+        );
+      }
+    }
   }
 
   private async buildSdkConfig(
     options?: InitializeOptions
   ): Promise<Record<string, unknown> | undefined> {
-    if (!options?.opencodeConfig && !options?.authConfig && !options?.model) {
+    if (!options?.opencodeConfig && !options?.model) {
       return undefined;
     }
 
@@ -130,42 +153,11 @@ export class OpenCodeService {
     if (options.opencodeConfig) {
       sdkConfig = await this.loadJsonFile(options.opencodeConfig, 'config');
     }
-    if (options.authConfig) {
-      const authData = await this.loadJsonFile(options.authConfig, 'auth');
-      sdkConfig = this.mergeConfigs(sdkConfig, authData);
-    }
     if (options.model) {
       sdkConfig.model = options.model;
     }
 
     return sdkConfig;
-  }
-
-  private mergeConfigs(
-    base: Record<string, unknown>,
-    override: Record<string, unknown>
-  ): Record<string, unknown> {
-    const result = { ...base };
-    for (const key of Object.keys(override)) {
-      const baseVal = result[key];
-      const overrideVal = override[key];
-      if (
-        baseVal &&
-        overrideVal &&
-        typeof baseVal === 'object' &&
-        typeof overrideVal === 'object' &&
-        !Array.isArray(baseVal) &&
-        !Array.isArray(overrideVal)
-      ) {
-        result[key] = {
-          ...(baseVal as Record<string, unknown>),
-          ...(overrideVal as Record<string, unknown>),
-        };
-      } else {
-        result[key] = overrideVal;
-      }
-    }
-    return result;
   }
 
   private async loadJsonFile(filePath: string, label: string): Promise<Record<string, unknown>> {
