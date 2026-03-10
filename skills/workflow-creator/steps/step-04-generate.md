@@ -324,7 +324,6 @@ HALT and wait for selection.
           id: ai
           uses: [actionRef]
           with:
-            workflow_path: ''
             list_models: 'true'
             # EMIT ONLY IF authMethod is copilot-auth-json:
             auth_config: 'auth.json'

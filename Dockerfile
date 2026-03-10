@@ -1,4 +1,15 @@
-# Stage 1: Build stage - install packages and prepare environment
+# Stage 1: Bundle stage - install deps and build the application
+FROM node:20-bookworm-slim AS bundler
+
+WORKDIR /build
+
+COPY package.json package-lock.json tsconfig.json ./
+RUN npm ci
+
+COPY src/ src/
+RUN npm run bundle
+
+# Stage 2: System builder - install system packages and runtimes
 FROM debian:bookworm-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -25,7 +36,7 @@ RUN apt-get update && \
 # Install OpenCode CLI globally (required for @opencode-ai/sdk)
 RUN npm install -g opencode-ai
 
-# Stage 2: Runtime stage - minimal image with only necessary files
+# Stage 3: Runtime stage - minimal image with only necessary files
 FROM debian:bookworm-slim AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/arch-playground/ai-workflow-runner"
@@ -34,7 +45,6 @@ LABEL org.opencontainers.image.description="AI Workflow Runner - Multi-runtime G
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install runtime dependencies only (no build tools like curl, gnupg)
-# Java 21 requires ca-certificates-java for proper SSL handling
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -51,9 +61,7 @@ COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
 COPY --from=builder /usr/bin/npm /usr/bin/npm
 COPY --from=builder /usr/bin/npx /usr/bin/npx
 
-# Note: OpenCode CLI is already included in /usr/lib/node_modules/opencode-ai
-# from the builder stage, which was copied as part of /usr/lib/node_modules
-# Just need to create the symlink for the binary
+# OpenCode CLI is included in /usr/lib/node_modules from the builder stage
 RUN ln -s /usr/lib/node_modules/opencode-ai/bin/opencode /usr/local/bin/opencode
 
 # Copy Java 21 from builder stage (path varies by architecture: temurin-21-jre-arm64, temurin-21-jre-amd64)
@@ -68,16 +76,13 @@ RUN node --version && \
     java --version && \
     opencode --version
 
-# Copy application
-COPY dist/ /app/dist/
+# Copy bundled application from bundler stage
+COPY --from=bundler /build/dist/ /app/dist/
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Set working directory to where workspace will be mounted
 WORKDIR /github/workspace
-
-# Note: GitHub Actions runs Docker containers with --user matching the runner's UID,
-# so a custom USER directive is unnecessary and may cause permission issues.
 
 # Use entrypoint with signal handling
 ENTRYPOINT ["/entrypoint.sh"]

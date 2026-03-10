@@ -85,7 +85,7 @@ jobs:
 
 | Input                    | Description                                                                                                                            | Required | Default   |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------- |
-| `workflow_path`          | Path to the workflow.md file (relative to workspace root)                                                                              | Yes      | -         |
+| `workflow_path`          | Path to the workflow.md file (relative to workspace root). Required unless `list_models` is `'true'`.                                  | No       | `''`      |
 | `prompt`                 | Input prompt to pass to the workflow (max 100KB)                                                                                       | No       | `''`      |
 | `env_vars`               | JSON object of environment variables (max 64KB, 100 entries)                                                                           | No       | `'{}'`    |
 | `timeout_minutes`        | Maximum execution time in minutes                                                                                                      | No       | `30`      |
@@ -193,13 +193,12 @@ Use the `model` input to override the default model from your config file:
 
 ### Listing Available Models
 
-Set `list_models: 'true'` to print available models and exit without running a workflow. The `workflow_path` input is not validated when listing models.
+Set `list_models: 'true'` to print available models and exit without running a workflow. No `workflow_path` is needed when listing models.
 
 ```yaml
 - name: List Available Models
   uses: arch-playground/ai-workflow-runner@v1
   with:
-    workflow_path: ''
     list_models: 'true'
     auth_config: 'auth.json'
 ```

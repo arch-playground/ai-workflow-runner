@@ -4,15 +4,19 @@
 
 ### Inputs
 
-| Input                    | Type        | Required | Default | Description                                                  |
-| ------------------------ | ----------- | -------- | ------- | ------------------------------------------------------------ |
-| `workflow_path`          | string      | **Yes**  | -       | Path to the workflow.md file (relative to workspace root)    |
-| `prompt`                 | string      | No       | `''`    | Input prompt to pass to the workflow (max 100KB)             |
-| `env_vars`               | JSON string | No       | `'{}'`  | JSON object of environment variables (max 64KB, 100 entries) |
-| `timeout_minutes`        | number      | No       | `30`    | Maximum execution time in minutes (1-360)                    |
-| `validation_script`      | string      | No       | -       | Validation script path or inline code                        |
-| `validation_script_type` | string      | No       | -       | Script type: `python` or `javascript` (auto-detected)        |
-| `validation_max_retry`   | number      | No       | `5`     | Maximum validation retry attempts (1-20)                     |
+| Input                    | Type        | Required | Default   | Description                                                                                           |
+| ------------------------ | ----------- | -------- | --------- | ----------------------------------------------------------------------------------------------------- |
+| `workflow_path`          | string      | No       | `''`      | Path to the workflow.md file (relative to workspace root). Required unless `list_models` is `'true'`. |
+| `prompt`                 | string      | No       | `''`      | Input prompt to pass to the workflow (max 100KB)                                                      |
+| `env_vars`               | JSON string | No       | `'{}'`    | JSON object of environment variables (max 64KB, 100 entries)                                          |
+| `timeout_minutes`        | number      | No       | `30`      | Maximum execution time in minutes (1-360)                                                             |
+| `validation_script`      | string      | No       | -         | Validation script path or inline code                                                                 |
+| `validation_script_type` | string      | No       | -         | Script type: `python` or `javascript` (auto-detected)                                                 |
+| `validation_max_retry`   | number      | No       | `5`       | Maximum validation retry attempts (1-20)                                                              |
+| `opencode_config`        | string      | No       | `''`      | Path to OpenCode config.json (relative to workspace)                                                  |
+| `auth_config`            | string      | No       | `''`      | Path to OpenCode auth.json (relative to workspace)                                                    |
+| `model`                  | string      | No       | `''`      | Model override (e.g., `anthropic/claude-sonnet-4-5-20250929`)                                         |
+| `list_models`            | string      | No       | `'false'` | Print available models and exit without running workflow                                              |
 
 ### Outputs
 
@@ -54,7 +58,7 @@ On cancellation:
 
 | Rule         | Constraint                                                 |
 | ------------ | ---------------------------------------------------------- |
-| Required     | Yes                                                        |
+| Required     | No (required unless `list_models` is `'true'`)             |
 | Max length   | 1,024 characters                                           |
 | Format       | Relative path only                                         |
 | Restrictions | No `..`, no absolute paths, no symlinks escaping workspace |
@@ -158,7 +162,11 @@ interface ActionInputs {
   timeoutMs: number;
   validationScript?: string;
   validationScriptType?: 'python' | 'javascript';
-  validationMaxRetry: number;
+  maxValidationRetries: number;
+  opencodeConfig?: string;
+  authConfig?: string;
+  model?: string;
+  listModels: boolean;
 }
 ```
 
@@ -232,22 +240,22 @@ const INPUT_LIMITS = {
 
 ## Error Codes
 
-| Error Type        | Message Pattern                                                                         |
-| ----------------- | --------------------------------------------------------------------------------------- |
-| Missing input     | `workflow_path is required and cannot be empty`                                         |
-| Path too long     | `workflow_path exceeds maximum length of 1024`                                          |
-| Invalid path      | `Invalid workflow path: absolute paths and parent directory references are not allowed` |
-| File not found    | `Workflow file not found: {path}`                                                       |
-| Empty file        | `Workflow file is empty`                                                                |
-| Invalid JSON      | `env_vars must be a valid JSON object`                                                  |
-| Reserved var      | `env_vars cannot override reserved variable: {key}`                                     |
-| GitHub var        | `env_vars cannot override GitHub Actions variable: {key}`                               |
-| Invalid key       | `env_vars key "{key}" contains invalid characters`                                      |
-| Timeout           | `Workflow execution timed out after {ms}ms`                                             |
-| Validation failed | `Validation failed after {n} attempts. Last output: {message}`                          |
-| Script error      | `{interpreter} interpreter not found`                                                   |
-| Encoding error    | `File is not valid UTF-8: {filename}`                                                   |
-| Symlink escape    | `Invalid workflow path: symlink target escapes the workspace directory`                 |
+| Error Type        | Message Pattern                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| Missing input     | `workflow_path is required and cannot be empty` (skipped when `list_models` is `'true'`) |
+| Path too long     | `workflow_path exceeds maximum length of 1024`                                           |
+| Invalid path      | `Invalid workflow path: absolute paths and parent directory references are not allowed`  |
+| File not found    | `Workflow file not found: {path}`                                                        |
+| Empty file        | `Workflow file is empty`                                                                 |
+| Invalid JSON      | `env_vars must be a valid JSON object`                                                   |
+| Reserved var      | `env_vars cannot override reserved variable: {key}`                                      |
+| GitHub var        | `env_vars cannot override GitHub Actions variable: {key}`                                |
+| Invalid key       | `env_vars key "{key}" contains invalid characters`                                       |
+| Timeout           | `Workflow execution timed out after {ms}ms`                                              |
+| Validation failed | `Validation failed after {n} attempts. Last output: {message}`                           |
+| Script error      | `{interpreter} interpreter not found`                                                    |
+| Encoding error    | `File is not valid UTF-8: {filename}`                                                    |
+| Symlink escape    | `Invalid workflow path: symlink target escapes the workspace directory`                  |
 
 ---
 
