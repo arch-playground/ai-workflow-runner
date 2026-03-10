@@ -131,7 +131,7 @@ async function handleListModels(inputs: ActionInputs): Promise<RunnerResult> {
 
     core.info('=== Available Models ===');
     for (const model of models) {
-      core.info(`  - ${model.id}: ${model.name} (${model.provider})`);
+      core.info(`  - ${model.providerId}/${model.id}: ${model.name} (${model.provider})`);
     }
     core.info('========================');
 
