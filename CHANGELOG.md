@@ -5,6 +5,13 @@ All notable changes to AI Workflow Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1](https://github.com/arch-playground/ai-workflow-runner/compare/v1.1.0...v1.1.1) (2026-03-10)
+
+
+### Bug Fixes
+
+* **inputs:** make workflow_path optional and update validation logic ([45070aa](https://github.com/arch-playground/ai-workflow-runner/commit/45070aa5f567bfb0b545462a8c71049ebeb0dbcf))
+
 ## [1.1.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.0.0...v1.1.0) (2026-03-09)
 
 
