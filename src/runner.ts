@@ -234,6 +234,8 @@ async function runValidationLoop(
         abortSignal,
       });
 
+      core.info(`[Validation] Script output: ${validationResult.continueMessage || 'true'}`);
+
       if (validationResult.success) {
         core.info('[Validation] Success - workflow complete');
         return currentSession;
@@ -245,7 +247,9 @@ async function runValidationLoop(
         );
       }
 
-      core.info('[Validation] Retry - sending feedback to OpenCode');
+      core.info(
+        `[Validation] Retry - sending feedback to OpenCode: ${validationResult.continueMessage}`
+      );
       currentSession = await opencode.sendFollowUp(
         currentSession.sessionId,
         validationResult.continueMessage,
