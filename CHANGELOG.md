@@ -5,6 +5,15 @@ All notable changes to AI Workflow Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.1.4...v1.2.0) (2026-03-10)
+
+
+### Features
+
+* **config:** update config handling to support paths under runner temp ([5d31e47](https://github.com/arch-playground/ai-workflow-runner/commit/5d31e47fc5c3664eea37137258374bb08fdb1d89))
+* **security:** accept absolute paths under RUNNER_TEMP and translate to Docker mount ([154b2fc](https://github.com/arch-playground/ai-workflow-runner/commit/154b2fcb396d872ff7f6c80c60453de211c5543e))
+* **validation:** log validation output and retry messages for better debugging ([0031b0f](https://github.com/arch-playground/ai-workflow-runner/commit/0031b0f492fc844bec3a488f6d3cc6fa51c194da))
+
 ## [1.1.4](https://github.com/arch-playground/ai-workflow-runner/compare/v1.1.3...v1.1.4) (2026-03-10)
 
 
