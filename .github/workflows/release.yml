@@ -59,8 +59,11 @@ jobs:
           images: ghcr.io/arch-playground/ai-workflow-runner
           tags: |
             type=raw,value=${{ needs.release-please.outputs.version }}
+            type=raw,value=v${{ needs.release-please.outputs.version }}
             type=raw,value=${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }},enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
+            type=raw,value=v${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }},enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
             type=raw,value=${{ needs.release-please.outputs.major }},enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
+            type=raw,value=v${{ needs.release-please.outputs.major }},enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
             type=raw,value=latest,enable=${{ !contains(needs.release-please.outputs.tag_name, '-') }}
             type=sha,prefix=sha-,format=short
 
