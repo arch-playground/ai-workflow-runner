@@ -220,10 +220,14 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
 
-      - name: Print models
-        run: |
-          echo "Status: ${{ steps.ai.outputs.status }}"
-          echo "Result: ${{ steps.ai.outputs.result }}"
+      - name: Save model list
+        run: echo '${{ steps.ai.outputs.result }}' > models.json
+
+      - name: Upload model list
+        uses: actions/upload-artifact@v4
+        with:
+          name: available-models
+          path: models.json
 ```
 
 ---
