@@ -202,9 +202,19 @@ describe('OpenCodeService', () => {
       expect(result).toHaveLength(3);
       expect(result).toEqual(
         expect.arrayContaining([
-          { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },
-          { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', provider: 'Anthropic' },
-          { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
+          {
+            id: 'claude-3-opus',
+            name: 'Claude 3 Opus',
+            provider: 'Anthropic',
+            providerId: 'anthropic',
+          },
+          {
+            id: 'claude-3-sonnet',
+            name: 'Claude 3 Sonnet',
+            provider: 'Anthropic',
+            providerId: 'anthropic',
+          },
+          { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI', providerId: 'openai' },
         ])
       );
     });

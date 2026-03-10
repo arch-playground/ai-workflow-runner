@@ -465,7 +465,7 @@ describe('runner', () => {
       it('7.4-UNIT-001: with listModels true does NOT call validateWorkflowFile or runSession', async () => {
         // Arrange
         mockOpenCodeService.listModels.mockResolvedValue([
-          { id: 'model-1', name: 'Model One', provider: 'Provider' },
+          { id: 'model-1', name: 'Model One', provider: 'Provider', providerId: 'provider' },
         ]);
 
         const inputs = createValidInputs({ listModels: true });
@@ -482,8 +482,13 @@ describe('runner', () => {
       it('7.4-UNIT-003: prints models in exact format with header, model lines, and footer', async () => {
         // Arrange
         mockOpenCodeService.listModels.mockResolvedValue([
-          { id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' },
-          { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI' },
+          {
+            id: 'claude-3-opus',
+            name: 'Claude 3 Opus',
+            provider: 'Anthropic',
+            providerId: 'anthropic',
+          },
+          { id: 'gpt-4', name: 'GPT-4', provider: 'OpenAI', providerId: 'openai' },
         ]);
 
         const inputs = createValidInputs({ listModels: true });
@@ -493,14 +498,23 @@ describe('runner', () => {
 
         // Assert
         expect(core.info).toHaveBeenCalledWith('=== Available Models ===');
-        expect(core.info).toHaveBeenCalledWith('  - claude-3-opus: Claude 3 Opus (Anthropic)');
-        expect(core.info).toHaveBeenCalledWith('  - gpt-4: GPT-4 (OpenAI)');
+        expect(core.info).toHaveBeenCalledWith(
+          '  - anthropic/claude-3-opus: Claude 3 Opus (Anthropic)'
+        );
+        expect(core.info).toHaveBeenCalledWith('  - openai/gpt-4: GPT-4 (OpenAI)');
         expect(core.info).toHaveBeenCalledWith('========================');
       });
 
       it('7.4-UNIT-004: returns success with models JSON', async () => {
         // Arrange
-        const models = [{ id: 'claude-3-opus', name: 'Claude 3 Opus', provider: 'Anthropic' }];
+        const models = [
+          {
+            id: 'claude-3-opus',
+            name: 'Claude 3 Opus',
+            provider: 'Anthropic',
+            providerId: 'anthropic',
+          },
+        ];
         mockOpenCodeService.listModels.mockResolvedValue(models);
 
         const inputs = createValidInputs({ listModels: true });
