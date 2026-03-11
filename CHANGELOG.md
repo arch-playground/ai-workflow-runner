@@ -5,6 +5,14 @@ All notable changes to AI Workflow Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.2.0...v1.3.0) (2026-03-11)
+
+
+### Features
+
+* **logging:** implement tool call logger factory pattern ([72d9847](https://github.com/arch-playground/ai-workflow-runner/commit/72d9847f7192b48a6be30715272ff4848fecc4c5))
+* **logging:** implement tool call logger factory pattern ([a3397e9](https://github.com/arch-playground/ai-workflow-runner/commit/a3397e96f5b3aadff32a8f83c716a38cdfe24b42))
+
 ## [1.2.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.1.4...v1.2.0) (2026-03-10)
 
 
