@@ -5,6 +5,14 @@ All notable changes to AI Workflow Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.3.0...v1.4.0) (2026-03-11)
+
+
+### Features
+
+* **opencode:** implement heartbeat detection for event stream reconnection ([8d0596b](https://github.com/arch-playground/ai-workflow-runner/commit/8d0596b17ad3a5dbf75bc37b1f993d050dedd0c3))
+* **tool-loggers:** implement debug logging for edit, glob, grep, read, write, and todowrite tools ([c3a13c8](https://github.com/arch-playground/ai-workflow-runner/commit/c3a13c86b6ce7136af9a970d1b67458fa4da6756))
+
 ## [1.3.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.2.0...v1.3.0) (2026-03-11)
 
 
