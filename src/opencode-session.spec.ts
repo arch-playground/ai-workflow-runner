@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import { OpenCodeService, resetOpenCodeService } from './opencode';
 import { resetToolLoggerFactory } from './tool-loggers/index';
+import { getDebugLogWriter, resetDebugLogWriter, initDebugLogWriter } from './debug-log-writer';
 import {
   MockClient,
   MockServer,
@@ -355,7 +356,11 @@ describe('OpenCodeService - session & messages', () => {
       });
 
       await flushMicrotasks();
-      expect(mockCore.info).toHaveBeenCalledWith('[OpenCode] Tool: read - running - ./config.json');
+      expect(mockCore.info).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^\[\d{4}-\d{2}-\d{2}T[^\]]+Z\] \[OpenCode\] Tool: read - running - \.\/config\.json$/
+        )
+      );
 
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
       await sessionPromise;
@@ -386,7 +391,9 @@ describe('OpenCodeService - session & messages', () => {
 
       await flushMicrotasks();
       expect(mockCore.warning).toHaveBeenCalledWith(
-        '[OpenCode] Tool: read - error - ./missing.ts - File not found'
+        expect.stringMatching(
+          /^\[\d{4}-\d{2}-\d{2}T[^\]]+Z\] \[OpenCode\] Tool: read - error - \.\/missing\.ts - File not found$/
+        )
       );
 
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
@@ -416,7 +423,9 @@ describe('OpenCodeService - session & messages', () => {
       });
 
       await flushMicrotasks();
-      expect(mockCore.debug).toHaveBeenCalledWith('[OpenCode] Tool: bash - pending');
+      expect(mockCore.debug).toHaveBeenCalledWith(
+        expect.stringMatching(/^\[\d{4}-\d{2}-\d{2}T[^\]]+Z\] \[OpenCode\] Tool: bash - pending$/)
+      );
       expect(mockCore.info).not.toHaveBeenCalledWith(
         expect.stringContaining('Tool: bash - pending')
       );
@@ -436,8 +445,257 @@ describe('OpenCodeService - session & messages', () => {
       await sessionPromise;
 
       expect(mockCore.info).toHaveBeenCalledWith(
-        expect.stringMatching(/\[OpenCode\] Session started at \d{4}-\d{2}-\d{2}T/)
+        expect.stringMatching(/^\[\d{4}-\d{2}-\d{2}T.+Z\] \[OpenCode\] Session started$/)
       );
+    });
+  });
+
+  describe('debug log integration', () => {
+    let mockDebugWriter: jest.Mocked<ReturnType<typeof getDebugLogWriter>>;
+
+    beforeEach(() => {
+      resetDebugLogWriter();
+    });
+
+    afterEach(() => {
+      resetToolLoggerFactory();
+      resetDebugLogWriter();
+    });
+
+    it('calls writeToolEvent for completed tool state', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const writeToolEventSpy = jest.fn();
+      const writer = getDebugLogWriter();
+      writer.writeToolEvent = writeToolEventSpy;
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'bash',
+            state: {
+              status: 'completed',
+              input: { command: 'ls' },
+              output: 'file.txt',
+              title: '',
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        },
+      });
+      await flushMicrotasks();
+
+      expect(writeToolEventSpy).toHaveBeenCalledWith(expect.stringContaining('Tool: bash'));
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('calls writeToolEvent for error tool state', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const writeToolEventSpy = jest.fn();
+      const writer = getDebugLogWriter();
+      writer.writeToolEvent = writeToolEventSpy;
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'read',
+            state: {
+              status: 'error',
+              input: { filePath: './missing.ts' },
+              error: 'File not found',
+              time: { start: 0, end: 1 },
+            },
+          },
+        },
+      });
+      await flushMicrotasks();
+
+      expect(writeToolEventSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error: File not found')
+      );
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('does not call writeToolEvent for pending state', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const writeToolEventSpy = jest.fn();
+      const writer = getDebugLogWriter();
+      writer.writeToolEvent = writeToolEventSpy;
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'bash',
+            state: { status: 'pending', input: { command: 'ls' }, raw: '' },
+          },
+        },
+      });
+      await flushMicrotasks();
+
+      expect(writeToolEventSpy).not.toHaveBeenCalled();
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('calls writeToolEvent for running state', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const writeToolEventSpy = jest.fn();
+      const writer = getDebugLogWriter();
+      writer.writeToolEvent = writeToolEventSpy;
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'bash',
+            state: { status: 'running', input: { command: 'ls' }, time: { start: 0 } },
+          },
+        },
+      });
+      await flushMicrotasks();
+
+      expect(writeToolEventSpy).toHaveBeenCalledWith(expect.stringContaining('$ ls'));
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('calls writeCompleteMessage at session finalization', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const writeCompleteMessageSpy = jest.fn();
+      const writer = getDebugLogWriter();
+      writer.writeCompleteMessage = writeCompleteMessageSpy;
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.updated',
+        properties: { info: { id: 'msg-1', role: 'assistant', sessionID: 'session-123' } },
+      });
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'text',
+            text: 'Hello World!',
+            messageID: 'msg-1',
+            sessionID: 'session-123',
+          },
+        },
+      });
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+
+      await sessionPromise;
+
+      expect(writeCompleteMessageSpy).toHaveBeenCalledWith('Hello World!');
+    });
+
+    it('calls writeSessionEvent for session idle', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const writeSessionEventSpy = jest.fn();
+      const writer = getDebugLogWriter();
+      writer.writeSessionEvent = writeSessionEventSpy;
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+
+      expect(writeSessionEventSpy).toHaveBeenCalledWith('Session idle');
+    });
+
+    it('calls writeSessionEvent for session error', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const writeSessionEventSpy = jest.fn();
+      const writer = getDebugLogWriter();
+      writer.writeSessionEvent = writeSessionEventSpy;
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'session.status',
+        properties: {
+          sessionID: 'session-123',
+          status: { type: 'error', error: 'Connection lost' },
+        },
+      });
+
+      await expect(sessionPromise).rejects.toThrow('Session error: Connection lost');
+      expect(writeSessionEventSpy).toHaveBeenCalledWith('Error: Connection lost');
+    });
+
+    it('NoOpDebugLogWriter does not cause errors when debug is disabled', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'bash',
+            state: {
+              status: 'completed',
+              input: { command: 'ls' },
+              output: 'file.txt',
+              title: '',
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        },
+      });
+      await flushMicrotasks();
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      const result = await sessionPromise;
+
+      // Assert
+      expect(result).toBeDefined();
     });
   });
 });

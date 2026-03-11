@@ -47,6 +47,14 @@ inputs:
     description: 'If "true", print available models and exit without running workflow'
     required: false
     default: 'false'
+  debug_log:
+    description: 'Enable verbose debug logging to file. Also activated by ACTIONS_STEP_DEBUG=true or RUNNER_DEBUG=1.'
+    required: false
+    default: 'false'
+  debug_log_path:
+    description: 'Path for debug log file. Defaults to $RUNNER_TEMP/opencode-debug.log. Accepts workspace-relative or absolute paths under RUNNER_TEMP/tmp.'
+    required: false
+    default: ''
 
 outputs:
   status:

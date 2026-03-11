@@ -26,6 +26,7 @@ export interface EventControl {
   generator: AsyncGenerator<unknown, void, unknown>;
   emit: (event: unknown) => void;
   stop: () => void;
+  hang: () => void;
 }
 
 export function createEventGenerator(): EventControl {
@@ -69,6 +70,9 @@ export function createEventGenerator(): EventControl {
       if (pendingResolve) {
         pendingResolve({ value: undefined, done: true });
       }
+    },
+    hang: (): void => {
+      done = true;
     },
   };
 }

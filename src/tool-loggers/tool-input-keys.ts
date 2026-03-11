@@ -14,6 +14,8 @@ export const TOOL_INPUT_KEYS = {
   NEW_STRING: 'newString',
   OFFSET: 'offset',
   LIMIT: 'limit',
+  TODOS: 'todos',
+  CONTENT: 'content',
 } as const;
 
 /**

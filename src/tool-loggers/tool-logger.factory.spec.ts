@@ -6,6 +6,7 @@ function makeLogger(name: string): IToolLogger {
   return {
     support: () => name,
     formatLog: (_tool: string, _state: ToolState) => `${name}-log`,
+    formatDebugLog: (_tool: string, _state: ToolState) => `${name}-debug`,
   };
 }
 
