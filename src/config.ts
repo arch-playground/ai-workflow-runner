@@ -1,4 +1,6 @@
 import * as core from '@actions/core';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   ActionInputs,
   ValidationResult,
@@ -6,6 +8,8 @@ import {
   type ValidationScriptType,
 } from './types.js';
 import { maskSecrets, validateConfigPath } from './security.js';
+
+const SAFE_DEBUG_LOG_PREFIXES = ['/tmp/', '/github/runner_temp/'];
 
 const RESERVED_ENV_VARS = new Set([
   'PATH',
@@ -113,6 +117,39 @@ function parseValidationMaxRetry(maxValidationRetriesRaw: string): number {
   return maxValidationRetries;
 }
 
+export function validateDebugLogPath(workspacePath: string, debugLogPath: string): string {
+  if (path.isAbsolute(debugLogPath)) {
+    const normalized = path.normalize(debugLogPath);
+    const parentDir = path.dirname(normalized);
+    const safePrefixes = [...SAFE_DEBUG_LOG_PREFIXES];
+    const runnerTemp = process.env.RUNNER_TEMP;
+    if (runnerTemp) {
+      safePrefixes.push(path.normalize(runnerTemp) + path.sep);
+    }
+
+    const parentWithSep = parentDir + path.sep;
+    const isSafe = safePrefixes.some(
+      (prefix) => parentWithSep.startsWith(prefix) || parentDir === prefix.slice(0, -1)
+    );
+    if (!isSafe) {
+      throw new Error(
+        `Invalid debug_log_path: absolute paths are only allowed under RUNNER_TEMP, /tmp, or /github/runner_temp`
+      );
+    }
+
+    fs.mkdirSync(parentDir, { recursive: true });
+    return normalized;
+  }
+
+  const resolved = path.resolve(workspacePath, path.normalize(debugLogPath));
+  if (!resolved.startsWith(workspacePath + path.sep) && resolved !== workspacePath) {
+    throw new Error('Invalid debug_log_path: path escapes the workspace directory');
+  }
+
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  return resolved;
+}
+
 export function getInputs(): ActionInputs {
   const workflowPath = core.getInput('workflow_path') || '';
   const prompt = core.getInput('prompt') || '';
@@ -158,6 +195,21 @@ export function getInputs(): ActionInputs {
     : undefined;
   const authConfig = authConfigRaw ? validateConfigPath(workspacePath, authConfigRaw) : undefined;
 
+  const debugLogInput = core.getInput('debug_log').trim().toLowerCase() === 'true';
+  const actionsStepDebug = process.env.ACTIONS_STEP_DEBUG === 'true';
+  const runnerDebug = process.env.RUNNER_DEBUG === '1';
+  const debugLog = debugLogInput || actionsStepDebug || runnerDebug;
+
+  let debugLogPath = '';
+  if (debugLog) {
+    const debugLogPathRaw = core.getInput('debug_log_path') || '';
+    if (debugLogPathRaw) {
+      debugLogPath = validateDebugLogPath(workspacePath, debugLogPathRaw);
+    } else {
+      debugLogPath = path.join(process.env.RUNNER_TEMP || '/tmp', 'opencode-debug.log');
+    }
+  }
+
   return {
     workflowPath,
     prompt,
@@ -170,6 +222,8 @@ export function getInputs(): ActionInputs {
     authConfig,
     model,
     listModels,
+    debugLog,
+    debugLogPath,
   };
 }
 

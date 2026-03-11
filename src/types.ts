@@ -10,6 +10,8 @@ export interface ActionInputs {
   authConfig?: string;
   model?: string;
   listModels: boolean;
+  debugLog: boolean;
+  debugLogPath: string;
 }
 
 export interface OpenCodeSession {
@@ -60,6 +62,7 @@ export const INPUT_LIMITS = {
   SHUTDOWN_TIMEOUT_MS: 10_000, // 10 seconds for graceful shutdown
   SIGKILL_GRACE_PERIOD_MS: 5_000, // 5 seconds to wait before SIGKILL
   MAX_STDERR_SIZE: 10_000, // 10KB for stderr capture
+  EVENT_STREAM_HEARTBEAT_MS: 90_000, // Must exceed LLM inference pause (~60s)
 } as const;
 
 export type ShutdownSignal = 'SIGTERM' | 'SIGINT';

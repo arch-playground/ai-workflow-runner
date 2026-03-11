@@ -38,4 +38,25 @@ export class GlobToolLogger implements IToolLogger {
       }
     }
   }
+
+  formatDebugLog(tool: string, state: ToolState): string {
+    switch (state.status) {
+      case 'pending':
+        return '';
+      case 'running': {
+        const pattern = extractStringInput(state.input, TOOL_INPUT_KEYS.PATTERN);
+        return `Tool: glob\nPattern: ${pattern}`;
+      }
+      case 'completed': {
+        const pattern = extractStringInput(state.input, TOOL_INPUT_KEYS.PATTERN);
+        return `Tool: glob\nPattern: ${pattern}\n${state.output}`;
+      }
+      case 'error': {
+        const pattern = extractStringInput(state.input, TOOL_INPUT_KEYS.PATTERN);
+        return `Tool: glob\nPattern: ${pattern}\nError: ${state.error}`;
+      }
+      default:
+        return '';
+    }
+  }
 }

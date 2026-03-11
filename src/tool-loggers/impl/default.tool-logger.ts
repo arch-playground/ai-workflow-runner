@@ -27,4 +27,19 @@ export class DefaultToolLogger implements IToolLogger {
       }
     }
   }
+
+  formatDebugLog(tool: string, state: ToolState): string {
+    switch (state.status) {
+      case 'pending':
+        return '';
+      case 'running':
+        return `Tool: ${tool}\nInput:\n${JSON.stringify(state.input, null, 2)}`;
+      case 'completed':
+        return `Tool: ${tool}\nInput:\n${JSON.stringify(state.input, null, 2)}\nOutput:\n${state.output}`;
+      case 'error':
+        return `Tool: ${tool}\nInput:\n${JSON.stringify(state.input, null, 2)}\nError:\n${state.error}`;
+      default:
+        return '';
+    }
+  }
 }

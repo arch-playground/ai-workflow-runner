@@ -148,4 +148,95 @@ describe('GrepToolLogger', () => {
       expect(result).toContain('...');
     });
   });
+
+  describe('formatDebugLog', () => {
+    it('returns empty string for pending state', () => {
+      // Arrange
+      const state = { status: 'pending' as const, input: {}, raw: '' };
+
+      // Act & Assert
+      expect(target.formatDebugLog('grep', state)).toBe('');
+    });
+
+    it('returns pattern and include for running state', () => {
+      // Arrange
+      const state = {
+        status: 'running' as const,
+        input: { pattern: 'import', include: '*.ts' },
+        time: { start: 0 },
+      };
+
+      // Act & Assert
+      expect(target.formatDebugLog('grep', state)).toBe(
+        'Tool: grep\nPattern: import\nInclude: *.ts'
+      );
+    });
+
+    it('shows "all files" for running state without include', () => {
+      // Arrange
+      const state = {
+        status: 'running' as const,
+        input: { pattern: 'import' },
+        time: { start: 0 },
+      };
+
+      // Act & Assert
+      expect(target.formatDebugLog('grep', state)).toBe(
+        'Tool: grep\nPattern: import\nInclude: all files'
+      );
+    });
+
+    it('returns pattern, include filter, and full output for completed state', () => {
+      // Arrange
+      const output = 'src/foo.ts:1:import { bar }\nsrc/baz.ts:5:import { qux }';
+      const state = {
+        status: 'completed' as const,
+        input: { pattern: 'import', include: '*.ts' },
+        output,
+        title: '',
+        metadata: {},
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('grep', state);
+
+      // Assert
+      expect(result).toBe(`Tool: grep\nPattern: import\nInclude: *.ts\n${output}`);
+    });
+
+    it('shows "all files" when include is absent', () => {
+      // Arrange
+      const state = {
+        status: 'completed' as const,
+        input: { pattern: 'foo' },
+        output: 'match',
+        title: '',
+        metadata: {},
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('grep', state);
+
+      // Assert
+      expect(result).toContain('Include: all files');
+    });
+
+    it('returns full error for error state', () => {
+      // Arrange
+      const state = {
+        status: 'error' as const,
+        input: { pattern: 'bad[regex' },
+        error: 'Invalid regex pattern',
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('grep', state);
+
+      // Assert
+      expect(result).toBe('Tool: grep\nPattern: bad[regex\nError: Invalid regex pattern');
+    });
+  });
 });

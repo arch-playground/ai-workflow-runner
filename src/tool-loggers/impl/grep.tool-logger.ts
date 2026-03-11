@@ -40,4 +40,27 @@ export class GrepToolLogger implements IToolLogger {
       }
     }
   }
+
+  formatDebugLog(tool: string, state: ToolState): string {
+    switch (state.status) {
+      case 'pending':
+        return '';
+      case 'running': {
+        const pattern = extractStringInput(state.input, TOOL_INPUT_KEYS.PATTERN);
+        const include = extractStringInput(state.input, TOOL_INPUT_KEYS.INCLUDE) || 'all files';
+        return `Tool: grep\nPattern: ${pattern}\nInclude: ${include}`;
+      }
+      case 'completed': {
+        const pattern = extractStringInput(state.input, TOOL_INPUT_KEYS.PATTERN);
+        const include = extractStringInput(state.input, TOOL_INPUT_KEYS.INCLUDE) || 'all files';
+        return `Tool: grep\nPattern: ${pattern}\nInclude: ${include}\n${state.output}`;
+      }
+      case 'error': {
+        const pattern = extractStringInput(state.input, TOOL_INPUT_KEYS.PATTERN);
+        return `Tool: grep\nPattern: ${pattern}\nError: ${state.error}`;
+      }
+      default:
+        return '';
+    }
+  }
 }

@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import * as fs from 'fs';
 import { createOpencode } from '@opencode-ai/sdk';
 import { OpenCodeService, resetOpenCodeService } from './opencode';
+import { INPUT_LIMITS } from './types';
 import {
   MockClient,
   MockServer,
@@ -98,6 +99,171 @@ describe('OpenCodeService - config & reconnection', () => {
 
       expect(mockCore.warning).toHaveBeenCalledWith(expect.stringContaining('Event loop error'));
     }, 10000);
+  });
+
+  describe('event stream heartbeat', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('triggers reconnection when no events received within heartbeat interval', async () => {
+      // Arrange
+      const hangControl = createEventGenerator();
+      const resumeControl = createEventGenerator();
+
+      mockClient.event.subscribe
+        .mockImplementationOnce(() => Promise.resolve({ stream: hangControl.generator }))
+        .mockImplementationOnce(() => Promise.resolve({ stream: resumeControl.generator }));
+
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      // Act
+      hangControl.hang();
+      await jest.advanceTimersByTimeAsync(INPUT_LIMITS.EVENT_STREAM_HEARTBEAT_MS + 10);
+      await jest.advanceTimersByTimeAsync(10);
+      await jest.advanceTimersByTimeAsync(1100);
+      await jest.advanceTimersByTimeAsync(10);
+
+      // Assert
+      expect(mockCore.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Event stream heartbeat timeout')
+      );
+      expect(mockClient.event.subscribe).toHaveBeenCalledTimes(2);
+
+      resumeControl.stop();
+      target.dispose();
+    });
+
+    it('does not trigger reconnection when events keep flowing within heartbeat interval', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      // Act: emit events at intervals shorter than heartbeat, advance past total that would exceed one heartbeat
+      eventControl.emit({ type: 'message.updated', properties: {} });
+      await jest.advanceTimersByTimeAsync(10);
+
+      eventControl.emit({ type: 'message.updated', properties: {} });
+      await jest.advanceTimersByTimeAsync(INPUT_LIMITS.EVENT_STREAM_HEARTBEAT_MS - 100);
+
+      eventControl.emit({ type: 'message.updated', properties: {} });
+      await jest.advanceTimersByTimeAsync(10);
+
+      // Assert: no heartbeat warning triggered
+      expect(mockCore.warning).not.toHaveBeenCalledWith(
+        expect.stringContaining('Event stream heartbeat timeout')
+      );
+      expect(mockClient.event.subscribe).toHaveBeenCalledTimes(1);
+
+      eventControl.stop();
+      target.dispose();
+    });
+
+    it('clears heartbeat timer and stops reconnection on dispose', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+      await jest.advanceTimersByTimeAsync(10);
+
+      // Act
+      target.dispose();
+      await jest.advanceTimersByTimeAsync(INPUT_LIMITS.EVENT_STREAM_HEARTBEAT_MS + 10);
+
+      // Assert
+      expect(mockCore.warning).not.toHaveBeenCalledWith(
+        expect.stringContaining('Event stream heartbeat timeout')
+      );
+      expect(mockClient.event.subscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-establishes event flow after heartbeat-triggered reconnection', async () => {
+      // Arrange
+      const hangControl = createEventGenerator();
+      const reconnectControl = createEventGenerator();
+
+      mockClient.event.subscribe
+        .mockImplementationOnce(() => Promise.resolve({ stream: hangControl.generator }))
+        .mockImplementationOnce(() => Promise.resolve({ stream: reconnectControl.generator }));
+
+      mockClient.session.create.mockResolvedValue({ data: { id: 'session-reconnect' } });
+      mockClient.session.promptAsync.mockResolvedValue({ data: {} });
+
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      // Start a session so we can verify idle detection works after reconnect
+      let sessionResolved = false;
+      void target.runSession('test prompt', 600_000).then((result) => {
+        sessionResolved = true;
+        return result;
+      });
+      await jest.advanceTimersByTimeAsync(10);
+
+      // Act: stream hangs, triggering heartbeat reconnection
+      hangControl.hang();
+      await jest.advanceTimersByTimeAsync(INPUT_LIMITS.EVENT_STREAM_HEARTBEAT_MS + 10);
+
+      // Allow reconnect delay (1000ms) + microtasks
+      await jest.advanceTimersByTimeAsync(10);
+      await jest.advanceTimersByTimeAsync(1100);
+      await jest.advanceTimersByTimeAsync(10);
+
+      // Emit session.idle on the reconnected stream — this should resolve the session
+      reconnectControl.emit({
+        type: 'session.idle',
+        properties: { sessionID: 'session-reconnect', status: { type: 'idle' } },
+      });
+      await jest.advanceTimersByTimeAsync(10);
+
+      // Assert: reconnection occurred AND session idle detection worked
+      expect(mockCore.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Event stream heartbeat timeout')
+      );
+      expect(mockClient.event.subscribe).toHaveBeenCalledTimes(2);
+      expect(sessionResolved).toBe(true);
+
+      reconnectControl.stop();
+      target.dispose();
+    });
+
+    it('keeps retrying on heartbeat timeouts without exhausting reconnection attempts', async () => {
+      // Arrange — 4 consecutive hanging streams (more than maxReconnectAttempts=3)
+      const hangControls = Array.from({ length: 4 }, () => createEventGenerator());
+      const finalControl = createEventGenerator();
+
+      const subscribeMock = mockClient.event.subscribe;
+      for (const ctrl of hangControls) {
+        subscribeMock.mockImplementationOnce(() => Promise.resolve({ stream: ctrl.generator }));
+      }
+      subscribeMock.mockImplementationOnce(() =>
+        Promise.resolve({ stream: finalControl.generator })
+      );
+
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      // Act: hang and reconnect 4 times (exceeds maxReconnectAttempts=3)
+      for (const ctrl of hangControls) {
+        ctrl.hang();
+        await jest.advanceTimersByTimeAsync(INPUT_LIMITS.EVENT_STREAM_HEARTBEAT_MS + 10);
+        await jest.advanceTimersByTimeAsync(1100);
+        await jest.advanceTimersByTimeAsync(10);
+      }
+
+      // Assert: no failure — heartbeat retries are unlimited
+      expect(mockCore.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('Event loop failed after max reconnection attempts')
+      );
+      expect(subscribeMock).toHaveBeenCalledTimes(5);
+
+      finalControl.stop();
+      target.dispose();
+    }, 15000);
   });
 
   describe('config loading', () => {

@@ -118,4 +118,61 @@ describe('GlobToolLogger', () => {
       expect(result).toContain('...');
     });
   });
+
+  describe('formatDebugLog', () => {
+    it('returns empty string for pending state', () => {
+      // Arrange
+      const state = { status: 'pending' as const, input: {}, raw: '' };
+
+      // Act & Assert
+      expect(target.formatDebugLog('glob', state)).toBe('');
+    });
+
+    it('returns pattern for running state', () => {
+      // Arrange
+      const state = {
+        status: 'running' as const,
+        input: { pattern: '**/*.ts' },
+        time: { start: 0 },
+      };
+
+      // Act & Assert
+      expect(target.formatDebugLog('glob', state)).toBe('Tool: glob\nPattern: **/*.ts');
+    });
+
+    it('returns pattern and full file listing for completed state', () => {
+      // Arrange
+      const output = 'src/foo.ts\nsrc/bar.ts\nsrc/baz.ts';
+      const state = {
+        status: 'completed' as const,
+        input: { pattern: '**/*.ts' },
+        output,
+        title: '',
+        metadata: {},
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('glob', state);
+
+      // Assert
+      expect(result).toBe(`Tool: glob\nPattern: **/*.ts\n${output}`);
+    });
+
+    it('returns full error for error state', () => {
+      // Arrange
+      const state = {
+        status: 'error' as const,
+        input: { pattern: '**/*.ts' },
+        error: 'Pattern invalid',
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('glob', state);
+
+      // Assert
+      expect(result).toBe('Tool: glob\nPattern: **/*.ts\nError: Pattern invalid');
+    });
+  });
 });

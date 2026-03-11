@@ -10,6 +10,7 @@ import {
 } from './security.js';
 import { getOpenCodeService, OpenCodeService } from './opencode.js';
 import { executeValidationScript } from './validation.js';
+import { initDebugLogWriter } from './debug-log-writer.js';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 
@@ -62,6 +63,12 @@ export async function runWorkflow(
   core.info(`Environment variables: ${Object.keys(inputs.envVars).length} entries`);
 
   const opencode = getOpenCodeService();
+
+  if (inputs.debugLog) {
+    initDebugLogWriter(inputs.debugLogPath);
+    core.info(`[OpenCode] Debug logging enabled: ${inputs.debugLogPath}`);
+  }
+
   let session: OpenCodeSession;
 
   try {

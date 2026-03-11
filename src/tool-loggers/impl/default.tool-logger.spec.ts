@@ -142,6 +142,17 @@ describe('DefaultToolLogger', () => {
       expect(result).not.toContain('[OpenCode]');
     });
 
+    it('handles unknown status', () => {
+      // Arrange
+      const state = { status: 'unknown', input: {} } as never;
+
+      // Act
+      const result = target.formatLog('mytool', state);
+
+      // Assert
+      expect(result).toBe('Tool: mytool - unknown');
+    });
+
     it('output is never empty string', () => {
       // Arrange
       const states = [
@@ -167,6 +178,90 @@ describe('DefaultToolLogger', () => {
       for (const state of states) {
         expect(target.formatLog('mytool', state)).not.toBe('');
       }
+    });
+  });
+
+  describe('formatDebugLog', () => {
+    it('returns empty string for pending state', () => {
+      // Arrange
+      const state = { status: 'pending' as const, input: {}, raw: '' };
+
+      // Act
+      const result = target.formatDebugLog('mytool', state);
+
+      // Assert
+      expect(result).toBe('');
+    });
+
+    it('returns JSON input for running state', () => {
+      // Arrange
+      const state = {
+        status: 'running' as const,
+        input: { key: 'value' },
+        time: { start: 0 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('mytool', state);
+
+      // Assert
+      expect(result).toBe('Tool: mytool\nInput:\n{\n  "key": "value"\n}');
+    });
+
+    it('returns formatted JSON input and full output for completed state', () => {
+      // Arrange
+      const state = {
+        status: 'completed' as const,
+        input: { key: 'value', nested: { a: 1 } },
+        output: 'full output content\nline 2',
+        title: '',
+        metadata: {},
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('mytool', state);
+
+      // Assert
+      expect(result).toBe(
+        'Tool: mytool\nInput:\n{\n  "key": "value",\n  "nested": {\n    "a": 1\n  }\n}\nOutput:\nfull output content\nline 2'
+      );
+    });
+
+    it('returns formatted JSON input and full error for error state', () => {
+      // Arrange
+      const state = {
+        status: 'error' as const,
+        input: { command: 'test' },
+        error: 'full error message without truncation',
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('mytool', state);
+
+      // Assert
+      expect(result).toBe(
+        'Tool: mytool\nInput:\n{\n  "command": "test"\n}\nError:\nfull error message without truncation'
+      );
+    });
+
+    it('output never includes [OpenCode] prefix', () => {
+      // Arrange
+      const state = {
+        status: 'completed' as const,
+        input: {},
+        output: 'test',
+        title: '',
+        metadata: {},
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('mytool', state);
+
+      // Assert
+      expect(result).not.toContain('[OpenCode]');
     });
   });
 });
