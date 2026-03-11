@@ -80,6 +80,7 @@ export class OpenCodeService {
   private eventLoopAbortController: AbortController | null = null;
   private sessionCompletionCallbacks: Map<string, SessionCallbacks> = new Map();
   private sessionMessageState: Map<string, SessionMessageState> = new Map();
+  private heartbeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   async initialize(options?: InitializeOptions): Promise<void> {
     if (this.initializationError) {
@@ -303,6 +304,8 @@ export class OpenCodeService {
     }
     this.sessionCompletionCallbacks.clear();
 
+    this.clearHeartbeatTimer();
+
     const eventController = this.eventLoopAbortController;
     const server = this.server;
 
@@ -321,6 +324,13 @@ export class OpenCodeService {
     }
   }
 
+  private clearHeartbeatTimer(): void {
+    if (this.heartbeatTimeoutId) {
+      clearTimeout(this.heartbeatTimeoutId);
+      this.heartbeatTimeoutId = null;
+    }
+  }
+
   private startEventLoop(): void {
     if (!this.client) return;
     const client = this.client;
@@ -328,25 +338,63 @@ export class OpenCodeService {
     const maxReconnectAttempts = 3;
     const reconnectDelayMs = 1000;
 
+    const isHeartbeatError = (error: unknown): boolean =>
+      error instanceof Error && error.message === 'Event stream heartbeat timeout';
+
+    const raceNextEventAgainstHeartbeat = async (
+      iterator: AsyncIterator<unknown>
+    ): Promise<IteratorResult<unknown>> => {
+      const heartbeatPromise = new Promise<never>((_, reject) => {
+        this.heartbeatTimeoutId = setTimeout(() => {
+          reject(new Error('Event stream heartbeat timeout'));
+        }, INPUT_LIMITS.EVENT_STREAM_HEARTBEAT_MS);
+      });
+
+      try {
+        return (await Promise.race([iterator.next(), heartbeatPromise])) as IteratorResult<
+          unknown,
+          void
+        >;
+      } catch (error) {
+        core.warning(
+          `[OpenCode] Event stream heartbeat timeout - no events in ${INPUT_LIMITS.EVENT_STREAM_HEARTBEAT_MS}ms, reconnecting...`
+        );
+        void iterator.return?.(undefined);
+        throw error;
+      } finally {
+        this.clearHeartbeatTimer();
+      }
+    };
+
+    const consumeEventStream = async (iterator: AsyncIterator<unknown>): Promise<void> => {
+      while (!signal?.aborted) {
+        const result = await raceNextEventAgainstHeartbeat(iterator);
+        if (result.done) break;
+        this.handleEvent(result.value, client);
+      }
+    };
+
     const runLoop = async (attempt: number = 0): Promise<void> => {
       try {
+        if (this.isDisposed) return;
         const eventResult = await client.event.subscribe();
-        for await (const event of eventResult.stream) {
-          if (signal?.aborted) break;
-          this.handleEvent(event, client);
-        }
+        const iterator = eventResult.stream[Symbol.asyncIterator]();
+        await consumeEventStream(iterator);
       } catch (error) {
         if (signal?.aborted) return;
 
+        const heartbeat = isHeartbeatError(error);
+        const nextAttempt = heartbeat ? 0 : attempt + 1;
+
         core.warning(
-          `[OpenCode] Event loop error (attempt ${attempt + 1}/${maxReconnectAttempts}): ${String(error)}`
+          `[OpenCode] Event loop ${heartbeat ? 'heartbeat timeout' : `error (attempt ${nextAttempt}/${maxReconnectAttempts})`}: ${String(error)}`
         );
 
-        if (attempt < maxReconnectAttempts - 1) {
+        if (heartbeat || nextAttempt < maxReconnectAttempts) {
           core.info(`[OpenCode] Attempting to reconnect event loop in ${reconnectDelayMs}ms...`);
           await this.abortableDelay(reconnectDelayMs, signal);
-          if (!signal?.aborted) {
-            void runLoop(attempt + 1);
+          if (!signal?.aborted && !this.isDisposed) {
+            void runLoop(nextAttempt);
           }
         } else {
           this.handleEventLoopFailure();
