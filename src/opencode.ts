@@ -1,9 +1,11 @@
 import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk';
+import type { ToolState } from '@opencode-ai/sdk';
 import * as core from '@actions/core';
 import * as fs from 'fs';
 import * as path from 'path';
 import { OpenCodeSession, INPUT_LIMITS } from './types.js';
 import { truncateString } from './security.js';
+import { getToolLoggerFactory } from './tool-loggers/index.js';
 
 export interface InitializeOptions {
   opencodeConfig?: string;
@@ -225,6 +227,7 @@ export class OpenCodeService {
     });
 
     core.info(`[OpenCode] Session created: ${sessionId}`);
+    core.info(`[OpenCode] Session started at ${new Date().toISOString()}`);
 
     const idlePromise = this.waitForSessionIdle(sessionId, timeoutMs, abortSignal);
 
@@ -437,7 +440,7 @@ export class OpenCodeService {
           messageID?: string;
           sessionID?: string;
           tool?: string;
-          state?: { status?: string };
+          state?: ToolState;
         };
       }
     )?.part;
@@ -446,8 +449,16 @@ export class OpenCodeService {
       this.handleTextPart(part);
     }
 
-    if (part?.type === 'tool' && part.tool && part.state?.status) {
-      core.info(`[OpenCode] Tool: ${part.tool} - ${part.state.status}`);
+    if (part?.type === 'tool' && part.tool && part.state) {
+      const logger = getToolLoggerFactory().getLogger(part.tool);
+      const message = logger.formatLog(part.tool, part.state);
+      if (part.state.status === 'pending') {
+        core.debug(`[OpenCode] ${message}`);
+      } else if (part.state.status === 'error') {
+        core.warning(`[OpenCode] ${message}`);
+      } else {
+        core.info(`[OpenCode] ${message}`);
+      }
     }
   }
 
