@@ -36,4 +36,25 @@ export class ReadToolLogger implements IToolLogger {
       }
     }
   }
+
+  formatDebugLog(tool: string, state: ToolState): string {
+    switch (state.status) {
+      case 'pending':
+        return '';
+      case 'running': {
+        const filePath = extractStringInput(state.input, TOOL_INPUT_KEYS.FILE_PATH) || '(unknown)';
+        return `Tool: read\nFile: ${filePath}`;
+      }
+      case 'completed': {
+        const filePath = extractStringInput(state.input, TOOL_INPUT_KEYS.FILE_PATH) || '(unknown)';
+        return `Tool: read\nFile: ${filePath}\n${state.output}`;
+      }
+      case 'error': {
+        const filePath = extractStringInput(state.input, TOOL_INPUT_KEYS.FILE_PATH) || '(unknown)';
+        return `Tool: read\nFile: ${filePath}\nError: ${state.error}`;
+      }
+      default:
+        return '';
+    }
+  }
 }

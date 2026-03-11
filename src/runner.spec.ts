@@ -27,6 +27,11 @@ jest.mock('./validation', () => ({
   executeValidationScript: jest.fn(),
 }));
 
+const mockInitDebugLogWriter = jest.fn();
+jest.mock('./debug-log-writer', () => ({
+  initDebugLogWriter: (...args: unknown[]) => mockInitDebugLogWriter(...args),
+}));
+
 import { executeValidationScript } from './validation';
 
 const mockExecuteValidationScript = executeValidationScript as jest.MockedFunction<
@@ -64,6 +69,8 @@ describe('runner', () => {
     timeoutMs: INPUT_LIMITS.DEFAULT_TIMEOUT_MINUTES * 60 * 1000,
     maxValidationRetries: INPUT_LIMITS.DEFAULT_VALIDATION_RETRY,
     listModels: false,
+    debugLog: false,
+    debugLogPath: '',
     ...overrides,
   });
 
@@ -458,6 +465,39 @@ describe('runner', () => {
 
       expect(result.success).toBe(true);
       expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('Error on attempt 1'));
+    });
+
+    describe('debug log wiring', () => {
+      beforeEach(() => {
+        const workflowFile = path.join(tempDir, 'test-workflow.md');
+        fs.writeFileSync(workflowFile, '# Test');
+      });
+
+      it('calls initDebugLogWriter when debugLog is true', async () => {
+        // Arrange
+        const inputs = createValidInputs({
+          debugLog: true,
+          debugLogPath: '/tmp/debug.log',
+        });
+
+        // Act
+        await runWorkflow(inputs);
+
+        // Assert
+        expect(mockInitDebugLogWriter).toHaveBeenCalledWith('/tmp/debug.log');
+        expect(core.info).toHaveBeenCalledWith('[OpenCode] Debug logging enabled: /tmp/debug.log');
+      });
+
+      it('does not call initDebugLogWriter when debugLog is false', async () => {
+        // Arrange
+        const inputs = createValidInputs({ debugLog: false });
+
+        // Act
+        await runWorkflow(inputs);
+
+        // Assert
+        expect(mockInitDebugLogWriter).not.toHaveBeenCalled();
+      });
     });
 
     // Note: runWorkflow is a module function, not a class - 'target' variable pattern N/A

@@ -218,4 +218,157 @@ describe('BashToolLogger', () => {
       expect(result).toContain('...');
     });
   });
+
+  describe('formatDebugLog', () => {
+    it('returns empty string for pending state', () => {
+      // Arrange
+      const state = { status: 'pending' as const, input: {}, raw: '' };
+
+      // Act
+      const result = target.formatDebugLog('bash', state);
+
+      // Assert
+      expect(result).toBe('');
+    });
+
+    it('returns command for running state', () => {
+      // Arrange
+      const state = {
+        status: 'running' as const,
+        input: { command: 'npm run build' },
+        time: { start: 0 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('bash', state);
+
+      // Assert
+      expect(result).toBe('Tool: bash\n$ npm run build');
+    });
+
+    it('returns (no command) for running state with missing command', () => {
+      // Arrange
+      const state = {
+        status: 'running' as const,
+        input: {},
+        time: { start: 0 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('bash', state);
+
+      // Assert
+      expect(result).toBe('Tool: bash\n$ (no command)');
+    });
+
+    it('returns full command and full output for completed state', () => {
+      // Arrange
+      const longCommand = 'npm run build -- --verbose --all-packages';
+      const output = 'Building...\nDone in 5s\nAll packages built successfully';
+      const state = {
+        status: 'completed' as const,
+        input: { command: longCommand },
+        output,
+        title: '',
+        metadata: {},
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('bash', state);
+
+      // Assert
+      expect(result).toBe(`Tool: bash\n$ ${longCommand}\n${output}`);
+    });
+
+    it('shows exit code when non-zero', () => {
+      // Arrange
+      const state = {
+        status: 'completed' as const,
+        input: { command: 'false' },
+        output: '',
+        title: '',
+        metadata: { exit: 1 },
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('bash', state);
+
+      // Assert
+      expect(result).toBe('Tool: bash\n$ false\n\nExit code: 1');
+    });
+
+    it('omits exit code when zero', () => {
+      // Arrange
+      const state = {
+        status: 'completed' as const,
+        input: { command: 'true' },
+        output: 'ok',
+        title: '',
+        metadata: { exit: 0 },
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('bash', state);
+
+      // Assert
+      expect(result).not.toContain('Exit code');
+    });
+
+    it('shows (no command) when command is missing', () => {
+      // Arrange
+      const state = {
+        status: 'completed' as const,
+        input: {},
+        output: 'output',
+        title: '',
+        metadata: {},
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('bash', state);
+
+      // Assert
+      expect(result).toContain('$ (no command)');
+    });
+
+    it('returns full error without truncation for error state', () => {
+      // Arrange
+      const longError = 'e'.repeat(500);
+      const state = {
+        status: 'error' as const,
+        input: { command: 'bad-cmd' },
+        error: longError,
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('bash', state);
+
+      // Assert
+      expect(result).toBe(`Tool: bash\n$ bad-cmd\nError: ${longError}`);
+      expect(result).not.toContain('...');
+    });
+
+    it('output never includes [OpenCode] prefix', () => {
+      // Arrange
+      const state = {
+        status: 'completed' as const,
+        input: { command: 'ls' },
+        output: 'file.txt',
+        title: '',
+        metadata: {},
+        time: { start: 0, end: 1 },
+      };
+
+      // Act
+      const result = target.formatDebugLog('bash', state);
+
+      // Assert
+      expect(result).not.toContain('[OpenCode]');
+    });
+  });
 });

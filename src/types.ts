@@ -10,6 +10,8 @@ export interface ActionInputs {
   authConfig?: string;
   model?: string;
   listModels: boolean;
+  debugLog: boolean;
+  debugLogPath: string;
 }
 
 export interface OpenCodeSession {

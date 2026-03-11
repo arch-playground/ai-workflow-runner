@@ -43,4 +43,28 @@ export class BashToolLogger implements IToolLogger {
       }
     }
   }
+
+  formatDebugLog(tool: string, state: ToolState): string {
+    switch (state.status) {
+      case 'pending':
+        return '';
+      case 'running': {
+        const command = extractStringInput(state.input, TOOL_INPUT_KEYS.COMMAND) || '(no command)';
+        return `Tool: bash\n$ ${command}`;
+      }
+      case 'completed': {
+        const command = extractStringInput(state.input, TOOL_INPUT_KEYS.COMMAND) || '(no command)';
+        const exitCode = extractNumberMetadata(state.metadata, TOOL_METADATA_KEYS.EXIT);
+        const exitSuffix =
+          exitCode !== undefined && exitCode !== 0 ? `\nExit code: ${exitCode}` : '';
+        return `Tool: bash\n$ ${command}\n${state.output}${exitSuffix}`;
+      }
+      case 'error': {
+        const command = extractStringInput(state.input, TOOL_INPUT_KEYS.COMMAND) || '(no command)';
+        return `Tool: bash\n$ ${command}\nError: ${state.error}`;
+      }
+      default:
+        return '';
+    }
+  }
 }

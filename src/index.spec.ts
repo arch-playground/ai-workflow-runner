@@ -40,6 +40,8 @@ describe('index', () => {
     timeoutMs: 60000,
     maxValidationRetries: 5,
     listModels: false,
+    debugLog: false,
+    debugLogPath: '',
   });
 
   const setupMocks = (): void => {
