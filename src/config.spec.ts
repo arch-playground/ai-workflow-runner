@@ -2,12 +2,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import * as core from '@actions/core';
-import { getInputs, validateInputs } from './config';
+import { getInputs, validateInputs, validateDebugLogPath } from './config';
 import { INPUT_LIMITS } from './types';
 import { maskSecrets, validateConfigPath } from './security';
 
 jest.mock('@actions/core');
 jest.mock('./security');
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  mkdirSync: jest.fn(),
+}));
 
 const mockCore = core as jest.Mocked<typeof core>;
 const mockMaskSecrets = maskSecrets as jest.MockedFunction<typeof maskSecrets>;
@@ -526,6 +530,122 @@ describe('config', () => {
       // Assert
       expect(inputs.listModels).toBe(true);
     });
+
+    describe('debug_log parsing', () => {
+      let originalActionsStepDebug: string | undefined;
+      let originalRunnerDebug: string | undefined;
+      let originalRunnerTemp: string | undefined;
+
+      beforeEach(() => {
+        originalActionsStepDebug = process.env.ACTIONS_STEP_DEBUG;
+        originalRunnerDebug = process.env.RUNNER_DEBUG;
+        originalRunnerTemp = process.env.RUNNER_TEMP;
+        delete process.env.ACTIONS_STEP_DEBUG;
+        delete process.env.RUNNER_DEBUG;
+      });
+
+      afterEach(() => {
+        if (originalActionsStepDebug === undefined) delete process.env.ACTIONS_STEP_DEBUG;
+        else process.env.ACTIONS_STEP_DEBUG = originalActionsStepDebug;
+        if (originalRunnerDebug === undefined) delete process.env.RUNNER_DEBUG;
+        else process.env.RUNNER_DEBUG = originalRunnerDebug;
+        if (originalRunnerTemp === undefined) delete process.env.RUNNER_TEMP;
+        else process.env.RUNNER_TEMP = originalRunnerTemp;
+      });
+
+      it('sets debugLog to true when debug_log input is "true"', () => {
+        // Arrange
+        mockInputs({ debug_log: 'true' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.debugLog).toBe(true);
+      });
+
+      it('sets debugLog to false when debug_log input is "false"', () => {
+        // Arrange
+        mockInputs({ debug_log: 'false' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.debugLog).toBe(false);
+      });
+
+      it('defaults debugLog to false when input is empty', () => {
+        // Arrange
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.debugLog).toBe(false);
+      });
+
+      it('sets debugLog to true when ACTIONS_STEP_DEBUG=true', () => {
+        // Arrange
+        process.env.ACTIONS_STEP_DEBUG = 'true';
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.debugLog).toBe(true);
+      });
+
+      it('sets debugLog to true when RUNNER_DEBUG=1', () => {
+        // Arrange
+        process.env.RUNNER_DEBUG = '1';
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.debugLog).toBe(true);
+      });
+
+      it('defaults debugLogPath to $RUNNER_TEMP/opencode-debug.log', () => {
+        // Arrange
+        process.env.RUNNER_TEMP = '/tmp/runner-temp';
+        mockInputs({ debug_log: 'true' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.debugLogPath).toBe('/tmp/runner-temp/opencode-debug.log');
+      });
+
+      it('defaults debugLogPath to /tmp/opencode-debug.log when RUNNER_TEMP is unset', () => {
+        // Arrange
+        delete process.env.RUNNER_TEMP;
+        mockInputs({ debug_log: 'true' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.debugLogPath).toBe('/tmp/opencode-debug.log');
+      });
+
+      it('does not validate debugLogPath when debugLog is false', () => {
+        // Arrange
+        mockInputs({ debug_log: 'false', debug_log_path: '/etc/bad-path/debug.log' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.debugLog).toBe(false);
+        expect(inputs.debugLogPath).toBe('');
+      });
+    });
   });
 
   describe('action.yml schema', () => {
@@ -576,6 +696,22 @@ describe('config', () => {
       expect(input.required).toBe(false);
       expect(input.default).toBe('false');
     });
+
+    it('defines debug_log as optional with false default', () => {
+      // Assert
+      const input = actionInputs['debug_log']!;
+      expect(input).toBeDefined();
+      expect(input.required).toBe(false);
+      expect(input.default).toBe('false');
+    });
+
+    it('defines debug_log_path as optional with empty default', () => {
+      // Assert
+      const input = actionInputs['debug_log_path']!;
+      expect(input).toBeDefined();
+      expect(input.required).toBe(false);
+      expect(input.default).toBe('');
+    });
   });
 
   describe('validateInputs', () => {
@@ -591,6 +727,8 @@ describe('config', () => {
         timeoutMs: DEFAULT_TIMEOUT,
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
+        debugLog: false,
+        debugLogPath: '',
       };
 
       // Act
@@ -610,6 +748,8 @@ describe('config', () => {
         timeoutMs: DEFAULT_TIMEOUT,
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
+        debugLog: false,
+        debugLogPath: '',
       };
 
       // Act
@@ -629,6 +769,8 @@ describe('config', () => {
         timeoutMs: DEFAULT_TIMEOUT,
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
+        debugLog: false,
+        debugLogPath: '',
       };
 
       // Act
@@ -648,6 +790,8 @@ describe('config', () => {
         timeoutMs: DEFAULT_TIMEOUT,
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
+        debugLog: false,
+        debugLogPath: '',
       };
 
       // Act
@@ -667,6 +811,8 @@ describe('config', () => {
         timeoutMs: DEFAULT_TIMEOUT,
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
+        debugLog: false,
+        debugLogPath: '',
       };
 
       // Act
@@ -675,6 +821,68 @@ describe('config', () => {
       // Assert
       expect(result.valid).toBe(false);
       expect(result.errors[0]).toContain('exceeds maximum size');
+    });
+  });
+
+  describe('validateDebugLogPath', () => {
+    let originalRunnerTemp: string | undefined;
+
+    beforeEach(() => {
+      originalRunnerTemp = process.env.RUNNER_TEMP;
+    });
+
+    afterEach(() => {
+      if (originalRunnerTemp === undefined) delete process.env.RUNNER_TEMP;
+      else process.env.RUNNER_TEMP = originalRunnerTemp;
+    });
+
+    it('accepts absolute path under /tmp', () => {
+      // Act
+      const result = validateDebugLogPath('/workspace', '/tmp/debug.log');
+
+      // Assert
+      expect(result).toBe('/tmp/debug.log');
+    });
+
+    it('accepts absolute path under RUNNER_TEMP', () => {
+      // Arrange
+      process.env.RUNNER_TEMP = '/home/runner/temp';
+
+      // Act
+      const result = validateDebugLogPath('/workspace', '/home/runner/temp/debug.log');
+
+      // Assert
+      expect(result).toBe('/home/runner/temp/debug.log');
+    });
+
+    it('rejects absolute path outside safe directories', () => {
+      // Act & Assert
+      expect(() => validateDebugLogPath('/workspace', '/etc/debug.log')).toThrow(
+        'Invalid debug_log_path'
+      );
+    });
+
+    it('resolves relative path against workspace', () => {
+      // Act
+      const result = validateDebugLogPath('/workspace', 'logs/debug.log');
+
+      // Assert
+      expect(result).toBe('/workspace/logs/debug.log');
+    });
+
+    it('rejects relative path escaping workspace', () => {
+      // Act & Assert
+      expect(() => validateDebugLogPath('/workspace', '../../etc/debug.log')).toThrow(
+        'Invalid debug_log_path: path escapes the workspace directory'
+      );
+    });
+
+    it('creates parent directories', () => {
+      // Act
+      validateDebugLogPath('/workspace', 'deep/nested/dir/debug.log');
+
+      // Assert
+      expect(fs.mkdirSync).toHaveBeenCalledWith('/workspace/deep/nested/dir', { recursive: true });
     });
   });
 });

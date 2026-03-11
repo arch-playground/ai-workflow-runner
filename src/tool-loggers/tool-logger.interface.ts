@@ -17,6 +17,15 @@ export interface IToolLogger {
    * @returns Non-empty formatted log string without [OpenCode] prefix
    */
   formatLog(tool: string, state: ToolState): string;
+
+  /**
+   * Returns verbose, untruncated debug string for running/completed/error states.
+   *
+   * @param tool - The tool name from the event
+   * @param state - The current tool state
+   * @returns Verbose debug string, or empty string for pending state
+   */
+  formatDebugLog(tool: string, state: ToolState): string;
 }
 
 /**

@@ -6,6 +6,7 @@ import * as path from 'path';
 import { OpenCodeSession, INPUT_LIMITS } from './types.js';
 import { truncateString } from './security.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
+import { getDebugLogWriter } from './debug-log-writer.js';
 
 export interface InitializeOptions {
   opencodeConfig?: string;
@@ -227,7 +228,8 @@ export class OpenCodeService {
     });
 
     core.info(`[OpenCode] Session created: ${sessionId}`);
-    core.info(`[OpenCode] Session started at ${new Date().toISOString()}`);
+    core.info(this.formatTimestampedLog('Session started'));
+    getDebugLogWriter().writeSessionEvent('Session started');
 
     const idlePromise = this.waitForSessionIdle(sessionId, timeoutMs, abortSignal);
 
@@ -452,14 +454,26 @@ export class OpenCodeService {
     if (part?.type === 'tool' && part.tool && part.state) {
       const logger = getToolLoggerFactory().getLogger(part.tool);
       const message = logger.formatLog(part.tool, part.state);
+      const logLine = this.formatTimestampedLog(message);
       if (part.state.status === 'pending') {
-        core.debug(`[OpenCode] ${message}`);
+        core.debug(logLine);
       } else if (part.state.status === 'error') {
-        core.warning(`[OpenCode] ${message}`);
+        core.warning(logLine);
       } else {
-        core.info(`[OpenCode] ${message}`);
+        core.info(logLine);
+      }
+
+      if (part.state.status !== 'pending') {
+        const debugLog = logger.formatDebugLog(part.tool, part.state);
+        if (debugLog) {
+          getDebugLogWriter().writeToolEvent(debugLog);
+        }
       }
     }
+  }
+
+  private formatTimestampedLog(message: string): string {
+    return `[${new Date().toISOString()}] [OpenCode] ${message}`;
   }
 
   private handleTextPart(part: { text?: string; messageID?: string; sessionID?: string }): void {
@@ -492,6 +506,16 @@ export class OpenCodeService {
     const state = this.sessionMessageState.get(sessionID);
     if (state?.messageBuffer) {
       state.lastCompleteMessage = state.messageBuffer;
+    }
+
+    if (state?.lastCompleteMessage) {
+      getDebugLogWriter().writeCompleteMessage(state.lastCompleteMessage);
+    }
+
+    if (isError) {
+      getDebugLogWriter().writeSessionEvent(`Error: ${errorMessage || 'unknown error'}`);
+    } else {
+      getDebugLogWriter().writeSessionEvent('Session idle');
     }
 
     const callbacks = this.sessionCompletionCallbacks.get(sessionID);

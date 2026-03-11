@@ -2,7 +2,7 @@
 title: 'Tool Call Logger Factory Pattern'
 slug: 'tool-call-logger-factory'
 created: '2026-03-10'
-status: 'ready-for-dev'
+status: 'implementation-complete'
 stepsCompleted: [1, 2, 3, 4]
 tech_stack: ['typescript', 'node', '@opencode-ai/sdk', '@actions/core', 'jest']
 files_to_modify:
@@ -37,7 +37,7 @@ The current tool call logging in `src/opencode.ts` method `handleMessagePartUpda
 1. Tool-specific input/output statistics (e.g., file path for read, command for bash, line count for output)
 2. Error cause logging when tool calls fail (the SDK provides an `error` field in the error state, currently ignored)
 3. Extensibility — adding new tool-specific formatting requires modifying the same method
-4. Timestamp at the beginning of log output
+4. Timestamp as the first position prefix on every tool log line (e.g., `[2026-03-11T10:30:00.000Z] [OpenCode] Tool: read - running`)
 
 The OpenCode SDK's `ToolPart` provides rich data (`input`, `output`, `error`, `time`, `metadata`) across 4 states (`pending`, `running`, `completed`, `error`) — all currently ignored due to narrow type casting.
 
@@ -56,7 +56,7 @@ Apply the Factory Pattern to create a `ToolLoggerFactory` with separate logger c
 - Error cause logging when tool status is `error` (using `state.error` field)
 - Tool input statistics (file path, command, pattern, etc.)
 - Tool output statistics on completed (output length, line count)
-- Timestamp at session start log line
+- ISO timestamp as first position prefix on **every** tool log line (format: `[{ISO timestamp}] [OpenCode] {message}`)
 - `pending` state logged at `core.debug()` level (not `core.info()`) to reduce log noise
 
 **Out of Scope:**
@@ -106,7 +106,7 @@ Apply the Factory Pattern to create a `ToolLoggerFactory` with separate logger c
 5. **ToolState discriminated union**: Use `state.status` as discriminant for type narrowing in logger implementations
 6. **Error logging**: Use `core.warning()` for tool errors (recoverable issues), not `core.error()` (reserved for fatal errors)
 7. **Output line count**: Use helper `countLines(output)` that returns `0` for empty string, otherwise `output.split('\n').length` (fixes off-by-one)
-8. **Timestamp**: Add ISO timestamp to session start log line in `runSession()` via `new Date().toISOString()`
+8. **Timestamp**: Add ISO timestamp as first position prefix on every tool log line in `handleMessagePartUpdated()` via `new Date().toISOString()`. Format: `[{timestamp}] [OpenCode] {message}`. The timestamp is added by the caller, NOT by `formatLog()`
 9. **Centralized input key constants**: Tool input key names (e.g., `filePath`, `command`, `oldString`) and metadata keys (e.g., `matches`, `count`, `exit`) defined in `src/tool-loggers/tool-input-keys.ts` — verified against OpenCode source, single place to update if OpenCode changes
 10. **Factory with reset for testing**: Export `createToolLoggerFactory()` function and `resetToolLoggerFactory()` for test isolation, following the `getOpenCodeService()` / `resetOpenCodeService()` pattern
 11. **`pending` state at debug level**: `pending` events are high-frequency noise — log at `core.debug()`, not `core.info()`
@@ -429,19 +429,20 @@ private handleMessagePartUpdated(event: ParsedEvent): void {
        if (part?.type === 'tool' && part.tool && part.state) {
          const logger = getToolLoggerFactory().getLogger(part.tool);
          const message = logger.formatLog(part.tool, part.state);
+         const timestamp = new Date().toISOString();
          if (part.state.status === 'pending') {
-           core.debug(`[OpenCode] ${message}`);
+           core.debug(`[${timestamp}] [OpenCode] ${message}`);
          } else if (part.state.status === 'error') {
-           core.warning(`[OpenCode] ${message}`);
+           core.warning(`[${timestamp}] [OpenCode] ${message}`);
          } else {
-           core.info(`[OpenCode] ${message}`);
+           core.info(`[${timestamp}] [OpenCode] ${message}`);
          }
        }
        ```
 
     5. Add timestamp log in `runSession()` after session creation log:
        ```typescript
-       core.info(`[OpenCode] Session started at ${new Date().toISOString()}`);
+       core.info(`[${new Date().toISOString()}] [OpenCode] Session started`);
        ```
 
   - Notes:
@@ -449,6 +450,7 @@ private handleMessagePartUpdated(event: ParsedEvent): void {
     - `pending` → `core.debug()` (reduces log noise — F12)
     - `error` → `core.warning()`
     - `running`/`completed` → `core.info()`
+    - All log lines prefixed with `[{ISO timestamp}]` as first position, before `[OpenCode]`
 
 - [ ] **Task 14: Write unit tests for factory** (AC: 3, 4, 8)
   - File: `src/tool-loggers/tool-logger.factory.spec.ts`
@@ -514,7 +516,8 @@ private handleMessagePartUpdated(event: ParsedEvent): void {
     - Verify `core.info()` called with formatted message including tool-specific details (e.g., filePath)
     - Emit tool error event, verify `core.warning()` called with error cause
     - **Emit tool pending event, verify `core.debug()` called (not `core.info()`)**
-    - Emit session start, verify timestamp log line present
+    - Emit session start, verify timestamp log line present with format `[{ISO timestamp}] [OpenCode] Session started`
+    - **Verify ALL tool log lines start with `[{ISO timestamp}]` as first position** (regex: `/^\[.+Z\] \[OpenCode\]/`)
   - Notes: Use `resetToolLoggerFactory()` in `afterEach` for test isolation
 
 - [ ] **Task 19: Write unit tests for helper functions** (AC: 5)
@@ -539,12 +542,12 @@ private handleMessagePartUpdated(event: ParsedEvent): void {
 ### Acceptance Criteria
 
 - [ ] **AC 1**: Given the factory pattern is implemented, when a new tool type needs logging support, then a developer can add a new logger class in `impl/` and add it to `ToolLoggerImpls` without modifying the factory or `OpenCodeService`
-- [ ] **AC 2**: Given a tool event with `status: "running"` and `input: { filePath: "./config.json" }`, when the read tool logger formats the log, then the output is `"Tool: read - running - ./config.json"` (without `[OpenCode]` prefix)
+- [ ] **AC 2**: Given a tool event with `status: "running"` and `input: { filePath: "./config.json" }`, when the read tool logger formats the log, then `formatLog()` returns `"Tool: read - running - ./config.json"` (without `[OpenCode]` prefix or timestamp — those are added by the caller as `[{timestamp}] [OpenCode] {message}`)
 - [ ] **AC 3**: Given no default logger is provided to the factory constructor, when the factory is instantiated, then it throws an Error with message indicating no default logger found
 - [ ] **AC 4**: Given a tool name not registered in the factory, when `getLogger()` is called, then the default logger is returned (O(1) fallback)
 - [ ] **AC 5**: Given a tool event with `status: "completed"` and `output` containing 250 lines, when the logger formats the log, then the output includes `"250 lines"`. Given empty output, the log includes `"empty output"` (not `"1 lines"`)
 - [ ] **AC 6**: Given a tool event with `status: "error"` and `error: "File not found"`, when the logger formats the log, then the output includes `"error - File not found"` and is logged via `core.warning()` (not `core.info()`). Given an error > 200 chars, it is truncated with `...` suffix
-- [ ] **AC 7**: Given a session is started via `runSession()`, when the session is created, then a log line with ISO timestamp is emitted (e.g., `"[OpenCode] Session started at 2026-03-10T14:30:00.000Z"`)
+- [ ] **AC 7**: Given any tool log line is emitted, when `handleMessagePartUpdated()` processes a tool event, then the log line starts with an ISO timestamp in brackets as the first position (e.g., `"[2026-03-10T14:30:00.000Z] [OpenCode] Tool: read - running - ./config.json"`). Also, session start log uses the same format: `"[2026-03-10T14:30:00.000Z] [OpenCode] Session started"`
 - [ ] **AC 8**: Given two loggers return the same value from `support()`, when the factory is instantiated, then it throws an Error indicating duplicate registration
 - [ ] **AC 9**: Given the SDK changes a tool input key name, when the developer updates `TOOL_INPUT_KEYS` in `tool-input-keys.ts`, then all loggers automatically use the new key name (single update point)
 - [ ] **AC 10**: Given a tool event with `status: "pending"`, when it is processed by `handleMessagePartUpdated`, then it is logged at `core.debug()` level (not `core.info()`)

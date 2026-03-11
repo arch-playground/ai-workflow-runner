@@ -6,6 +6,7 @@ import { EditToolLogger } from './impl/edit.tool-logger.js';
 import { BashToolLogger } from './impl/bash.tool-logger.js';
 import { GrepToolLogger } from './impl/grep.tool-logger.js';
 import { GlobToolLogger } from './impl/glob.tool-logger.js';
+import { TodoWriteToolLogger } from './impl/todowrite.tool-logger.js';
 
 export type { IToolLogger } from './tool-logger.interface.js';
 export { ToolLoggerFactory } from './tool-logger.factory.js';
@@ -18,6 +19,7 @@ const ToolLoggerImpls = [
   new BashToolLogger(),
   new GrepToolLogger(),
   new GlobToolLogger(),
+  new TodoWriteToolLogger(),
 ];
 
 let toolLoggerFactoryInstance: ToolLoggerFactory | null = null;
