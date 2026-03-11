@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import { OpenCodeService, resetOpenCodeService } from './opencode';
+import { resetToolLoggerFactory } from './tool-loggers/index';
 import {
   MockClient,
   MockServer,
@@ -323,6 +324,120 @@ describe('OpenCodeService - session & messages', () => {
 
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
       await sessionPromise;
+    });
+  });
+
+  describe('tool logging', () => {
+    afterEach(() => {
+      resetToolLoggerFactory();
+    });
+
+    it('logs running tool event via core.info() with tool-specific details', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'read',
+            state: {
+              status: 'running',
+              input: { filePath: './config.json' },
+              time: { start: 0 },
+            },
+          },
+        },
+      });
+
+      await flushMicrotasks();
+      expect(mockCore.info).toHaveBeenCalledWith('[OpenCode] Tool: read - running - ./config.json');
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('logs tool error event via core.warning() with error cause', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'read',
+            state: {
+              status: 'error',
+              input: { filePath: './missing.ts' },
+              error: 'File not found',
+              time: { start: 0, end: 1 },
+            },
+          },
+        },
+      });
+
+      await flushMicrotasks();
+      expect(mockCore.warning).toHaveBeenCalledWith(
+        '[OpenCode] Tool: read - error - ./missing.ts - File not found'
+      );
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('logs tool pending event via core.debug() (not core.info())', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'bash',
+            state: {
+              status: 'pending',
+              input: { command: 'ls' },
+              raw: '',
+            },
+          },
+        },
+      });
+
+      await flushMicrotasks();
+      expect(mockCore.debug).toHaveBeenCalledWith('[OpenCode] Tool: bash - pending');
+      expect(mockCore.info).not.toHaveBeenCalledWith(
+        expect.stringContaining('Tool: bash - pending')
+      );
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('logs ISO timestamp when session starts', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+
+      expect(mockCore.info).toHaveBeenCalledWith(
+        expect.stringMatching(/\[OpenCode\] Session started at \d{4}-\d{2}-\d{2}T/)
+      );
     });
   });
 });
