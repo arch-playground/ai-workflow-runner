@@ -5,6 +5,22 @@ All notable changes to AI Workflow Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.4.0...v1.5.0) (2026-03-12)
+
+
+### Features
+
+* **research:** document root cause analysis for workflow hang issue ([dae5210](https://github.com/arch-playground/ai-workflow-runner/commit/dae5210704128f8030b941c2d53624c04ec10de6))
+* **scripts:** create run-local.sh for local debugging of workflows ([dae5210](https://github.com/arch-playground/ai-workflow-runner/commit/dae5210704128f8030b941c2d53624c04ec10de6))
+* **settings:** add settings.json for plugin configuration ([7d6671c](https://github.com/arch-playground/ai-workflow-runner/commit/7d6671c33d279037fc0a219565a0afc5acaacba3))
+* **settings:** add settings.json for plugin configuration ([dae5210](https://github.com/arch-playground/ai-workflow-runner/commit/dae5210704128f8030b941c2d53624c04ec10de6))
+
+
+### Bug Fixes
+
+* **opencode:** exhaust reconnection attempts on heartbeat timeouts ([dae5210](https://github.com/arch-playground/ai-workflow-runner/commit/dae5210704128f8030b941c2d53624c04ec10de6))
+* **opencode:** update event handling for permission.asked events ([dae5210](https://github.com/arch-playground/ai-workflow-runner/commit/dae5210704128f8030b941c2d53624c04ec10de6))
+
 ## [1.4.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.3.0...v1.4.0) (2026-03-11)
 
 
