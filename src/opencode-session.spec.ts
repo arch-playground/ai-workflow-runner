@@ -217,7 +217,7 @@ describe('OpenCodeService - session & messages', () => {
   });
 
   describe('event handling', () => {
-    it('handles permission.updated events by auto-approving', async () => {
+    it('handles permission.asked events by auto-approving', async () => {
       const target = new OpenCodeService();
       await target.initialize();
 
@@ -225,7 +225,7 @@ describe('OpenCodeService - session & messages', () => {
       await flushMicrotasks();
 
       eventControl.emit({
-        type: 'permission.updated',
+        type: 'permission.asked',
         properties: { sessionID: 'session-123', id: 'perm-1' },
       });
 
@@ -252,7 +252,7 @@ describe('OpenCodeService - session & messages', () => {
       await flushMicrotasks();
 
       eventControl.emit({
-        type: 'permission.updated',
+        type: 'permission.asked',
         properties: { sessionID: 'session-123', id: 'perm-1' },
       });
 

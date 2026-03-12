@@ -90,8 +90,8 @@ describe('OpenCodeService - config & reconnection', () => {
       const target = new OpenCodeService();
       await target.initialize();
 
-      // Wait for all reconnection attempts (3 attempts with 1s delay each)
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      // Wait for all reconnection attempts (initial + 2 retries with 1s delay each)
+      await new Promise((resolve) => setTimeout(resolve, 4000));
 
       expect(mockCore.error).toHaveBeenCalledWith(
         '[OpenCode] Event loop failed after max reconnection attempts. Session idle detection may not work.'
@@ -231,23 +231,19 @@ describe('OpenCodeService - config & reconnection', () => {
       target.dispose();
     });
 
-    it('keeps retrying on heartbeat timeouts without exhausting reconnection attempts', async () => {
-      // Arrange — 4 consecutive hanging streams (more than maxReconnectAttempts=3)
-      const hangControls = Array.from({ length: 4 }, () => createEventGenerator());
-      const finalControl = createEventGenerator();
+    it('exhausts reconnection attempts on consecutive heartbeat timeouts', async () => {
+      // maxReconnectAttempts=3: initial + 2 retries, then failure on 3rd timeout
+      const hangControls = Array.from({ length: 3 }, () => createEventGenerator());
 
       const subscribeMock = mockClient.event.subscribe;
       for (const ctrl of hangControls) {
         subscribeMock.mockImplementationOnce(() => Promise.resolve({ stream: ctrl.generator }));
       }
-      subscribeMock.mockImplementationOnce(() =>
-        Promise.resolve({ stream: finalControl.generator })
-      );
 
       const target = new OpenCodeService();
       await target.initialize();
 
-      // Act: hang and reconnect 4 times (exceeds maxReconnectAttempts=3)
+      // Act: 3 consecutive heartbeat timeouts
       for (const ctrl of hangControls) {
         ctrl.hang();
         await jest.advanceTimersByTimeAsync(INPUT_LIMITS.EVENT_STREAM_HEARTBEAT_MS + 10);
@@ -255,13 +251,13 @@ describe('OpenCodeService - config & reconnection', () => {
         await jest.advanceTimersByTimeAsync(10);
       }
 
-      // Assert: no failure — heartbeat retries are unlimited
-      expect(mockCore.error).not.toHaveBeenCalledWith(
+      // Assert: heartbeat timeouts exhaust reconnection attempts like any other error
+      expect(mockCore.error).toHaveBeenCalledWith(
         expect.stringContaining('Event loop failed after max reconnection attempts')
       );
-      expect(subscribeMock).toHaveBeenCalledTimes(5);
+      // initial subscribe + 2 reconnect attempts (attempt 1 and 2 pass < 3 check, attempt 3 fails)
+      expect(subscribeMock).toHaveBeenCalledTimes(3);
 
-      finalControl.stop();
       target.dispose();
     }, 15000);
   });
