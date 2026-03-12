@@ -25,6 +25,8 @@ RUN apt-get update && \
         python3.11 \
         python3.11-venv \
         python3-pip \
+        git \
+        golang \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
@@ -51,6 +53,7 @@ RUN apt-get update && \
         python3.11 \
         python3.11-venv \
         python3-pip \
+        git \
     && rm -f /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -67,7 +70,11 @@ RUN ln -s /usr/lib/node_modules/opencode-ai/bin/opencode /usr/local/bin/opencode
 # Copy Java 21 from builder stage (path varies by architecture: temurin-21-jre-arm64, temurin-21-jre-amd64)
 COPY --from=builder /usr/lib/jvm/temurin-21-jre-* /usr/lib/jvm/temurin-21-jre/
 ENV JAVA_HOME=/usr/lib/jvm/temurin-21-jre
-ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+# Copy Go from builder stage (for gopls LSP server auto-install)
+COPY --from=builder /usr/lib/go /usr/lib/go
+ENV GOPATH=/root/go
+ENV PATH="${JAVA_HOME}/bin:/usr/lib/go/bin:${GOPATH}/bin:${PATH}"
 
 # Verify installations
 RUN node --version && \

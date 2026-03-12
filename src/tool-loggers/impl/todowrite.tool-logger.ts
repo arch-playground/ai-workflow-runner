@@ -1,4 +1,4 @@
-import type { ToolState } from '@opencode-ai/sdk';
+import type { ToolState } from '@opencode-ai/sdk/v2';
 import { IToolLogger, truncateError } from '../tool-logger.interface.js';
 import { TOOL_INPUT_KEYS } from '../tool-input-keys.js';
 

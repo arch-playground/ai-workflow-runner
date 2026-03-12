@@ -1,5 +1,5 @@
-import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk';
-import type { ToolState } from '@opencode-ai/sdk';
+import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk/v2';
+import type { ToolState } from '@opencode-ai/sdk/v2';
 import * as core from '@actions/core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -16,8 +16,8 @@ export interface InitializeOptions {
 
 const SESSION_STATUS = {
   IDLE: 'idle',
-  ERROR: 'error',
-  DISCONNECTED: 'disconnected',
+  RETRY: 'retry',
+  BUSY: 'busy',
 } as const;
 
 const EVENT_TYPES = {
@@ -26,6 +26,8 @@ const EVENT_TYPES = {
   MESSAGE_PART_UPDATED: 'message.part.updated',
   SESSION_IDLE: 'session.idle',
   SESSION_STATUS: 'session.status',
+  SESSION_ERROR: 'session.error',
+  SESSION_COMPACTED: 'session.compacted',
 } as const;
 
 interface OpenCodeServerInfo {
@@ -107,10 +109,9 @@ export class OpenCodeService {
       port: 0,
     };
 
-    const config = await this.buildSdkConfig(options);
-    if (config) {
-      serverOptions.config = config;
-    }
+    serverOptions.config = await this.buildSdkConfig(options);
+
+    process.env.OPENCODE_EXPERIMENTAL_LSP_TOOL = 'true';
 
     const opencode = await createOpencode(serverOptions);
     this.client = opencode.client;
@@ -134,8 +135,8 @@ export class OpenCodeService {
     for (const [providerId, credentials] of Object.entries(authData)) {
       core.info(`[OpenCode] Setting auth for provider: ${providerId}`);
       const response = await this.client.auth.set({
-        path: { id: providerId },
-        body: credentials as Parameters<typeof this.client.auth.set>[0]['body'],
+        providerID: providerId,
+        auth: credentials as Parameters<typeof this.client.auth.set>[0]['auth'],
       });
       if (response.error) {
         throw new Error(
@@ -145,23 +146,40 @@ export class OpenCodeService {
     }
   }
 
-  private async buildSdkConfig(
-    options?: InitializeOptions
-  ): Promise<Record<string, unknown> | undefined> {
-    if (!options?.opencodeConfig && !options?.model) {
-      return undefined;
-    }
-
+  private async buildSdkConfig(options?: InitializeOptions): Promise<Record<string, unknown>> {
     let sdkConfig: Record<string, unknown> = {};
 
-    if (options.opencodeConfig) {
-      sdkConfig = await this.loadJsonFile(options.opencodeConfig, 'config');
+    if (options?.opencodeConfig) {
+      const loaded = await this.loadJsonFile(options.opencodeConfig, 'config');
+      if (loaded && typeof loaded === 'object' && !Array.isArray(loaded)) {
+        sdkConfig = loaded;
+      }
     }
-    if (options.model) {
+    if (options?.model) {
       sdkConfig.model = options.model;
     }
 
+    sdkConfig.permission = this.buildPermissionConfig(
+      sdkConfig.permission as Record<string, unknown> | undefined
+    );
+
     return sdkConfig;
+  }
+
+  private buildPermissionConfig(existing?: Record<string, unknown>): Record<string, string> {
+    const defaults: Record<string, string> = {
+      '*': 'allow',
+      lsp: 'allow',
+      question: 'deny',
+      plan_enter: 'deny',
+      plan_exit: 'deny',
+    };
+
+    if (!existing || Object.keys(existing).length === 0) {
+      return defaults;
+    }
+
+    return { ...defaults, ...(existing as Record<string, string>) };
   }
 
   private async loadJsonFile(filePath: string, label: string): Promise<Record<string, unknown>> {
@@ -217,7 +235,7 @@ export class OpenCodeService {
     }
     if (!this.client) throw new Error('OpenCode client not initialized - call initialize() first');
 
-    const sessionResponse = await this.client.session.create({ body: { title: 'AI Workflow' } });
+    const sessionResponse = await this.client.session.create({ title: 'AI Workflow' });
     if (!sessionResponse.data) throw new Error('Failed to create OpenCode session');
 
     const sessionId = sessionResponse.data.id;
@@ -235,8 +253,8 @@ export class OpenCodeService {
     const idlePromise = this.waitForSessionIdle(sessionId, timeoutMs, abortSignal);
 
     const promptResponse = await this.client.session.promptAsync({
-      path: { id: sessionId },
-      body: { parts: [{ type: 'text', text: prompt }] },
+      sessionID: sessionId,
+      parts: [{ type: 'text', text: prompt }],
     });
     if (promptResponse.error) {
       const callbacks = this.sessionCompletionCallbacks.get(sessionId);
@@ -245,7 +263,7 @@ export class OpenCodeService {
       throw new Error(`Prompt failed: ${JSON.stringify(promptResponse.error)}`);
     }
 
-    core.info('[OpenCode] Prompt sent, waiting for completion...');
+    core.info(this.formatTimestampedLog('Prompt sent, waiting for completion...'));
     await idlePromise;
 
     return { sessionId, lastMessage: this.getLastMessage(sessionId) };
@@ -270,13 +288,15 @@ export class OpenCodeService {
 
     const truncatedMessage = truncateString(message, INPUT_LIMITS.MAX_VALIDATION_OUTPUT_SIZE);
 
-    core.info(`[OpenCode] Sending follow-up: ${truncatedMessage.substring(0, 100)}...`);
+    core.info(
+      this.formatTimestampedLog(`Sending follow-up: ${truncatedMessage.substring(0, 100)}...`)
+    );
 
     const idlePromise = this.waitForSessionIdle(sessionId, timeoutMs, abortSignal);
 
     await this.client.session.promptAsync({
-      path: { id: sessionId },
-      body: { parts: [{ type: 'text', text: truncatedMessage }] },
+      sessionID: sessionId,
+      parts: [{ type: 'text', text: truncatedMessage }],
     });
 
     await idlePromise;
@@ -447,21 +467,61 @@ export class OpenCodeService {
       case EVENT_TYPES.SESSION_STATUS:
         this.handleSessionStatusChange(parsedEvent);
         break;
+      case EVENT_TYPES.SESSION_ERROR:
+        this.handleSessionError(parsedEvent);
+        break;
+      case EVENT_TYPES.SESSION_COMPACTED:
+        this.handleSessionCompacted(parsedEvent);
+        break;
     }
   }
 
   private handlePermissionAsked(event: ParsedEvent, client: OpencodeClient): void {
-    const permission = event.properties as { sessionID?: string; id?: string };
+    const permission = event.properties as {
+      sessionID?: string;
+      id?: string;
+      permission?: string;
+      description?: string;
+    };
     if (permission.sessionID && permission.id) {
-      void client
-        .postSessionIdPermissionsPermissionId({
-          path: { id: permission.sessionID, permissionID: permission.id },
-          body: { response: 'always' },
+      const permissionLabel = permission.permission || permission.id;
+      core.info(
+        this.formatTimestampedLog(
+          `Permission requested: ${permissionLabel}${permission.description ? ` - ${permission.description}` : ''}`
+        )
+      );
+      void client.permission
+        .reply({ requestID: permission.id, reply: 'always' })
+        .then(() => {
+          core.info(this.formatTimestampedLog(`Permission auto-approved: ${permissionLabel}`));
         })
-        .catch((err) => {
+        .catch((err: Error) => {
           core.warning(`[OpenCode] Failed to auto-approve permission ${permission.id}: ${err}`);
         });
     }
+  }
+
+  private handleSessionError(event: ParsedEvent): void {
+    const props = event.properties as {
+      sessionID?: string;
+      error?: { type?: string; message?: string } | string;
+    };
+    const sessionID = props?.sessionID;
+    if (!sessionID) return;
+    const errorMessage =
+      typeof props?.error === 'string'
+        ? props.error
+        : (props?.error as { message?: string })?.message || 'unknown error';
+    core.error(this.formatTimestampedLog(`Session error for ${sessionID}: ${errorMessage}`));
+    this.finalizeSession(sessionID, true, errorMessage);
+  }
+
+  private handleSessionCompacted(event: ParsedEvent): void {
+    const props = event.properties as { sessionID?: string };
+    const sessionID = props?.sessionID;
+    if (!sessionID) return;
+    core.info(this.formatTimestampedLog(`Session compacted for ${sessionID}`));
+    getDebugLogWriter().writeSessionEvent(`Session compacted for ${sessionID}`);
   }
 
   private handleMessageUpdated(event: ParsedEvent): void {
@@ -491,12 +551,27 @@ export class OpenCodeService {
           sessionID?: string;
           tool?: string;
           state?: ToolState;
+          auto?: boolean;
+          overflow?: boolean;
         };
       }
     )?.part;
 
     if (part?.type === 'text' && part.text && part.sessionID) {
       this.handleTextPart(part);
+    }
+
+    if (part?.type === 'compaction' && part.sessionID) {
+      const autoLabel = part.auto ? 'auto' : 'manual';
+      const overflowLabel = part.overflow ? ' (overflow)' : '';
+      core.info(
+        this.formatTimestampedLog(
+          `Context compaction triggered [${autoLabel}${overflowLabel}] for session ${part.sessionID}`
+        )
+      );
+      getDebugLogWriter().writeSessionEvent(
+        `Context compaction triggered [${autoLabel}${overflowLabel}] for session ${part.sessionID}`
+      );
     }
 
     if (part?.type === 'tool' && part.tool && part.state) {
@@ -528,7 +603,7 @@ export class OpenCodeService {
     const state = this.sessionMessageState.get(part.sessionID!);
     if (state) {
       if (!state.currentMessageId || part.messageID === state.currentMessageId) {
-        core.info(`[OpenCode] ${part.text}`);
+        core.info(this.formatTimestampedLog(part.text!));
         state.messageBuffer += part.text;
       }
     }
@@ -542,11 +617,9 @@ export class OpenCodeService {
     const sessionID = props?.sessionID;
     const statusType = props?.status?.type;
     const isIdle = event.type === EVENT_TYPES.SESSION_IDLE || statusType === SESSION_STATUS.IDLE;
-    const isError =
-      statusType === SESSION_STATUS.ERROR || statusType === SESSION_STATUS.DISCONNECTED;
 
-    if (sessionID && (isIdle || isError)) {
-      this.finalizeSession(sessionID, isError, props?.status?.error);
+    if (sessionID && isIdle) {
+      this.finalizeSession(sessionID, false);
     }
   }
 

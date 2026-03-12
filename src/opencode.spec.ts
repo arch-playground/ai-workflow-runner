@@ -1,5 +1,5 @@
 import * as core from '@actions/core';
-import { createOpencode, OpencodeClient } from '@opencode-ai/sdk';
+import { createOpencode, OpencodeClient } from '@opencode-ai/sdk/v2';
 import {
   OpenCodeService,
   getOpenCodeService,
@@ -18,7 +18,7 @@ import {
 } from './opencode-test-helpers';
 
 jest.mock('@actions/core');
-jest.mock('@opencode-ai/sdk');
+jest.mock('@opencode-ai/sdk/v2');
 
 const mockCreateOpencode = createOpencode as jest.MockedFunction<typeof createOpencode>;
 const mockCore = core as jest.Mocked<typeof core>;
@@ -73,10 +73,9 @@ describe('OpenCodeService', () => {
     it('creates client and server', async () => {
       const target = new OpenCodeService();
       await target.initialize();
-      expect(mockCreateOpencode).toHaveBeenCalledWith({
-        hostname: '127.0.0.1',
-        port: 0,
-      });
+      expect(mockCreateOpencode).toHaveBeenCalledWith(
+        expect.objectContaining({ hostname: '127.0.0.1', port: 0 })
+      );
       expect(mockCore.info).toHaveBeenCalledWith('[OpenCode] Initializing SDK server...');
       expect(mockCore.info).toHaveBeenCalledWith('[OpenCode] Server started on localhost');
     });
