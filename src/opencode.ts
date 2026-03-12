@@ -21,7 +21,7 @@ const SESSION_STATUS = {
 } as const;
 
 const EVENT_TYPES = {
-  PERMISSION_UPDATED: 'permission.updated',
+  PERMISSION_ASKED: 'permission.asked',
   MESSAGE_UPDATED: 'message.updated',
   MESSAGE_PART_UPDATED: 'message.part.updated',
   SESSION_IDLE: 'session.idle',
@@ -384,13 +384,13 @@ export class OpenCodeService {
         if (signal?.aborted) return;
 
         const heartbeat = isHeartbeatError(error);
-        const nextAttempt = heartbeat ? 0 : attempt + 1;
+        const nextAttempt = attempt + 1;
 
         core.warning(
-          `[OpenCode] Event loop ${heartbeat ? 'heartbeat timeout' : `error (attempt ${nextAttempt}/${maxReconnectAttempts})`}: ${String(error)}`
+          `[OpenCode] Event loop ${heartbeat ? 'heartbeat timeout' : 'error'} (attempt ${nextAttempt}/${maxReconnectAttempts}): ${String(error)}`
         );
 
-        if (heartbeat || nextAttempt < maxReconnectAttempts) {
+        if (nextAttempt < maxReconnectAttempts) {
           core.info(`[OpenCode] Attempting to reconnect event loop in ${reconnectDelayMs}ms...`);
           await this.abortableDelay(reconnectDelayMs, signal);
           if (!signal?.aborted && !this.isDisposed) {
@@ -434,8 +434,8 @@ export class OpenCodeService {
     const parsedEvent = event as ParsedEvent;
 
     switch (parsedEvent.type) {
-      case EVENT_TYPES.PERMISSION_UPDATED:
-        this.handlePermissionUpdated(parsedEvent, client);
+      case EVENT_TYPES.PERMISSION_ASKED:
+        this.handlePermissionAsked(parsedEvent, client);
         break;
       case EVENT_TYPES.MESSAGE_UPDATED:
         this.handleMessageUpdated(parsedEvent);
@@ -450,7 +450,7 @@ export class OpenCodeService {
     }
   }
 
-  private handlePermissionUpdated(event: ParsedEvent, client: OpencodeClient): void {
+  private handlePermissionAsked(event: ParsedEvent, client: OpencodeClient): void {
     const permission = event.properties as { sessionID?: string; id?: string };
     if (permission.sessionID && permission.id) {
       void client
