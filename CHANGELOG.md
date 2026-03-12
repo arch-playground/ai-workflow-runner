@@ -5,6 +5,14 @@ All notable changes to AI Workflow Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.5.0...v1.6.0) (2026-03-12)
+
+
+### Features
+
+* **opencode:** migrate to SDK v2 and update permission handling in O… ([ba0d2c8](https://github.com/arch-playground/ai-workflow-runner/commit/ba0d2c897005d3a352fa97f66b02570f1363684c))
+* **opencode:** migrate to SDK v2 and update permission handling in OpenCodeService ([1256eaa](https://github.com/arch-playground/ai-workflow-runner/commit/1256eaa2b4c93dbdbc6ae6042dea9f6855588690))
+
 ## [1.5.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.4.0...v1.5.0) (2026-03-12)
 
 
