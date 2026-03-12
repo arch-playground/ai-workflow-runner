@@ -1,6 +1,6 @@
 import { ToolLoggerFactory } from './tool-logger.factory';
 import { IToolLogger } from './tool-logger.interface';
-import type { ToolState } from '@opencode-ai/sdk';
+import type { ToolState } from '@opencode-ai/sdk/v2';
 
 function makeLogger(name: string): IToolLogger {
   return {

@@ -7,6 +7,9 @@ dist/
 # Test coverage
 coverage/
 
+# Run log
+.local-run-logs/
+
 # Environment files
 .env
 .env.*

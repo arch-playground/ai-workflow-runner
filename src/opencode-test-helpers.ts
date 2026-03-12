@@ -1,4 +1,4 @@
-import { createOpencode, OpencodeClient } from '@opencode-ai/sdk';
+import { createOpencode, OpencodeClient } from '@opencode-ai/sdk/v2';
 
 export interface MockClient {
   session: {
@@ -14,7 +14,9 @@ export interface MockClient {
   auth: {
     set: jest.Mock;
   };
-  postSessionIdPermissionsPermissionId: jest.Mock;
+  permission: {
+    reply: jest.Mock;
+  };
 }
 
 export interface MockServer {
@@ -99,7 +101,9 @@ export function createMockClient(): MockClient {
     auth: {
       set: jest.fn().mockResolvedValue({ data: {} }),
     },
-    postSessionIdPermissionsPermissionId: jest.fn().mockResolvedValue({}),
+    permission: {
+      reply: jest.fn().mockResolvedValue({}),
+    },
   };
 }
 
