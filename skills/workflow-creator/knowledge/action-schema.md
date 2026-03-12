@@ -378,9 +378,124 @@ consumer-job:
 
 ## Key Constraints for Generated Workflows
 
-1. **Linux only** — always use `runs-on: ubuntu-latest`; never suggest Windows or macOS
+1. **Linux only** — always use `runs-on: ubuntu-latest`; never suggest Windows or macOS. If the user specifies a custom self-hosted runner label, use it and generate a `.github/actionlint.yaml` config file to register the label (see "Custom Runner Labels" section below)
 2. **No filesystem persistence** — each job starts fresh; files from one job are NOT available to another without artifact upload/download
 3. **Checkout required** — every job that needs repository files must include `- uses: actions/checkout@v6`
 4. **Job ID format** — lowercase alphanumeric and hyphens only (e.g., `step-a`, `generate-report`)
 5. **outputs require `id:`** — a job step must have `id: ai` to reference `steps.ai.outputs.*`; the job must declare `outputs:` block to expose them to `needs.<job>.outputs.*`
 6. **Cleanup is mandatory** — if `${{ runner.temp }}/auth.json` or `${{ runner.temp }}/config.json` is written, a cleanup step with `if: always()` must follow the last AI step that uses it
+7. **Artifact uploads must be scoped** — each job should upload only its own output file(s), NOT the entire output directory. When multiple jobs download upstream artifacts into a shared directory then re-upload the whole directory, the same files get duplicated across every artifact, wasting storage and slowing transfers. The final aggregation job can use `download-artifact@v8` with `merge-multiple: true` to collect all artifacts in one step
+8. **`continue-on-error` is NOT allowed on reusable workflow callers** — when a job uses `uses:` to call a reusable workflow, only these keys are allowed: `name`, `uses`, `with`, `secrets`, `needs`, `if`, and `permissions`. To achieve failure resilience, place `continue-on-error: true` inside the reusable workflow's job definition, and use `if: always()` on any downstream fan-in job
+9. **Workflow-level `env:` vars are NOT available in reusable workflow `with:` inputs** — expressions in `with:` for reusable workflow calls cannot reference `${{ env.* }}` from the caller workflow. Values must be hardcoded or passed through `workflow_dispatch` inputs
+10. **Reusable workflows do NOT inherit secrets** — secrets must be explicitly declared in the reusable workflow's `on.workflow_call.secrets` block and passed via `secrets:` in each caller job
+
+---
+
+## Reusable Workflow Pattern (for reducing duplication in multi-job workflows)
+
+When 3+ jobs share the same step structure (checkout, download artifacts, auth, AI step, cleanup, upload), extract the common pattern into a reusable workflow:
+
+**Reusable workflow (`.github/workflows/run-step.yml`):**
+
+```yaml
+name: Run Step
+
+on:
+  workflow_call:
+    inputs:
+      step_name:
+        required: true
+        type: string
+      workflow_path:
+        required: true
+        type: string
+      output_file:
+        required: true
+        type: string
+      artifact_name:
+        required: true
+        type: string
+      artifact_path:
+        required: true
+        type: string
+      timeout_minutes:
+        required: false
+        type: string
+        default: '30'
+    secrets:
+      OPENCODE_API_KEY:
+        required: true
+
+jobs:
+  run-step:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: ${{ inputs.step_name }}
+        id: ai
+        uses: arch-playground/ai-workflow-runner@v1
+        with:
+          workflow_path: ${{ inputs.workflow_path }}
+          timeout_minutes: ${{ inputs.timeout_minutes }}
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+
+      - name: Upload output
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.artifact_path }}
+```
+
+**Caller job:**
+
+```yaml
+step-b:
+  needs: step-a
+  uses: ./.github/workflows/run-step.yml
+  with:
+    step_name: 'Generate Report'
+    workflow_path: 'workflows/step-b.md'
+    output_file: 'output/report.md'
+    artifact_name: 'docs-report'
+    artifact_path: 'output/report.md'
+    timeout_minutes: '20'
+  secrets:
+    OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+```
+
+**When to use:** Workflows with 3+ parallel jobs sharing identical structure. Do NOT use for jobs with unique step sequences (e.g., init jobs, final commit-and-push jobs).
+
+**Key rules:**
+
+- `continue-on-error` goes inside the reusable workflow, not on the caller
+- Every secret must be declared in `on.workflow_call.secrets` and passed explicitly
+- `env:` vars from the caller are not available — pass values via `inputs`
+
+---
+
+## Concurrency Control
+
+For workflows that commit/push results, add a `concurrency` block to prevent overlapping runs from conflicting:
+
+```yaml
+concurrency:
+  group: <workflow-name>-${{ github.ref }}
+  cancel-in-progress: false
+```
+
+Use `cancel-in-progress: false` for long-running AI workflows — you don't want a scheduled run to cancel an in-progress manual run. Use `cancel-in-progress: true` only for fast, idempotent workflows where the latest run supersedes previous ones.
+
+---
+
+## Custom Runner Labels
+
+If the user specifies a custom self-hosted runner label (e.g., `my-runner`), generate a `.github/actionlint.yaml` file to register it. Without this, `actionlint` will report false-positive errors for unknown runner labels.
+
+```yaml
+self-hosted-runner:
+  labels:
+    - my-runner
+```

@@ -85,10 +85,12 @@ HALT and wait for selection.
 For each dependency edge (A → B), ask:
 
 > "When [step-B] depends on [step-A], what does it need from [step-A]?
+>
 > - A **string value** (status, summary, file path, JSON snippet — a few KB): use GitHub Actions outputs
 > - A **file or directory** (generated report, code files, artifacts — any size): use artifact upload/download"
 
 Record for each edge:
+
 - `strategy`: `"output"` or `"artifact"`
 - If `"output"`: what key name (e.g., `summary`, `result`, `filepath`)
 - If `"artifact"`: what artifact name and path (e.g., name: `step-a-output`, path: `output/`)
@@ -113,23 +115,60 @@ Ask:
 HALT and wait for selection.
 
 Record `authMethod`:
+
 - `[1]` → `"anthropic-api-key"`
 - `[2]` → `"copilot-auth-json"`
 - `[3]` → `"custom-opencode-config"`
 - `[4]` → `"anthropic-api-key-with-model"`
 
 If `[4]`, also ask:
+
 > "Which model? (e.g., `anthropic/claude-sonnet-4-6`, `anthropic/claude-opus-4-6`)"
 
 ---
 
-### Phase F: Default Timeout
+### Phase F: Timeout Strategy
 
 Ask:
 
 > "What should the default timeout be for each AI step, in minutes? (Default: 30 minutes — individual steps can override this)"
 
 Record `defaultTimeout` (string, e.g., `"30"`).
+
+**If the workflow has 5+ steps**, proactively suggest per-step timeout tuning:
+
+> "With [N] steps, you may want different timeouts based on complexity:
+>
+> - **Heavy steps** (full codebase scans, diagram generation, deep analysis): consider 45 min
+> - **Standard steps** (focused analysis on one aspect): 30 min (default)
+> - **Light steps** (package.json parsing, flag inventory, script-driven work): 20 min
+>
+> Would you like me to suggest timeouts for each step, or use [default] for all?"
+
+If the user wants per-step tuning, collect `timeout` overrides for individual steps and record them in the WIP alongside each step entry.
+
+---
+
+### Phase F2: Reusable Workflow Extraction
+
+**If 3+ parallel jobs share the same structure** (checkout → download artifacts → auth → AI step → cleanup → upload), suggest extracting the common pattern:
+
+> "I notice [N] of your steps share the same job structure. Would you like me to extract them into a reusable workflow to reduce YAML duplication?
+>
+> This creates a separate `.github/workflows/run-<workflowSlug>-step.yml` that each parallel job calls with different parameters. It reduces maintenance and makes adding new steps easier.
+>
+> [Y] Yes, extract reusable workflow
+> [N] No, keep all jobs inline"
+
+HALT and wait for selection.
+
+Record `useReusableWorkflow: true/false` in the WIP.
+
+**Important constraints to mention if user selects [Y]:**
+
+- `continue-on-error` must go inside the reusable workflow, not on the caller job
+- Workflow-level `env:` vars won't be available — values will be passed as inputs
+- Secrets must be passed explicitly to each caller job
 
 ---
 
@@ -183,6 +222,10 @@ dataPassingEdges:
     outputKey: summary
 authMethod: anthropic-api-key
 defaultTimeout: '30'
+useReusableWorkflow: false
+runnerLabel: 'ubuntu-latest'
+# Per-step timeout overrides (optional):
+# steps[n].timeout: '45'
 ```
 
 ---

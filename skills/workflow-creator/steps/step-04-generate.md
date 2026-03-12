@@ -20,17 +20,17 @@ Execute in this exact order. Do NOT write any files until the pre-generation che
 
 ---
 
-### Phase 1: Pre-Generation Checklist (Items 1–7)
+### Phase 1: Pre-Generation Checklist (Items 1–10)
 
-Load `skills/workflow-creator/checklists/output-checklist.md` and run items 1–7.
+Load `skills/workflow-creator/checklists/output-checklist.md` and run items 1–10.
 
 For each item:
 
 - Evaluate against the WIP state
 - If the item FAILS: HALT, report the specific failing item using the HALT message from the checklist, and DO NOT write any files until the user resolves it
-- If the item auto-resolves (items 6 and 7 may): apply the auto-fix, inform the user, continue
+- If the item auto-resolves (items 6, 7, 8, 9, 10 may): apply the auto-fix, inform the user, continue
 
-Only proceed to Phase 2 after ALL 7 items pass.
+Only proceed to Phase 2 after ALL 10 items pass.
 
 ---
 
@@ -120,10 +120,48 @@ Using `knowledge/auth-patterns.md`, prepare the auth step snippets for insertion
 
 For each dependency edge with `strategy: "artifact"` in the WIP:
 
-- **Producer job** (upstream): add `actions/upload-artifact@v7` step AFTER the AI step
+- **Producer job** (upstream): add `actions/upload-artifact@v7` step AFTER the AI step. **Upload only the specific output file(s) for this step** — never the entire output directory. This prevents artifact bloat from cascading downloads.
 - **Consumer job** (downstream): add `actions/download-artifact@v8` step BEFORE the AI step AND before `actions/checkout@v6` if checkout follows download
+- **Fan-in job** (aggregation): if a final job needs all upstream artifacts, use a single `actions/download-artifact@v8` with `merge-multiple: true` instead of individual download steps for each artifact
 
 Use the `artifactName` and `artifactPath` values from the WIP edge data.
+
+---
+
+### Phase 5B: Generate Reusable Workflow (if enabled)
+
+**Skip this phase if `useReusableWorkflow` is `false` in the WIP.**
+
+If `useReusableWorkflow` is `true`, generate `.github/workflows/run-<workflowSlug>-step.yml` using the Reusable Workflow Pattern from `action-schema.md`.
+
+The reusable workflow must:
+
+1. Declare all varying parameters as `inputs` (step_name, workflow_path, output_file, artifact_name, artifact_path, timeout_minutes, plus any job-specific inputs like target_repo/target_branch)
+2. Declare all required secrets in `on.workflow_call.secrets`
+3. Place `continue-on-error: true` on the job inside the reusable workflow (NOT on caller jobs — this is invalid syntax)
+4. Include the full step sequence: checkout → artifact downloads → auth setup → AI step → cleanup → artifact upload
+5. Gate auth/AI/cleanup steps behind any skip-check conditions if applicable
+
+Progress update:
+
+```
+Writing reusable workflow...
+[✓] .github/workflows/run-<workflowSlug>-step.yml
+```
+
+---
+
+### Phase 5C: Generate Custom Runner Config (if needed)
+
+**Skip this phase if `runnerLabel` is `ubuntu-latest` or any standard GitHub-hosted label.**
+
+If a custom self-hosted runner label is used, generate `.github/actionlint.yaml`:
+
+```yaml
+self-hosted-runner:
+  labels:
+    - [runnerLabel]
+```
 
 ---
 
@@ -138,6 +176,11 @@ name: [workflowName]
 
 on:
   [trigger]: [trigger-specific config if needed]
+
+# EMIT IF workflow has jobs that commit/push or if trigger includes schedule:
+concurrency:
+  group: [workflowSlug]-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   [for each step in dependency order]:
@@ -206,63 +249,107 @@ jobs:
             path: [artifact-path]
 ```
 
+**If `useReusableWorkflow` is `true`**, jobs that were identified for extraction in Step 02 use the caller pattern instead of inline steps:
+
+```yaml
+[step-slug]:
+  needs: [dependency-list]
+  uses: ./.github/workflows/run-[workflowSlug]-step.yml
+  with:
+    step_name: '[step-name]'
+    workflow_path: 'workflows/[step-slug].md'
+    output_file: '[output-file-path]'
+    artifact_name: '[artifact-name]'
+    artifact_path: '[artifact-path]'
+    timeout_minutes: '[timeout]'
+    # ... any additional inputs
+  secrets:
+    [SECRET_NAME]: ${{ secrets.[SECRET_NAME] }}
+    # ... one entry per secret declared in the reusable workflow
+```
+
+**Important:** Do NOT add `continue-on-error`, `runs-on`, or `steps` to reusable workflow caller jobs. These are invalid. Failure resilience is handled inside the reusable workflow.
+
 **Critical YAML rules (from action-schema.md):**
 
-- Every job uses `runs-on: ubuntu-latest` — NO exceptions
-- Every job includes `- uses: actions/checkout@v6`
+- Every inline job uses `runs-on: ubuntu-latest` (or the custom runner label) — NO exceptions
+- Every inline job includes `- uses: actions/checkout@v6`
 - `id: ai` on every AI action step
 - `outputs:` block at job level when the job exposes values to downstream jobs
 - All input values are strings (wrap numbers in quotes: `timeout_minutes: '30'`)
 - Job IDs are the step slugs (lowercase alphanumeric + hyphens)
+- Reusable workflow caller jobs may only use: `name`, `uses`, `with`, `secrets`, `needs`, `if`, `permissions`
+- Workflow-level `env:` vars cannot be referenced in reusable workflow `with:` — hardcode values or use inputs
 
 ---
 
-### Phase 7: action-validator (Item 8)
+### Phase 7: Workflow Validation (Item 11)
 
-Check if `npx` is available:
+Try validators in this order of preference:
+
+**Option A: `actionlint` (preferred)**
+
+Check if `actionlint` is available:
+
+```
+actionlint --version
+```
+
+If available, run it against all generated workflow files:
+
+```
+actionlint .github/workflows/[workflowSlug].yml
+```
+
+If a reusable workflow was generated, also validate it:
+
+```
+actionlint .github/workflows/run-[workflowSlug]-step.yml
+```
+
+**Note:** `actionlint` will report false positives for custom self-hosted runner labels unless `.github/actionlint.yaml` exists (Phase 5C handles this).
+
+**Option B: `npx action-validator` (fallback)**
+
+If `actionlint` is not available, check for `npx`:
 
 ```
 npx --version
 ```
 
-**If `npx` NOT available:**
+If available, run: `npx action-validator .github/workflows/[workflowSlug].yml`
+
+**If neither tool is available:**
 
 ```
-WARNING: `npx` not found. Skipping action-validator schema validation.
-After installing Node.js, run manually: npx action-validator .github/workflows/[workflowSlug].yml
+WARNING: Neither `actionlint` nor `npx action-validator` found. Skipping workflow validation.
+Install actionlint (brew install actionlint) or Node.js for validation.
+Run manually: actionlint .github/workflows/[workflowSlug].yml
 ```
 
 Skip to Phase 8.
-
-**If `npx` available:**
-
-Run:
-
-```
-npx action-validator .github/workflows/[workflowSlug].yml
-```
 
 **If validation passes (zero errors):** Continue to Phase 8.
 
 **If validation fails:** Enter the fix loop (max 3 iterations):
 
 1. Analyze all reported errors
-2. Regenerate the ENTIRE `.github/workflows/[workflowSlug].yml` from scratch with all corrections applied
-3. Rewrite the file
-4. Re-run `npx action-validator .github/workflows/[workflowSlug].yml`
+2. Regenerate the ENTIRE `.github/workflows/[workflowSlug].yml` from scratch with all corrections applied (and the reusable workflow if applicable)
+3. Rewrite the file(s)
+4. Re-run validation
 5. If passes: continue to Phase 8
 6. If fails and iteration < 3: go back to step 1
 7. If fails after 3 attempts:
 
 ```
-WARNING: action-validator still reports errors after 3 regeneration attempts.
+WARNING: Validation still reports errors after 3 regeneration attempts.
 
 The generated YAML has been written to .github/workflows/[workflowSlug].yml
 Please fix the following errors manually:
 
-[raw action-validator output]
+[raw validation output]
 
-After fixing, verify with: npx action-validator .github/workflows/[workflowSlug].yml
+After fixing, verify with: actionlint .github/workflows/[workflowSlug].yml
 ```
 
 Proceed to Phase 9 anyway (generation is considered complete; YAML needs manual fix).
@@ -377,6 +464,8 @@ Generation complete!
 
 Files written:
   .github/workflows/[workflowSlug].yml
+  [if reusable workflow:] .github/workflows/run-[workflowSlug]-step.yml
+  [if custom runner:] .github/actionlint.yaml
   [if list-models was created:] .github/workflows/list-models.yml
   workflows/[step-a-slug].md
   workflows/[step-b-slug].md
@@ -387,7 +476,7 @@ Files written:
   Preserved (unchanged):
     workflows/[step-c-slug].md
 
-action-validator: [PASSED / SKIPPED (npx not available) / NEEDS MANUAL FIX]
+Validation: [PASSED / SKIPPED (no validator available) / NEEDS MANUAL FIX]
 
 Next steps:
 1. Review the generated files to ensure the prompts match your intent
