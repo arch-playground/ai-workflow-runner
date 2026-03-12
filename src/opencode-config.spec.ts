@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
-import { createOpencode } from '@opencode-ai/sdk';
+import { createOpencode } from '@opencode-ai/sdk/v2';
 import { OpenCodeService, resetOpenCodeService } from './opencode';
 import { INPUT_LIMITS } from './types';
 import {
@@ -14,7 +14,7 @@ import {
 } from './opencode-test-helpers';
 
 jest.mock('@actions/core');
-jest.mock('@opencode-ai/sdk');
+jest.mock('@opencode-ai/sdk/v2');
 jest.mock('fs', () => {
   const actual = jest.requireActual<typeof import('fs')>('fs');
   return {
@@ -264,6 +264,17 @@ describe('OpenCodeService - config & reconnection', () => {
 
   describe('config loading', () => {
     const DEFAULT_SERVER_OPTIONS = { hostname: '127.0.0.1', port: 0 };
+    const DEFAULT_PERMISSION = {
+      '*': 'allow',
+      lsp: 'allow',
+      question: 'deny',
+      plan_enter: 'deny',
+      plan_exit: 'deny',
+    };
+    const serverOptionsWithPermission = (config?: Record<string, unknown>) => ({
+      ...DEFAULT_SERVER_OPTIONS,
+      config: { ...config, permission: DEFAULT_PERMISSION },
+    });
 
     beforeEach(() => {
       mockReadFile.mockResolvedValue('{}');
@@ -292,10 +303,9 @@ describe('OpenCodeService - config & reconnection', () => {
       await target.initialize({ opencodeConfig: '/workspace/config.json' });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith({
-        ...DEFAULT_SERVER_OPTIONS,
-        config: configData,
-      });
+      expect(mockCreateOpencode).toHaveBeenCalledWith(
+        serverOptionsWithPermission({ provider: { anthropic: { options: { apiKey: 'test' } } } })
+      );
     });
 
     it('7.3-UNIT-003: reads auth_config file as JSON', async () => {
@@ -325,10 +335,10 @@ describe('OpenCodeService - config & reconnection', () => {
       await target.initialize({ authConfig: '/workspace/auth.json' });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith(DEFAULT_SERVER_OPTIONS);
+      expect(mockCreateOpencode).toHaveBeenCalledWith(serverOptionsWithPermission());
       expect(mockClient.auth.set).toHaveBeenCalledWith({
-        path: { id: 'github-copilot' },
-        body: authData['github-copilot'],
+        providerID: 'github-copilot',
+        auth: authData['github-copilot'],
       });
     });
 
@@ -338,10 +348,9 @@ describe('OpenCodeService - config & reconnection', () => {
       await target.initialize({ model: 'claude-sonnet-4-5-20250929' });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith({
-        ...DEFAULT_SERVER_OPTIONS,
-        config: { model: 'claude-sonnet-4-5-20250929' },
-      });
+      expect(mockCreateOpencode).toHaveBeenCalledWith(
+        serverOptionsWithPermission({ model: 'claude-sonnet-4-5-20250929' })
+      );
     });
 
     it('7.3-UNIT-006: throws config file not found with basename', async () => {
@@ -408,13 +417,13 @@ describe('OpenCodeService - config & reconnection', () => {
       expect((error as Error).message).not.toContain('/very/long/secret/path');
     });
 
-    it('7.3-UNIT-011: without any config options calls createOpencode() without config', async () => {
+    it('7.3-UNIT-011: without any config options still injects permission config', async () => {
       // Act
       const target = new OpenCodeService();
       await target.initialize();
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith(DEFAULT_SERVER_OPTIONS);
+      expect(mockCreateOpencode).toHaveBeenCalledWith(serverOptionsWithPermission());
     });
 
     it('7.3-UNIT-012: with model only sets config.model without loading files', async () => {
@@ -424,10 +433,9 @@ describe('OpenCodeService - config & reconnection', () => {
 
       // Assert
       expect(mockReadFile).not.toHaveBeenCalled();
-      expect(mockCreateOpencode).toHaveBeenCalledWith({
-        ...DEFAULT_SERVER_OPTIONS,
-        config: { model: 'gpt-4' },
-      });
+      expect(mockCreateOpencode).toHaveBeenCalledWith(
+        serverOptionsWithPermission({ model: 'gpt-4' })
+      );
     });
 
     it('7.3-UNIT-013: with all three options passes config and model to createOpencode and auth via auth.set()', async () => {
@@ -448,16 +456,12 @@ describe('OpenCodeService - config & reconnection', () => {
       });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith({
-        ...DEFAULT_SERVER_OPTIONS,
-        config: {
-          setting1: 'value1',
-          model: 'claude-opus-4-6',
-        },
-      });
+      expect(mockCreateOpencode).toHaveBeenCalledWith(
+        serverOptionsWithPermission({ setting1: 'value1', model: 'claude-opus-4-6' })
+      );
       expect(mockClient.auth.set).toHaveBeenCalledWith({
-        path: { id: 'anthropic' },
-        body: { type: 'api', key: 'sk-123' },
+        providerID: 'anthropic',
+        auth: { type: 'api', key: 'sk-123' },
       });
     });
 
@@ -477,15 +481,15 @@ describe('OpenCodeService - config & reconnection', () => {
       });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith(DEFAULT_SERVER_OPTIONS);
+      expect(mockCreateOpencode).toHaveBeenCalledWith(serverOptionsWithPermission());
       expect(mockClient.auth.set).toHaveBeenCalledTimes(2);
       expect(mockClient.auth.set).toHaveBeenCalledWith({
-        path: { id: 'anthropic' },
-        body: { type: 'api', key: 'sk-anthropic' },
+        providerID: 'anthropic',
+        auth: { type: 'api', key: 'sk-anthropic' },
       });
       expect(mockClient.auth.set).toHaveBeenCalledWith({
-        path: { id: 'github-copilot' },
-        body: { type: 'oauth', access: 'gho_test', refresh: 'gho_test', expires: 0 },
+        providerID: 'github-copilot',
+        auth: { type: 'oauth', access: 'gho_test', refresh: 'gho_test', expires: 0 },
       });
     });
 
@@ -516,7 +520,7 @@ describe('OpenCodeService - config & reconnection', () => {
       expect((error as Error).message).not.toContain('/very/secret/deep/path');
     });
 
-    it('7.3-UNIT-017: handles non-object JSON values in config file', async () => {
+    it('7.3-UNIT-017: handles non-object JSON values in config file by ignoring them', async () => {
       // Arrange
       mockReadFile.mockResolvedValue('"just a string"');
 
@@ -524,11 +528,8 @@ describe('OpenCodeService - config & reconnection', () => {
       const target = new OpenCodeService();
       await target.initialize({ opencodeConfig: '/workspace/config.json' });
 
-      // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith({
-        ...DEFAULT_SERVER_OPTIONS,
-        config: 'just a string',
-      });
+      // Assert - non-object JSON is discarded, only permission config remains
+      expect(mockCreateOpencode).toHaveBeenCalledWith(serverOptionsWithPermission());
     });
 
     it('7.3-UNIT-018: auth.set() error throws with provider name', async () => {

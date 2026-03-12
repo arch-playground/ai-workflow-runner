@@ -14,7 +14,7 @@ import {
 } from './opencode-test-helpers';
 
 jest.mock('@actions/core');
-jest.mock('@opencode-ai/sdk');
+jest.mock('@opencode-ai/sdk/v2');
 
 const mockCore = core as jest.Mocked<typeof core>;
 
@@ -50,10 +50,10 @@ describe('OpenCodeService - session & messages', () => {
 
       const result = await sessionPromise;
 
-      expect(mockClient.session.create).toHaveBeenCalledWith({ body: { title: 'AI Workflow' } });
+      expect(mockClient.session.create).toHaveBeenCalledWith({ title: 'AI Workflow' });
       expect(mockClient.session.promptAsync).toHaveBeenCalledWith({
-        path: { id: 'session-123' },
-        body: { parts: [{ type: 'text', text: 'test prompt' }] },
+        sessionID: 'session-123',
+        parts: [{ type: 'text', text: 'test prompt' }],
       });
       expect(result.sessionId).toBe('session-123');
     });
@@ -144,10 +144,10 @@ describe('OpenCodeService - session & messages', () => {
       await followUpPromise;
 
       const call = mockClient.session.promptAsync.mock.calls[1] as [
-        { body: { parts: Array<{ text: string }> } },
+        { parts: Array<{ text: string }> },
       ];
-      expect(call[0]?.body.parts[0]?.text).toContain('...[truncated]');
-      expect(call[0]?.body.parts[0]?.text.length).toBeLessThan(longMessage.length);
+      expect(call[0]?.parts[0]?.text).toContain('...[truncated]');
+      expect(call[0]?.parts[0]?.text.length).toBeLessThan(longMessage.length);
     });
 
     it('throws if service is disposed', async () => {
@@ -231,9 +231,9 @@ describe('OpenCodeService - session & messages', () => {
 
       await flushMicrotasks();
 
-      expect(mockClient.postSessionIdPermissionsPermissionId).toHaveBeenCalledWith({
-        path: { id: 'session-123', permissionID: 'perm-1' },
-        body: { response: 'always' },
+      expect(mockClient.permission.reply).toHaveBeenCalledWith({
+        requestID: 'perm-1',
+        reply: 'always',
       });
 
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
@@ -241,9 +241,7 @@ describe('OpenCodeService - session & messages', () => {
     });
 
     it('logs permission approval failures', async () => {
-      mockClient.postSessionIdPermissionsPermissionId.mockRejectedValueOnce(
-        new Error('Permission denied')
-      );
+      mockClient.permission.reply.mockRejectedValueOnce(new Error('Permission denied'));
 
       const target = new OpenCodeService();
       await target.initialize();
@@ -266,7 +264,7 @@ describe('OpenCodeService - session & messages', () => {
       await sessionPromise;
     });
 
-    it('handles session.status with error type by rejecting callback', async () => {
+    it('handles session.error by rejecting callback', async () => {
       const target = new OpenCodeService();
       await target.initialize();
 
@@ -274,17 +272,17 @@ describe('OpenCodeService - session & messages', () => {
       await flushMicrotasks();
 
       eventControl.emit({
-        type: 'session.status',
+        type: 'session.error',
         properties: {
           sessionID: 'session-123',
-          status: { type: 'error', error: 'Something failed' },
+          error: 'Something failed',
         },
       });
 
       await expect(sessionPromise).rejects.toThrow('Session error: Something failed');
     });
 
-    it('handles session.status with disconnected type by rejecting callback', async () => {
+    it('handles session.error with object error by rejecting callback', async () => {
       const target = new OpenCodeService();
       await target.initialize();
 
@@ -292,10 +290,10 @@ describe('OpenCodeService - session & messages', () => {
       await flushMicrotasks();
 
       eventControl.emit({
-        type: 'session.status',
+        type: 'session.error',
         properties: {
           sessionID: 'session-123',
-          status: { type: 'disconnected', error: 'Connection lost' },
+          error: { type: 'disconnected', message: 'Connection lost' },
         },
       });
 
@@ -321,7 +319,7 @@ describe('OpenCodeService - session & messages', () => {
       });
 
       await flushMicrotasks();
-      expect(mockCore.info).toHaveBeenCalledWith('[OpenCode] Test output');
+      expect(mockCore.info).toHaveBeenCalledWith(expect.stringContaining('[OpenCode] Test output'));
 
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
       await sessionPromise;
@@ -654,10 +652,10 @@ describe('OpenCodeService - session & messages', () => {
       await flushMicrotasks();
 
       eventControl.emit({
-        type: 'session.status',
+        type: 'session.error',
         properties: {
           sessionID: 'session-123',
-          status: { type: 'error', error: 'Connection lost' },
+          error: 'Connection lost',
         },
       });
 

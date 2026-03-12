@@ -1,4 +1,4 @@
-import type { ToolState } from '@opencode-ai/sdk';
+import type { ToolState } from '@opencode-ai/sdk/v2';
 import { IToolLogger, countLines, truncateError } from '../tool-logger.interface.js';
 
 export class DefaultToolLogger implements IToolLogger {

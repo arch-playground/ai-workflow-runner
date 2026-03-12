@@ -1,4 +1,4 @@
-// F11 Fix: Add proper type exports to match actual SDK interface
+// F11 Fix: Add proper type exports to match actual SDK v2 interface
 export interface OpencodeClient {
   session: {
     create: jest.Mock;
@@ -7,7 +7,11 @@ export interface OpencodeClient {
   event: {
     subscribe: jest.Mock;
   };
-  postSessionIdPermissionsPermissionId: jest.Mock;
+  permission: {
+    reply: jest.Mock;
+  };
 }
 
 export const createOpencode = jest.fn();
+
+export type ToolState = Record<string, unknown>;

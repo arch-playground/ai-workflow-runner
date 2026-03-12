@@ -1,4 +1,4 @@
-import type { ToolState } from '@opencode-ai/sdk';
+import type { ToolState } from '@opencode-ai/sdk/v2';
 
 export interface IToolLogger {
   /**
