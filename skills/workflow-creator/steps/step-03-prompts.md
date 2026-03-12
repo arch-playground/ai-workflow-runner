@@ -8,7 +8,7 @@
 
 ## INITIALIZATION
 
-1. Load and internalize `skills/workflow-creator/knowledge/prompt-quality-guide.md` — apply its 5-section structure and quality principles to every prompt you generate
+1. Load and internalize `skills/workflow-creator/knowledge/prompt-quality-guide.md` — apply its 7-section structure and quality principles to every prompt you generate
 2. Read the WIP file to get the step list, objectives, output artifacts, and data-passing edges
 
 Remind the user at the start:
@@ -45,7 +45,7 @@ Expected output: [stepOutputArtifact]
 
 #### 2. Generate Suggested Prompt
 
-Apply the 5-section structure from `prompt-quality-guide.md`:
+Apply the 7-section structure from `prompt-quality-guide.md`:
 
 ```markdown
 # [Step Name]
@@ -58,6 +58,7 @@ Apply the 5-section structure from `prompt-quality-guide.md`:
 
 [If this step receives data from a previous step:]
 The following data is available via environment variables:
+
 - `[KEY_NAME]`: [description of what this contains, from the data-passing edge]
 
 [If no upstream data:]
@@ -76,11 +77,39 @@ No data is passed from previous steps. The repository is checked out at the stan
 [If file: specify path and structure]
 [If Markdown: show expected heading structure]
 
+## Progressive Output
+
+Before starting analysis, create the output file at [output path] (or open
+it if it already exists). For each required section: if the section does not
+exist or is empty, add a `<!-- PLACEHOLDER: [section description] -->` marker.
+If the section already contains real content, leave it as-is.
+
+Then, as each section's analysis completes, compare the result against the
+current file content. Replace placeholder markers with the real content.
+If a section already has content, update it only if the new content differs.
+Do not wait until all analysis is done to write the file.
+
+[Tailor the specific scaffold structure and fill order to this step's output format.
+For example:]
+[If the output is a Markdown report: list the heading structure to scaffold,
+note which sections get placeholders vs which may already have content]
+[If the output is JSON: describe creating the file with the top-level schema
+and placeholder values, then filling each field as analysis completes]
+[If the output is multiple files: describe creating all files with placeholders first]
+
 ## Success Criteria
 
 - [Criterion 1 — derivable from Output Format]
 - [Criterion 2 — derivable from Output Format]
 - [Criterion 3 — at least one "no placeholder text" criterion if applicable]
+- The output file contains no remaining `<!-- PLACEHOLDER: ... -->` markers
+
+## Completion
+
+When the deliverables listed above are complete, STOP. Do NOT proceed to any
+subsequent steps, do NOT look for or execute other workflow files, and do NOT
+begin work that is not described in this prompt. Your task is finished when
+the success criteria are met.
 ```
 
 #### 3. Present to User
@@ -122,12 +151,14 @@ If **yes**, go through each step that needs one:
 > "For [step-name]: what should the validation script check?
 >
 > The script receives `AI_LAST_MESSAGE` as an environment variable (the AI's last response). Common checks:
+>
 > - Is the output valid JSON?
 > - Does it contain required fields?
 > - Does the output file exist?
 > - Does it pass a specific format check?"
 
 For each step that needs a validation script, collect:
+
 - Validation language preference: Python (default) or JavaScript
 - What to check (described in plain terms — the script will be generated in Step 04)
 - How many retries before failure: default 3, max 20
@@ -142,9 +173,9 @@ steps:
       enabled: true
       language: python
       checks:
-        - "output is valid JSON"
-        - "contains fields: name, description, items"
-        - "items array has at least 1 entry"
+        - 'output is valid JSON'
+        - 'contains fields: name, description, items'
+        - 'items array has at least 1 entry'
       maxRetry: '3'
 ```
 
