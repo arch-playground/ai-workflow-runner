@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+# Fix git "dubious ownership" in GitHub Actions Docker containers (CVE-2022-24765)
+git config --global --replace-all safe.directory '*'
+
 # Track exit code for signal handler
 FINAL_EXIT_CODE=0
 
