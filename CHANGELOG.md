@@ -5,6 +5,14 @@ All notable changes to AI Workflow Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.6.0...v1.7.0) (2026-03-13)
+
+
+### Features
+
+* **entrypoint:** add git safe.directory configuration for Docker con… ([1bcf084](https://github.com/arch-playground/ai-workflow-runner/commit/1bcf084749c2fb9e0171af244cd2b8fc82c18ef9))
+* **entrypoint:** add git safe.directory configuration for Docker container ([d3808e2](https://github.com/arch-playground/ai-workflow-runner/commit/d3808e2f14bc5e409abdae8d2ac02185f45a51b5))
+
 ## [1.6.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.5.0...v1.6.0) (2026-03-12)
 
 
