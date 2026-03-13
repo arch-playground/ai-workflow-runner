@@ -77,6 +77,32 @@ describe('Docker Container Integration', () => {
   );
 
   test(
+    'git config safe.directory command works inside container',
+    () => {
+      const output = execSync(
+        `docker run --rm --entrypoint sh ${DOCKER_IMAGE} -c "git config --global --replace-all safe.directory '*' && git config --global --get-all safe.directory"`,
+        { timeout: TIMEOUT_MS }
+      )
+        .toString()
+        .trim();
+      expect(output).toBe('*');
+    },
+    TIMEOUT_MS
+  );
+
+  test(
+    'entrypoint.sh includes git safe.directory configuration',
+    () => {
+      const output = execSync(`docker run --rm --entrypoint cat ${DOCKER_IMAGE} /entrypoint.sh`, {
+        timeout: TIMEOUT_MS,
+      }).toString();
+      expect(output).toContain("safe.directory '*'");
+      expect(output).toContain('CVE-2022-24765');
+    },
+    TIMEOUT_MS
+  );
+
+  test(
     'application files exist',
     () => {
       const output = execSync(`docker run --rm --entrypoint ls ${DOCKER_IMAGE} -la /app/dist/`, {
