@@ -99,9 +99,22 @@ export class OpenCodeService {
   };
 
   private readonly KNOWN_MODELS: Record<string, string> = {
+    // Anthropic
     opus: 'anthropic/claude-opus-4-6',
     sonnet: 'anthropic/claude-sonnet-4-6',
     haiku: 'anthropic/claude-haiku-4-5',
+    'sonnet-4': 'anthropic/claude-sonnet-4-6',
+    'opus-4': 'anthropic/claude-opus-4-6',
+    'haiku-4': 'anthropic/claude-haiku-4-5',
+    // OpenAI
+    'gpt-4o': 'openai/gpt-4o',
+    'gpt-4o-mini': 'openai/gpt-4o-mini',
+    o3: 'openai/o3',
+    'o3-mini': 'openai/o3-mini',
+    'o4-mini': 'openai/o4-mini',
+    // Google
+    'gemini-2.5-pro': 'google/gemini-2.5-pro',
+    'gemini-2.5-flash': 'google/gemini-2.5-flash',
   };
 
   async initialize(options?: InitializeOptions): Promise<void> {
@@ -180,19 +193,7 @@ export class OpenCodeService {
     }
 
     if (options?.modelStrategy?.primary && !options?.model) {
-      const resolved = this.resolveShortNameSync(options.modelStrategy.primary);
-      if (resolved) {
-        sdkConfig.model = resolved;
-      } else if (this.isFullModelId(options.modelStrategy.primary)) {
-        sdkConfig.model = options.modelStrategy.primary;
-      } else {
-        const availableNames = Object.keys(this.KNOWN_MODELS).join(', ');
-        throw new Error(
-          `Unknown model short name "${options.modelStrategy.primary}" for primary. ` +
-            `Available short names: ${availableNames}. ` +
-            `Use a full model ID (e.g., "anthropic/claude-sonnet-4-6") or one of: ${availableNames}.`
-        );
-      }
+      sdkConfig.model = this.resolveModelName(options.modelStrategy.primary);
     }
 
     const strategyAgents = this.buildAgentConfigs(options?.modelStrategy, options?.model);
@@ -212,8 +213,30 @@ export class OpenCodeService {
     return value.includes('/');
   }
 
-  private resolveShortNameSync(shortName: string): string | null {
-    return this.KNOWN_MODELS[shortName.toLowerCase()] ?? null;
+  private resolveModelName(value: string): string {
+    if (this.isFullModelId(value)) return value;
+
+    const lower = value.toLowerCase();
+    const exact = this.KNOWN_MODELS[lower];
+    if (exact) return exact;
+
+    const matches = [
+      ...new Set(Object.values(this.KNOWN_MODELS).filter((fullId) => fullId.includes(lower))),
+    ];
+
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length > 1) {
+      throw new Error(
+        `Ambiguous model name "${value}" matches multiple models: ${matches.join(', ')}. ` +
+          `Use a full model ID or a more specific short name.`
+      );
+    }
+
+    const availableNames = Object.keys(this.KNOWN_MODELS).join(', ');
+    throw new Error(
+      `Unknown model short name "${value}". Available short names: ${availableNames}. ` +
+        `Use a full model ID (e.g., "anthropic/claude-sonnet-4-6") or one of: ${availableNames}.`
+    );
   }
 
   private buildAgentConfigs(
@@ -225,21 +248,10 @@ export class OpenCodeService {
     const agents: Record<string, unknown> = {};
     const model = defaultModel || '';
 
-    const resolveModel = (value: string): string => {
-      if (this.isFullModelId(value)) return value;
-      const resolved = this.resolveShortNameSync(value);
-      if (resolved) return resolved;
-      const availableNames = Object.keys(this.KNOWN_MODELS).join(', ');
-      throw new Error(
-        `Unknown model short name "${value}". Available short names: ${availableNames}. ` +
-          `Use a full model ID (e.g., "anthropic/claude-sonnet-4-6") or one of: ${availableNames}.`
-      );
-    };
-
     if (strategy) {
       for (const [taskType, modelValue] of Object.entries(strategy)) {
         if (taskType === 'primary') continue;
-        const resolvedModel = resolveModel(modelValue);
+        const resolvedModel = this.resolveModelName(modelValue);
         agents[taskType] = {
           model: resolvedModel,
           mode: 'subagent',
