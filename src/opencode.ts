@@ -3,7 +3,7 @@ import type { ToolState } from '@opencode-ai/sdk/v2';
 import * as core from '@actions/core';
 import * as fs from 'fs';
 import * as path from 'path';
-import { OpenCodeSession, INPUT_LIMITS } from './types.js';
+import { OpenCodeSession, INPUT_LIMITS, ModelStrategy } from './types.js';
 import { truncateString } from './security.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
 import { getDebugLogWriter } from './debug-log-writer.js';
@@ -12,6 +12,7 @@ export interface InitializeOptions {
   opencodeConfig?: string;
   authConfig?: string;
   model?: string;
+  modelStrategy?: ModelStrategy;
 }
 
 const SESSION_STATUS = {
@@ -83,6 +84,22 @@ export class OpenCodeService {
   private sessionCompletionCallbacks: Map<string, SessionCallbacks> = new Map();
   private sessionMessageState: Map<string, SessionMessageState> = new Map();
   private heartbeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  private readonly DEFAULT_TASK_TYPES = ['explore', 'validate', 'format', 'generate'] as const;
+
+  private readonly TASK_TYPE_DESCRIPTIONS: Record<string, string> = {
+    explore: 'Exploration and codebase scanning tasks',
+    validate: 'Validation and checking tasks',
+    format: 'Formatting and transformation tasks',
+    generate: 'Code generation and implementation tasks',
+    default: 'Default fallback tasks',
+  };
+
+  private readonly KNOWN_MODELS: Record<string, string> = {
+    opus: 'anthropic/claude-opus-4-6',
+    sonnet: 'anthropic/claude-sonnet-4-6',
+    haiku: 'anthropic/claude-haiku-4-5',
+  };
 
   async initialize(options?: InitializeOptions): Promise<void> {
     if (this.initializationError) {
@@ -159,11 +176,81 @@ export class OpenCodeService {
       sdkConfig.model = options.model;
     }
 
+    if (options?.modelStrategy?.primary && !options?.model) {
+      const resolved = this.resolveShortNameSync(options.modelStrategy.primary);
+      if (resolved) {
+        sdkConfig.model = resolved;
+      } else if (this.isFullModelId(options.modelStrategy.primary)) {
+        sdkConfig.model = options.modelStrategy.primary;
+      }
+    }
+
+    const strategyAgents = this.buildAgentConfigs(options?.modelStrategy, options?.model);
+    if (strategyAgents) {
+      const existingAgents = (sdkConfig.agent as Record<string, unknown>) || {};
+      sdkConfig.agent = { ...existingAgents, ...strategyAgents };
+    }
+
     sdkConfig.permission = this.buildPermissionConfig(
       sdkConfig.permission as Record<string, unknown> | undefined
     );
 
     return sdkConfig;
+  }
+
+  private isFullModelId(value: string): boolean {
+    return value.includes('/');
+  }
+
+  private resolveShortNameSync(shortName: string): string | null {
+    return this.KNOWN_MODELS[shortName.toLowerCase()] ?? null;
+  }
+
+  private buildAgentConfigs(
+    strategy: ModelStrategy | undefined,
+    defaultModel?: string
+  ): Record<string, unknown> | undefined {
+    if (!defaultModel && !strategy) return undefined;
+
+    const agents: Record<string, unknown> = {};
+    const model = defaultModel || '';
+
+    const resolveModel = (value: string): string => {
+      if (this.isFullModelId(value)) return value;
+      const resolved = this.resolveShortNameSync(value);
+      if (resolved) return resolved;
+      const availableNames = Object.keys(this.KNOWN_MODELS).join(', ');
+      throw new Error(
+        `Unknown model short name "${value}". Available short names: ${availableNames}. ` +
+          `Use a full model ID (e.g., "anthropic/claude-sonnet-4-6") or one of: ${availableNames}.`
+      );
+    };
+
+    if (strategy) {
+      for (const [taskType, modelValue] of Object.entries(strategy)) {
+        if (taskType === 'primary') continue;
+        const resolvedModel = resolveModel(modelValue);
+        agents[taskType] = {
+          model: resolvedModel,
+          mode: 'subagent',
+          description: this.TASK_TYPE_DESCRIPTIONS[taskType] || `${taskType} tasks`,
+        };
+      }
+    }
+
+    if (model) {
+      for (const taskType of this.DEFAULT_TASK_TYPES) {
+        if (!agents[taskType]) {
+          agents[taskType] = {
+            model: model,
+            mode: 'subagent',
+            description: this.TASK_TYPE_DESCRIPTIONS[taskType],
+          };
+        }
+      }
+    }
+
+    return Object.keys(agents).length > 0 ? agents : undefined;
   }
 
   private buildPermissionConfig(existing?: Record<string, unknown>): Record<string, string> {
