@@ -688,5 +688,133 @@ describe('OpenCodeService - config & reconnection', () => {
       const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
       expect(configArg.model).toBe('anthropic/claude-sonnet-4-6');
     });
+
+    it('throws error for unrecognized primary short name', async () => {
+      const service = new OpenCodeService();
+      await expect(
+        service.initialize({
+          modelStrategy: { primary: 'unknown-model' },
+        })
+      ).rejects.toThrow(/Unknown model short name "unknown-model" for primary/);
+    });
+  });
+
+  describe('token tracking integration', () => {
+    it('exposes TokenTracker via getTokenTracker()', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+      const tracker = service.getTokenTracker();
+      expect(tracker).toBeDefined();
+      expect(tracker.getSummary().totalTokens).toBe(0);
+    });
+
+    it('collects token metrics after runSession completes', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+
+      mockClient.session.messages.mockResolvedValue({
+        data: [
+          {
+            info: {
+              id: 'msg-1',
+              role: 'assistant',
+              model: { providerID: 'anthropic', modelID: 'opus' },
+              cost: 0.1,
+              tokens: { input: 1000, output: 500, reasoning: 0, cache: { read: 0, write: 0 } },
+            },
+            parts: [],
+          },
+          { info: { id: 'msg-2', role: 'user' }, parts: [] },
+        ],
+      });
+
+      const sessionPromise = service.runSession('test prompt', 30000);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      eventControl.emit({
+        type: 'session.idle',
+        properties: { sessionID: 'session-123', status: { type: 'idle' } },
+      });
+
+      await sessionPromise;
+
+      expect(mockClient.session.messages).toHaveBeenCalledWith({ sessionID: 'session-123' });
+      const tracker = service.getTokenTracker();
+      const summary = tracker.getSummary();
+      expect(summary.inputTokens).toBe(1000);
+      expect(summary.outputTokens).toBe(500);
+    });
+
+    it('only tracks assistant messages, not user messages', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+
+      mockClient.session.messages.mockResolvedValue({
+        data: [
+          { info: { id: 'msg-1', role: 'user' }, parts: [] },
+          {
+            info: {
+              id: 'msg-2',
+              role: 'assistant',
+              model: { providerID: 'anthropic', modelID: 'opus' },
+              cost: 0.1,
+              tokens: { input: 1000, output: 500, reasoning: 0, cache: { read: 0, write: 0 } },
+            },
+            parts: [],
+          },
+        ],
+      });
+
+      const sessionPromise = service.runSession('test prompt', 30000);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      eventControl.emit({
+        type: 'session.idle',
+        properties: { sessionID: 'session-123', status: { type: 'idle' } },
+      });
+      await sessionPromise;
+
+      const tracker = service.getTokenTracker();
+      const summary = tracker.getSummary();
+      expect(summary.perModel['opus']?.messageCount).toBe(1);
+    });
+
+    it('handles session.messages failure gracefully', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+
+      mockClient.session.messages.mockRejectedValue(new Error('API error'));
+
+      const sessionPromise = service.runSession('test prompt', 30000);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      eventControl.emit({
+        type: 'session.idle',
+        properties: { sessionID: 'session-123', status: { type: 'idle' } },
+      });
+      await sessionPromise;
+
+      expect(mockCore.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to collect token metrics')
+      );
+    });
+
+    it('collects token metrics even when session errors (try/finally)', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+
+      mockClient.session.messages.mockResolvedValue({ data: [] });
+
+      const sessionPromise = service.runSession('test prompt', 30000);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      eventControl.emit({
+        type: 'session.error',
+        properties: { sessionID: 'session-123', error: { message: 'Something went wrong' } },
+      });
+
+      await expect(sessionPromise).rejects.toThrow('Session error');
+
+      expect(mockClient.session.messages).toHaveBeenCalledWith({ sessionID: 'session-123' });
+    });
   });
 });

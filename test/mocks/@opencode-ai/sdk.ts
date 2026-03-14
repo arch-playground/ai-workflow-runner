@@ -3,6 +3,7 @@ export interface OpencodeClient {
   session: {
     create: jest.Mock;
     promptAsync: jest.Mock;
+    messages: jest.Mock;
   };
   event: {
     subscribe: jest.Mock;

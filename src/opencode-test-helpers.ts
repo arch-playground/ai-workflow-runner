@@ -4,6 +4,7 @@ export interface MockClient {
   session: {
     create: jest.Mock;
     promptAsync: jest.Mock;
+    messages: jest.Mock;
   };
   event: {
     subscribe: jest.Mock;
@@ -91,6 +92,7 @@ export function createMockClient(): MockClient {
     session: {
       create: jest.fn().mockResolvedValue({ data: { id: 'session-123' } }),
       promptAsync: jest.fn().mockResolvedValue({ data: {} }),
+      messages: jest.fn().mockResolvedValue({ data: [] }),
     },
     event: {
       subscribe: jest.fn(),
