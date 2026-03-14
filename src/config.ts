@@ -6,6 +6,7 @@ import {
   ValidationResult,
   INPUT_LIMITS,
   type ValidationScriptType,
+  type ModelStrategy,
 } from './types.js';
 import { maskSecrets, validateConfigPath } from './security.js';
 
@@ -117,6 +118,41 @@ function parseValidationMaxRetry(maxValidationRetriesRaw: string): number {
   return maxValidationRetries;
 }
 
+function parseModelStrategy(raw: string): ModelStrategy | undefined {
+  if (!raw || raw.trim() === '') return undefined;
+
+  if (raw.length > INPUT_LIMITS.MAX_MODEL_STRATEGY_SIZE) {
+    throw new Error(
+      `model_strategy exceeds maximum size of ${INPUT_LIMITS.MAX_MODEL_STRATEGY_SIZE} bytes`
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      'model_strategy must be a valid JSON object. Example: {"explore":"haiku","validate":"haiku"}'
+    );
+  }
+
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('model_strategy must be a JSON object, not an array or primitive');
+  }
+
+  const strategy = parsed as Record<string, unknown>;
+  for (const [key, value] of Object.entries(strategy)) {
+    if (typeof value !== 'string') {
+      throw new Error(`model_strategy["${key}"] must be a string, got ${typeof value}`);
+    }
+    if (value.trim() === '') {
+      throw new Error(`model_strategy["${key}"] must be a non-empty string`);
+    }
+  }
+
+  return strategy as ModelStrategy;
+}
+
 export function validateDebugLogPath(workspacePath: string, debugLogPath: string): string {
   if (path.isAbsolute(debugLogPath)) {
     const normalized = path.normalize(debugLogPath);
@@ -183,6 +219,9 @@ export function getInputs(): ActionInputs {
 
   const maxValidationRetries = parseValidationMaxRetry(maxValidationRetriesRaw);
 
+  const modelStrategyRaw = core.getInput('model_strategy') || '';
+  const modelStrategy = parseModelStrategy(modelStrategyRaw);
+
   const opencodeConfigRaw = core.getInput('opencode_config') || undefined;
   const authConfigRaw = core.getInput('auth_config') || undefined;
   const model = core.getInput('model') || undefined;
@@ -221,6 +260,7 @@ export function getInputs(): ActionInputs {
     opencodeConfig,
     authConfig,
     model,
+    modelStrategy,
     listModels,
     debugLog,
     debugLogPath,
