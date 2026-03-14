@@ -695,7 +695,73 @@ describe('OpenCodeService - config & reconnection', () => {
         service.initialize({
           modelStrategy: { primary: 'unknown-model' },
         })
-      ).rejects.toThrow(/Unknown model short name "unknown-model" for primary/);
+      ).rejects.toThrow(/Unknown model short name "unknown-model"/);
+    });
+
+    it('resolves partial model name via substring match', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        modelStrategy: { primary: 'claude-haiku-4-5' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      expect(configArg.model).toBe('anthropic/claude-haiku-4-5');
+    });
+
+    it('resolves partial model name case-insensitively', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        modelStrategy: { primary: 'Claude-Haiku-4-5' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      expect(configArg.model).toBe('anthropic/claude-haiku-4-5');
+    });
+
+    it('resolves new OpenAI short names', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        model: 'anthropic/claude-sonnet-4-6',
+        modelStrategy: { explore: 'gpt-4o', validate: 'o3-mini' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.explore).toEqual(expect.objectContaining({ model: 'openai/gpt-4o' }));
+      expect(agentConfig.validate).toEqual(expect.objectContaining({ model: 'openai/o3-mini' }));
+    });
+
+    it('resolves new Google short names', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        model: 'anthropic/claude-sonnet-4-6',
+        modelStrategy: { explore: 'gemini-2.5-pro' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.explore).toEqual(
+        expect.objectContaining({ model: 'google/gemini-2.5-pro' })
+      );
+    });
+
+    it('throws ambiguous error when substring matches multiple models', async () => {
+      const service = new OpenCodeService();
+      await expect(
+        service.initialize({
+          model: 'anthropic/claude-sonnet-4-6',
+          modelStrategy: { explore: 'claude' },
+        })
+      ).rejects.toThrow(/Ambiguous model name "claude" matches multiple models/);
+    });
+
+    it('resolves substring match for agent configs', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        model: 'anthropic/claude-sonnet-4-6',
+        modelStrategy: { explore: 'claude-opus-4-6' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.explore).toEqual(
+        expect.objectContaining({ model: 'anthropic/claude-opus-4-6' })
+      );
     });
   });
 

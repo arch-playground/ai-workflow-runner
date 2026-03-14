@@ -44,7 +44,7 @@ inputs:
     required: false
     default: ''
   model_strategy:
-    description: 'JSON mapping of task types to models for multi-model workflows. Short names (opus, sonnet, haiku) or full model IDs. Example: {"explore":"haiku","validate":"haiku","generate":"sonnet"}'
+    description: 'JSON mapping of task types to models for multi-model workflows. Short names (opus, sonnet, haiku, gpt-4o, o3-mini, gemini-2.5-pro, etc.), partial names (claude-haiku-4-5), or full model IDs (anthropic/claude-sonnet-4-6). Example: {"explore":"haiku","validate":"gpt-4o-mini","generate":"sonnet"}'
     required: false
     default: ''
   list_models:
