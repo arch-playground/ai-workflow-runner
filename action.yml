@@ -43,6 +43,10 @@ inputs:
     description: 'Model to use for AI execution (e.g., "anthropic/claude-3-opus"). Overrides config file default.'
     required: false
     default: ''
+  model_strategy:
+    description: 'JSON mapping of task types to models for multi-model workflows. Short names (opus, sonnet, haiku) or full model IDs. Example: {"explore":"haiku","validate":"haiku","generate":"sonnet"}'
+    required: false
+    default: ''
   list_models:
     description: 'If "true", print available models and exit without running workflow'
     required: false
@@ -61,6 +65,22 @@ outputs:
     description: 'Execution status: success, failure, cancelled, or timeout'
   result:
     description: 'Workflow execution result as JSON string (max 900KB)'
+  total_tokens:
+    description: 'Total tokens consumed across all models'
+  input_tokens:
+    description: 'Total input tokens'
+  output_tokens:
+    description: 'Total output tokens'
+  reasoning_tokens:
+    description: 'Total reasoning/thinking tokens'
+  cache_read_tokens:
+    description: 'Total prompt cache read tokens'
+  cache_write_tokens:
+    description: 'Total prompt cache write tokens'
+  total_cost:
+    description: 'Total estimated cost in USD'
+  cost_breakdown:
+    description: 'JSON string with per-model token and cost breakdown'
 
 runs:
   using: 'docker'
