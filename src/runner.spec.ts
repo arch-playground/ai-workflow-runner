@@ -109,6 +109,7 @@ describe('runner', () => {
           opencodeConfig: '/workspace/config.json',
           authConfig: '/workspace/auth.json',
           model: 'claude-sonnet-4-5-20250929',
+          modelStrategy: undefined,
         });
       });
 
@@ -124,7 +125,25 @@ describe('runner', () => {
           opencodeConfig: undefined,
           authConfig: undefined,
           model: undefined,
+          modelStrategy: undefined,
         });
+      });
+
+      it('passes modelStrategy to opencode.initialize', async () => {
+        // Arrange
+        const inputs = createValidInputs({
+          modelStrategy: { explore: 'haiku', validate: 'haiku' },
+        });
+
+        // Act
+        await runWorkflow(inputs);
+
+        // Assert
+        expect(mockOpenCodeService.initialize).toHaveBeenCalledWith(
+          expect.objectContaining({
+            modelStrategy: { explore: 'haiku', validate: 'haiku' },
+          })
+        );
       });
 
       it('7.3-UNIT-017: returns failure when initialize() throws config error', async () => {
