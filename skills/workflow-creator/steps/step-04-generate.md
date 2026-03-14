@@ -36,7 +36,7 @@ Only proceed to Phase 2 after ALL 10 items pass.
 
 ### Phase 2: Generate Prompt Files
 
-For each step (in order), write `workflows/<step-slug>.md` with the confirmed prompt content from the WIP file.
+For each step (in order), write `workflows/<workflowSlug>/instructions/<step-slug>.md` with the confirmed prompt content from the WIP file.
 
 **In edit mode:** Skip unchanged steps (their prompt files are preserved as-is). Only write files for new or modified steps.
 
@@ -46,8 +46,8 @@ Progress update:
 
 ```
 Writing prompt files...
-[✓] workflows/step-a.md
-[✓] workflows/step-b.md
+[✓] workflows/[workflowSlug]/instructions/step-a.md
+[✓] workflows/[workflowSlug]/instructions/step-b.md
 ...
 ```
 
@@ -57,7 +57,7 @@ Writing prompt files...
 
 For each step with `validation.enabled: true` in the WIP:
 
-Generate the validation script at `workflows/validation/<step-slug>.py` (or `.js`).
+Generate the validation script at `workflows/<workflowSlug>/validation/<step-slug>.py` (or `.js`).
 
 The script must:
 
@@ -98,7 +98,7 @@ Progress update:
 
 ```
 Writing validation scripts...
-[✓] workflows/validation/step-b.py
+[✓] workflows/[workflowSlug]/validation/step-b.py
 ```
 
 ---
@@ -214,10 +214,10 @@ jobs:
           id: ai
           uses: [actionRef]
           with:
-            workflow_path: 'workflows/[step-slug].md'
+            workflow_path: 'workflows/[workflowSlug]/instructions/[step-slug].md'
             timeout_minutes: '[timeout]'
             # EMIT ONLY IF validation is enabled for this step:
-            validation_script: 'workflows/validation/[step-slug].py'
+            validation_script: 'workflows/[workflowSlug]/validation/[step-slug].py'
             validation_max_retry: '[maxRetry]'
             # EMIT ONLY IF this job receives string outputs from an upstream job:
             env_vars: '{"[KEY_NAME]": "${{ needs.[upstream-job].outputs.[output-key] }}"}'
@@ -257,7 +257,7 @@ jobs:
   uses: ./.github/workflows/run-[workflowSlug]-step.yml
   with:
     step_name: '[step-name]'
-    workflow_path: 'workflows/[step-slug].md'
+    workflow_path: 'workflows/[workflowSlug]/instructions/[step-slug].md'
     output_file: '[output-file-path]'
     artifact_name: '[artifact-name]'
     artifact_path: '[artifact-path]'
@@ -467,8 +467,8 @@ Files written:
   [if reusable workflow:] .github/workflows/run-[workflowSlug]-step.yml
   [if custom runner:] .github/actionlint.yaml
   [if list-models was created:] .github/workflows/list-models.yml
-  workflows/[step-a-slug].md
-  workflows/[step-b-slug].md
+  workflows/[workflowSlug]/instructions/[step-a-slug].md
+  workflows/[workflowSlug]/instructions/[step-b-slug].md
   [... one line per prompt file]
   [... one line per validation script, if any]
 
@@ -490,4 +490,31 @@ Next steps:
 4. Commit and push, then trigger your workflow from the GitHub Actions tab
 ```
 
-The workflow creator session is complete.
+---
+
+### Phase 10: Evaluation Offer
+
+After presenting the completion summary, offer evaluation:
+
+```
+Would you like to evaluate this workflow's step prompts?
+
+Evaluation runs each step against a sample codebase, grades the outputs,
+and reports quality metrics with recommendations.
+
+Requires: a sample codebase in .evaluations/workflows/<workflowSlug>/sample/
+
+[Y] Yes, evaluate  [N] No, I'm done
+```
+
+HALT and wait for selection.
+
+- **[N]:** The workflow creator session is complete.
+- **[Y]:** Update WIP frontmatter with:
+  ```yaml
+  evalWorkflow: '<workflowSlug>'
+  evalSelectedSteps: []
+  evalRunsPerStep: 3
+  evalPhase: setup
+  ```
+  Then read fully and follow: `steps/step-05-evaluate.md`

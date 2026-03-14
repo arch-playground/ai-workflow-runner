@@ -25,7 +25,7 @@
 
 ### Item 2: Every Job References a Generated Prompt File
 
-**Check:** For every step in the WIP, a `workflow_path` value has been set pointing to `workflows/<step-slug>.md`. This path will be used in `with: workflow_path:` in the generated YAML.
+**Check:** For every step in the WIP, a `workflow_path` value has been set pointing to `workflows/<workflowSlug>/instructions/<step-slug>.md`. This path will be used in `with: workflow_path:` in the generated YAML.
 
 **Failure condition:** A step exists in the dependency graph but has no prompt content in the WIP (never reviewed in Step 03).
 

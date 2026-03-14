@@ -10,6 +10,7 @@
 
 1. Load and internalize `skills/workflow-creator/knowledge/prompt-quality-guide.md` — apply its 7-section structure and quality principles to every prompt you generate
 2. Read the WIP file to get the step list, objectives, output artifacts, and data-passing edges
+3. If any step involves chart generation, SVG output, or data visualization, also load `skills/workflow-creator/knowledge/chart-rendering-guide.md` and apply its rendering conventions to those steps' prompts
 
 Remind the user at the start:
 
@@ -27,7 +28,7 @@ For each step in order:
 
 ```
 Step [N]: [step-name] — UNCHANGED
-Prompt file: workflows/[step-slug].md (preserved as-is)
+Prompt file: workflows/[workflowSlug]/instructions/[step-slug].md (preserved as-is)
 ```
 
 Skip to next step.
@@ -103,13 +104,14 @@ and placeholder values, then filling each field as analysis completes]
 - [Criterion 2 — derivable from Output Format]
 - [Criterion 3 — at least one "no placeholder text" criterion if applicable]
 - The output file contains no remaining `<!-- PLACEHOLDER: ... -->` markers
+- [If step produces charts/SVGs: SVG files exist and have consistent widths]
 
 ## Completion
 
-When the deliverables listed above are complete, STOP. Do NOT proceed to any
-subsequent steps, do NOT look for or execute other workflow files, and do NOT
-begin work that is not described in this prompt. Your task is finished when
-the success criteria are met.
+IMPORTANT: When this instruction is done, it is DONE. You MUST stop here.
+Do NOT automatically continue to any other instruction or workflow file.
+Do NOT begin work that is not described in this instruction.
+Your task is COMPLETE when the success criteria above are met — STOP IMMEDIATELY.
 ```
 
 #### 3. Present to User
