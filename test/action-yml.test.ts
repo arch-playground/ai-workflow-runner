@@ -7,8 +7,13 @@ interface ActionInput {
   default?: string;
 }
 
+interface ActionOutput {
+  description: string;
+}
+
 interface ActionYml {
   inputs: Record<string, ActionInput>;
+  outputs: Record<string, ActionOutput>;
 }
 
 function loadActionYml(): ActionYml {
@@ -68,5 +73,30 @@ describe('action.yml schema validation', () => {
     expect(input.required).toBe(false);
     expect(input.default).toBe('false');
     expect(input.description).toContain('models');
+  });
+
+  it('defines model_strategy as optional string with correct description', () => {
+    const input = actionYml.inputs['model_strategy'];
+    expect(input).toBeDefined();
+    expect(input.required).toBe(false);
+    expect(input.default).toBe('');
+    expect(input.description).toContain('model');
+  });
+
+  it('defines all 8 token tracking outputs', () => {
+    const expectedOutputs = [
+      'total_tokens',
+      'input_tokens',
+      'output_tokens',
+      'reasoning_tokens',
+      'cache_read_tokens',
+      'cache_write_tokens',
+      'total_cost',
+      'cost_breakdown',
+    ];
+    for (const output of expectedOutputs) {
+      expect(actionYml.outputs[output]).toBeDefined();
+      expect(actionYml.outputs[output].description).toBeTruthy();
+    }
   });
 });
