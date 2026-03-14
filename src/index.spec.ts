@@ -52,7 +52,13 @@ describe('index', () => {
     mockValidateInputs = jest.fn().mockReturnValue({ valid: true, errors: [] });
     mockSanitizeErrorMessage = jest.fn().mockImplementation((e: Error) => e.message);
     mockHasOpenCodeServiceInstance = jest.fn().mockReturnValue(false);
-    mockGetOpenCodeService = jest.fn().mockReturnValue({ dispose: mockDispose });
+    mockGetOpenCodeService = jest.fn().mockReturnValue({
+      dispose: mockDispose,
+      getTokenTracker: jest.fn().mockReturnValue({
+        emitLogs: jest.fn(),
+        setActionOutputs: jest.fn(),
+      }),
+    });
 
     // Mock @actions/core
     mockCore = {
@@ -332,11 +338,14 @@ describe('index', () => {
       await loadAndFlush();
 
       // Act
+      const callCountBeforeShutdown = mockGetOpenCodeService.mock.calls.length;
       sigTermHandler!();
       await flushPromises();
 
-      // Assert
-      expect(mockGetOpenCodeService).not.toHaveBeenCalled();
+      // Assert - getOpenCodeService should not be called during shutdown when no instance exists
+      const callsDuringShutdown =
+        mockGetOpenCodeService.mock.calls.length - callCountBeforeShutdown;
+      expect(callsDuringShutdown).toBe(0);
       expect(mockDispose).not.toHaveBeenCalled();
     });
   });

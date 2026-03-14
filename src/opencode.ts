@@ -7,6 +7,7 @@ import { OpenCodeSession, INPUT_LIMITS, ModelStrategy } from './types.js';
 import { truncateString } from './security.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
 import { getDebugLogWriter } from './debug-log-writer.js';
+import { TokenTracker } from './token-tracker.js';
 
 export interface InitializeOptions {
   opencodeConfig?: string;
@@ -84,6 +85,8 @@ export class OpenCodeService {
   private sessionCompletionCallbacks: Map<string, SessionCallbacks> = new Map();
   private sessionMessageState: Map<string, SessionMessageState> = new Map();
   private heartbeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  private tokenTracker = new TokenTracker();
 
   private readonly DEFAULT_TASK_TYPES = ['explore', 'validate', 'format', 'generate'] as const;
 
@@ -182,6 +185,13 @@ export class OpenCodeService {
         sdkConfig.model = resolved;
       } else if (this.isFullModelId(options.modelStrategy.primary)) {
         sdkConfig.model = options.modelStrategy.primary;
+      } else {
+        const availableNames = Object.keys(this.KNOWN_MODELS).join(', ');
+        throw new Error(
+          `Unknown model short name "${options.modelStrategy.primary}" for primary. ` +
+            `Available short names: ${availableNames}. ` +
+            `Use a full model ID (e.g., "anthropic/claude-sonnet-4-6") or one of: ${availableNames}.`
+        );
       }
     }
 
@@ -351,7 +361,11 @@ export class OpenCodeService {
     }
 
     core.info(this.formatTimestampedLog('Prompt sent, waiting for completion...'));
-    await idlePromise;
+    try {
+      await idlePromise;
+    } finally {
+      await this.collectTokenMetrics(sessionId);
+    }
 
     return { sessionId, lastMessage: this.getLastMessage(sessionId) };
   }
@@ -386,8 +400,16 @@ export class OpenCodeService {
       parts: [{ type: 'text', text: truncatedMessage }],
     });
 
-    await idlePromise;
+    try {
+      await idlePromise;
+    } finally {
+      await this.collectTokenMetrics(sessionId);
+    }
     return { sessionId, lastMessage: this.getLastMessage(sessionId) };
+  }
+
+  getTokenTracker(): TokenTracker {
+    return this.tokenTracker;
   }
 
   getLastMessage(sessionId: string): string {
@@ -397,6 +419,23 @@ export class OpenCodeService {
       core.warning('[OpenCode] Last message truncated due to size limit');
     }
     return truncateString(message, INPUT_LIMITS.MAX_LAST_MESSAGE_SIZE);
+  }
+
+  private async collectTokenMetrics(sessionID: string): Promise<void> {
+    if (!this.client) return;
+
+    try {
+      const response = await this.client.session.messages({ sessionID });
+      if (!response.data) return;
+
+      for (const entry of response.data) {
+        if (entry.info.role === 'assistant') {
+          this.tokenTracker.trackMessage(entry.info as unknown as Record<string, unknown>);
+        }
+      }
+    } catch (error) {
+      core.warning(`[TokenTracker] Failed to collect token metrics: ${String(error)}`);
+    }
   }
 
   dispose(): void {
