@@ -39,3 +39,6 @@ npm-debug.log*
 tmp/
 temp/
 *.tmp
+
+# Git worktrees
+.worktrees/

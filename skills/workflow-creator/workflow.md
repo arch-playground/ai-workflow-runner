@@ -23,7 +23,7 @@ Found an in-progress workflow session: "[workflowName]" (steps completed: [steps
 
 **HALT and wait for user selection.**
 
-- If **[R]**: Load the WIP file, restore state. Determine which step to resume: if `stepsCompleted` includes 3, resume at step-04; if it includes 2, resume at step-03; if it includes 1, resume at step-02; otherwise resume at step-01. Then read fully and follow that step file.
+- If **[R]**: Load the WIP file, restore state. Determine which step to resume: if `stepsCompleted` includes 4 and `evalPhase` is set, resume at step-05-evaluate; if `stepsCompleted` includes 3, resume at step-04; if it includes 2, resume at step-03; if it includes 1, resume at step-02; otherwise resume at step-01. Then read fully and follow that step file.
 - If **[A]**: Archive the existing WIP file before starting fresh (see Archive Logic below)
 
 **If not found:** Proceed to Step 2 (Mode Detection).
@@ -39,6 +39,7 @@ Where `<ISO-date>` is today's date in `YYYY-MM-DD` format. Get it by running `da
 **Collision handling:** If that archive filename already exists, append `-2`. If that exists, append `-3`, etc. Never overwrite an existing archive.
 
 Example sequence:
+
 ```
 .workflow-creator-wip-archived-2026-03-05.md      # first archive today
 .workflow-creator-wip-archived-2026-03-05-2.md    # second archive today
@@ -51,7 +52,21 @@ After archiving, proceed to Mode Detection.
 
 ### Step 2: Mode Detection
 
-Determine whether this is **create mode** or **edit mode**:
+Determine which mode to use. Check in this order:
+
+**Eval mode:** User's message contains evaluation-related keywords: "evaluate", "eval", "benchmark", "test workflow", "grade workflow", "run eval". The message may also specify a workflow name (e.g., "evaluate service-analysis", "run eval on my-workflow").
+
+If eval mode is detected:
+
+1. Extract the workflow name from the user's message. If not specified, list available workflows from `.github/workflows/` and ask the user to select one.
+2. Verify `.github/workflows/<workflow-name>.yml` exists
+3. Read the workflow YAML to identify all steps (jobs with `ai-workflow-runner`)
+4. Initialize eval-specific state:
+   - `evalWorkflow`: the workflow name
+   - `evalSelectedSteps`: [] (to be filled by user in step-05-evaluate.md)
+   - `evalRunsPerStep`: 3 (default)
+   - `evalPhase`: setup
+5. Proceed to read fully and follow: `steps/step-05-evaluate.md`
 
 **Edit mode:** User provided a path to an existing `.github/workflows/*.yml` file (e.g., "edit my workflow at `.github/workflows/my-workflow.yml`").
 

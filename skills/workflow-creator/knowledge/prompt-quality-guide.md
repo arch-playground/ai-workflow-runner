@@ -258,6 +258,20 @@ When presenting the suggestion, always remind the user:
 
 ---
 
+## Chart and Visualization Steps
+
+When a step generates charts or SVG visualizations, the prompt must include
+specific rendering instructions. Load `knowledge/chart-rendering-guide.md` for
+the full conventions. Key points:
+
+- Use **Mermaid `xychart-beta`** for X-Y charts (line, bar) — not PlantUML
+  (which has no native X-Y chart support)
+- Render via `npx --yes @mermaid-js/mermaid-cli@latest` (do not add `mmdc` arg)
+- Match chart width to other SVGs in the same output via a mermaid config file
+- Post-process rendered SVGs: replace `width="100%"` with fixed pixel width
+
+---
+
 ## Validation Script Alignment
 
 A validation script should check the success criteria mechanically:

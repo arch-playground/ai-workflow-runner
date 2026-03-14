@@ -136,8 +136,8 @@ jobs:
         id: ai
         uses: arch-playground/ai-workflow-runner@v1
         with:
-          workflow_path: 'workflows/my-step.md'
-          validation_script: 'workflows/validation/my-step.py'
+          workflow_path: 'workflows/my-workflow/instructions/my-step.md'
+          validation_script: 'workflows/my-workflow/validation/my-step.py'
           validation_max_retry: '3'
           timeout_minutes: '15'
         env:
