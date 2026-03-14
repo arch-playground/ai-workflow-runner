@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import * as core from '@actions/core';
 import { getInputs, validateInputs, validateDebugLogPath } from './config';
-import { INPUT_LIMITS } from './types';
+import { INPUT_LIMITS, type ModelStrategy } from './types';
 import { maskSecrets, validateConfigPath } from './security';
 
 jest.mock('@actions/core');
@@ -529,6 +529,62 @@ describe('config', () => {
 
       // Assert
       expect(inputs.listModels).toBe(true);
+    });
+
+    describe('model_strategy parsing', () => {
+      it('parses valid model_strategy JSON', () => {
+        mockInputs({
+          model_strategy: '{"explore":"haiku","validate":"haiku","generate":"sonnet"}',
+        });
+        const inputs = getInputs();
+        expect(inputs.modelStrategy).toEqual({
+          explore: 'haiku',
+          validate: 'haiku',
+          generate: 'sonnet',
+        });
+      });
+
+      it('returns undefined when model_strategy is empty', () => {
+        mockInputs({});
+        const inputs = getInputs();
+        expect(inputs.modelStrategy).toBeUndefined();
+      });
+
+      it('throws on invalid JSON in model_strategy', () => {
+        mockInputs({ model_strategy: 'not-json' });
+        expect(() => getInputs()).toThrow('model_strategy must be a valid JSON object');
+      });
+
+      it('throws when model_strategy exceeds max size', () => {
+        const oversized = JSON.stringify({ key: 'x'.repeat(11000) });
+        mockInputs({ model_strategy: oversized });
+        expect(() => getInputs()).toThrow('model_strategy exceeds maximum size');
+      });
+
+      it('throws when model_strategy value is not a string', () => {
+        mockInputs({ model_strategy: '{"explore": 123}' });
+        expect(() => getInputs()).toThrow('must be a string');
+      });
+
+      it('throws when model_strategy value is empty string', () => {
+        mockInputs({ model_strategy: '{"explore": ""}' });
+        expect(() => getInputs()).toThrow('must be a non-empty string');
+      });
+
+      it('throws when model_strategy is a JSON array', () => {
+        mockInputs({ model_strategy: '["haiku", "sonnet"]' });
+        expect(() => getInputs()).toThrow('must be a JSON object, not an array or primitive');
+      });
+
+      it('throws when model_strategy is a JSON primitive', () => {
+        mockInputs({ model_strategy: '"just-a-string"' });
+        expect(() => getInputs()).toThrow('must be a JSON object, not an array or primitive');
+      });
+
+      it('throws when model_strategy is JSON null', () => {
+        mockInputs({ model_strategy: 'null' });
+        expect(() => getInputs()).toThrow('must be a JSON object, not an array or primitive');
+      });
     });
 
     describe('debug_log parsing', () => {
