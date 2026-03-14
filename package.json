@@ -36,7 +36,7 @@
     "@opencode-ai/sdk": "^1.2.25"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.4.3",
+    "@commitlint/cli": "^20.4.4",
     "@commitlint/config-conventional": "^20.4.4",
     "@eslint/eslintrc": "^3.3.0",
     "@eslint/js": "^9.0.0",
