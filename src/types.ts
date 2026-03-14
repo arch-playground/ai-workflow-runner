@@ -9,6 +9,7 @@ export interface ActionInputs {
   opencodeConfig?: string;
   authConfig?: string;
   model?: string;
+  modelStrategy?: ModelStrategy;
   listModels: boolean;
   debugLog: boolean;
   debugLogPath: string;
@@ -29,6 +30,14 @@ export type ActionStatus = 'success' | 'failure' | 'cancelled' | 'timeout';
 export interface ActionOutputs {
   status: ActionStatus;
   result: string;
+  totalTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  reasoningTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  totalCost?: number;
+  costBreakdown?: string;
 }
 
 export interface RunnerResult {
@@ -63,8 +72,11 @@ export const INPUT_LIMITS = {
   SIGKILL_GRACE_PERIOD_MS: 5_000, // 5 seconds to wait before SIGKILL
   MAX_STDERR_SIZE: 10_000, // 10KB for stderr capture
   EVENT_STREAM_HEARTBEAT_MS: 90_000, // Must exceed LLM inference pause (~60s)
+  MAX_MODEL_STRATEGY_SIZE: 10_240, // 10KB
 } as const;
 
 export type ShutdownSignal = 'SIGTERM' | 'SIGINT';
 
 export type ValidationScriptType = 'python' | 'javascript';
+
+export type ModelStrategy = Record<string, string>;
