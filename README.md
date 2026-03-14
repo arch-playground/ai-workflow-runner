@@ -10,6 +10,8 @@ A GitHub Action that runs AI workflows using OpenCode SDK with validation script
 - **Multi-runtime support**: Node.js 20+, Python 3.11, and Java 21 pre-installed
 - **Secure execution**: Path traversal prevention, secret masking, input validation
 - **Docker-based**: Consistent environment across all runs
+- **Multi-model strategy**: Route tasks to different models for [cost optimization](docs/model-strategy.md)
+- **Token tracking**: Per-model token usage and cost breakdown as action outputs
 - **Configurable**: Timeout settings, environment variables, input prompts
 - **Workflow Creator Skill**: Claude Code skill that guides you through creating multi-job workflows ([docs](docs/workflow-creator.md))
 
@@ -95,14 +97,23 @@ jobs:
 | `opencode_config`        | Path to OpenCode config.json file (relative to workspace). Contains provider and model settings.                                       | No       | `''`      |
 | `auth_config`            | Path to OpenCode auth.json file (relative to workspace). Contains API keys and authentication. Store in GitHub Secrets, not Variables. | No       | `''`      |
 | `model`                  | Model to use for AI execution (e.g., "anthropic/claude-3-opus"). Overrides config file default.                                        | No       | `''`      |
+| `model_strategy`         | JSON mapping of task types to models for multi-model workflows ([docs](docs/model-strategy.md))                                        | No       | `''`      |
 | `list_models`            | If "true", print available models and exit without running workflow                                                                    | No       | `'false'` |
 
 ## Outputs
 
-| Output   | Description                                                       |
-| -------- | ----------------------------------------------------------------- |
-| `status` | Execution status: `success`, `failure`, `cancelled`, or `timeout` |
-| `result` | Workflow execution result as JSON string (max 900KB)              |
+| Output               | Description                                                       |
+| -------------------- | ----------------------------------------------------------------- |
+| `status`             | Execution status: `success`, `failure`, `cancelled`, or `timeout` |
+| `result`             | Workflow execution result as JSON string (max 900KB)              |
+| `total_tokens`       | Total tokens consumed across all models                           |
+| `input_tokens`       | Total input tokens                                                |
+| `output_tokens`      | Total output tokens                                               |
+| `reasoning_tokens`   | Total reasoning/thinking tokens                                   |
+| `cache_read_tokens`  | Total prompt cache read tokens                                    |
+| `cache_write_tokens` | Total prompt cache write tokens                                   |
+| `total_cost`         | Total estimated cost in USD                                       |
+| `cost_breakdown`     | JSON string with per-model token and cost breakdown               |
 
 ## Configuration
 
@@ -191,6 +202,21 @@ Use the `model` input to override the default model from your config file:
     model: 'anthropic/claude-sonnet-4-5-20250929'
 ```
 
+### Model Strategy (Multi-Model Workflows)
+
+Assign different models to different task types for cost optimization. Use short names (`haiku`, `gpt-4o-mini`), partial names (`claude-haiku-4-5`), or full model IDs.
+
+```yaml
+- name: Run AI Workflow
+  uses: arch-playground/ai-workflow-runner@v1
+  with:
+    workflow_path: 'workflow.md'
+    auth_config: '${{ runner.temp }}/auth.json'
+    model_strategy: '{"explore":"haiku","validate":"haiku","generate":"sonnet"}'
+```
+
+See the [Model Strategy documentation](docs/model-strategy.md) for the full short name table, fuzzy resolution rules, and examples.
+
 ### Listing Available Models
 
 Set `list_models: 'true'` to print available models and exit without running a workflow. No `workflow_path` is needed when listing models.
@@ -211,6 +237,7 @@ Set `list_models: 'true'` to print available models and exit without running a w
 | [`with-validation/`](examples/with-validation/) | Validation scripts with Python and retry mechanism  |
 | [`github-copilot/`](examples/github-copilot/)   | Using GitHub Copilot as the AI provider             |
 | [`custom-model/`](examples/custom-model/)       | Custom model selection and listing available models |
+| [Model Strategy](docs/model-strategy.md)        | Multi-model workflows with cost optimization        |
 
 ## Security
 
