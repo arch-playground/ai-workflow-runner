@@ -32,7 +32,7 @@
   "author": "TanNT",
   "license": "MIT",
   "dependencies": {
-    "@actions/core": "^3.0.0",
+    "@actions/core": "^3.0.1",
     "@opencode-ai/sdk": "^1.14.22"
   },
   "devDependencies": {
