@@ -14,6 +14,7 @@ const mockOpenCodeService = {
   sendFollowUp: jest.fn(),
   getLastMessage: jest.fn(),
   listModels: jest.fn(),
+  exportTranscript: jest.fn(),
   dispose: jest.fn(),
 };
 
@@ -30,6 +31,11 @@ jest.mock('./validation', () => ({
 const mockInitDebugLogWriter = jest.fn();
 jest.mock('./debug-log-writer', () => ({
   initDebugLogWriter: (...args: unknown[]) => mockInitDebugLogWriter(...args),
+}));
+
+const mockWriteTranscript = jest.fn();
+jest.mock('./transcript-writer', () => ({
+  writeTranscript: (...args: unknown[]) => mockWriteTranscript(...args),
 }));
 
 import { executeValidationScript } from './validation';
@@ -55,6 +61,7 @@ describe('runner', () => {
       sessionId: 'session-123',
       lastMessage: 'Updated response',
     });
+    mockOpenCodeService.exportTranscript.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -71,6 +78,8 @@ describe('runner', () => {
     listModels: false,
     debugLog: false,
     debugLogPath: '',
+    exportTranscript: false,
+    transcriptPath: '',
     ...overrides,
   });
 
@@ -621,6 +630,95 @@ describe('runner', () => {
           model: 'claude-sonnet-4-5-20250929',
         });
       });
+    });
+  });
+
+  describe('transcript export', () => {
+    let workflowFile: string;
+
+    beforeEach(() => {
+      workflowFile = path.join(tempDir, 'test-workflow.md');
+      fs.writeFileSync(workflowFile, '# Workflow');
+    });
+
+    it('9-3-AC1/AC4: calls exportTranscript and writeTranscript when exportTranscript is enabled', async () => {
+      // Arrange
+      const messages = [{ info: { role: 'assistant' }, parts: [] }];
+      mockOpenCodeService.exportTranscript.mockResolvedValue(messages);
+      const transcriptPath = path.join(tempDir, 'conversation.json');
+      const inputs = createValidInputs({ exportTranscript: true, transcriptPath });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(mockOpenCodeService.exportTranscript).toHaveBeenCalledWith('session-123');
+      expect(mockWriteTranscript).toHaveBeenCalledWith(transcriptPath, messages, ['test_value']);
+    });
+
+    it('9-3-AC4: does NOT call exportTranscript or writeTranscript when disabled', async () => {
+      // Arrange
+      const inputs = createValidInputs({ exportTranscript: false });
+
+      // Act
+      await runWorkflow(inputs);
+
+      // Assert
+      expect(mockOpenCodeService.exportTranscript).not.toHaveBeenCalled();
+      expect(mockWriteTranscript).not.toHaveBeenCalled();
+    });
+
+    it('9-3-AC3: passes env_vars values as secrets to writeTranscript for scrubbing', async () => {
+      // Arrange
+      const inputs = createValidInputs({
+        exportTranscript: true,
+        transcriptPath: path.join(tempDir, 'conversation.json'),
+        envVars: { SECRET_TOKEN: 'my_secret_value', API_KEY: 'another_secret' },
+      });
+
+      // Act
+      await runWorkflow(inputs);
+
+      // Assert
+      const writeCall = mockWriteTranscript.mock.calls[0] as unknown[];
+      const secrets = writeCall[2] as string[];
+      expect(secrets).toContain('my_secret_value');
+      expect(secrets).toContain('another_secret');
+    });
+
+    it('9-3-AC6: export failure does NOT fail the run', async () => {
+      // Arrange
+      mockOpenCodeService.exportTranscript.mockRejectedValue(new Error('SDK failure'));
+      const inputs = createValidInputs({
+        exportTranscript: true,
+        transcriptPath: path.join(tempDir, 'conversation.json'),
+      });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert: run still succeeds despite export failure
+      expect(result.success).toBe(true);
+      expect(mockWriteTranscript).not.toHaveBeenCalled();
+    });
+
+    it('9-3-AC1: uses RUNNER_TEMP default path when transcriptPath is empty', async () => {
+      // Arrange
+      const runnerTemp = path.join(tempDir, 'runner_temp');
+      fs.mkdirSync(runnerTemp);
+      process.env['RUNNER_TEMP'] = runnerTemp;
+      const inputs = createValidInputs({ exportTranscript: true, transcriptPath: '' });
+
+      // Act
+      await runWorkflow(inputs);
+
+      // Assert
+      expect(mockWriteTranscript).toHaveBeenCalledWith(
+        path.join(runnerTemp, 'conversation.json'),
+        expect.any(Array),
+        expect.any(Array)
+      );
     });
   });
 });

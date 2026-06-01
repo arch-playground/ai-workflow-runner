@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
+import * as path from 'path';
 import { ActionInputs, RunnerResult, OpenCodeSession, INPUT_LIMITS } from './types.js';
 import {
   validateWorkspacePath,
@@ -11,6 +12,7 @@ import {
 import { getOpenCodeService, OpenCodeService } from './opencode.js';
 import { executeValidationScript } from './validation.js';
 import { initDebugLogWriter } from './debug-log-writer.js';
+import { writeTranscript } from './transcript-writer.js';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 
@@ -87,6 +89,20 @@ export async function runWorkflow(
         timeoutMs,
         abortSignal,
       });
+    }
+
+    if (inputs.exportTranscript) {
+      try {
+        const messages = await opencode.exportTranscript(session.sessionId);
+        const transcriptPath =
+          inputs.transcriptPath ||
+          path.join(process.env['RUNNER_TEMP'] || '/tmp', 'conversation.json');
+        writeTranscript(transcriptPath, messages, Object.values(inputs.envVars));
+      } catch (error) {
+        core.warning(`[OpenCode] Transcript export failed: ${String(error)}`, {
+          title: 'Transcript export',
+        });
+      }
     }
 
     const output = JSON.stringify({

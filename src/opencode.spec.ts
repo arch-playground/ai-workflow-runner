@@ -271,4 +271,82 @@ describe('OpenCodeService', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('exportTranscript()', () => {
+    async function createInitializedService(): Promise<OpenCodeService> {
+      const target = new OpenCodeService();
+      await target.initialize();
+      return target;
+    }
+
+    it('returns the messages data array from session.messages', async () => {
+      // Arrange
+      const messages = [
+        { info: { id: 'msg-1', role: 'assistant' }, parts: [{ type: 'text', text: 'hello' }] },
+      ];
+      mockClient.session.messages.mockResolvedValue({ data: messages });
+      const target = await createInitializedService();
+
+      // Act
+      const result = await target.exportTranscript('session-123');
+
+      // Assert
+      expect(mockClient.session.messages).toHaveBeenCalledWith({ sessionID: 'session-123' });
+      expect(result).toEqual(messages);
+    });
+
+    it('returns [] when response.data is undefined', async () => {
+      // Arrange
+      mockClient.session.messages.mockResolvedValue({ data: undefined });
+      const target = await createInitializedService();
+
+      // Act
+      const result = await target.exportTranscript('session-123');
+
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    it('returns [] when response.data is null', async () => {
+      // Arrange
+      mockClient.session.messages.mockResolvedValue({ data: null });
+      const target = await createInitializedService();
+
+      // Act
+      const result = await target.exportTranscript('session-123');
+
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    it('throws when client not initialized', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+
+      // Act & Assert
+      await expect(target.exportTranscript('session-123')).rejects.toThrow(
+        'OpenCode client not initialized - call initialize() first'
+      );
+    });
+
+    it('throws when service is disposed', async () => {
+      // Arrange
+      const target = await createInitializedService();
+      target.dispose();
+
+      // Act & Assert
+      await expect(target.exportTranscript('session-123')).rejects.toThrow(
+        'OpenCode service disposed - cannot export transcript'
+      );
+    });
+
+    it('propagates client errors', async () => {
+      // Arrange
+      mockClient.session.messages.mockRejectedValue(new Error('Network error'));
+      const target = await createInitializedService();
+
+      // Act & Assert
+      await expect(target.exportTranscript('session-123')).rejects.toThrow('Network error');
+    });
+  });
 });
