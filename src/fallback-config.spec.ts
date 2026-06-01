@@ -237,6 +237,43 @@ describe('loadFallbackConfig', () => {
       // Act & Assert
       expect(() => loadFallbackConfig(filePath)).toThrow(/Invalid JSON in fallback config file/);
     });
+
+    it('11-6-gap: re-throws non-ENOENT file read errors (e.g. permission denied)', () => {
+      // Arrange — use a directory path (read throws EISDIR, not ENOENT)
+      const dirPath = tempDir; // reading a dir as file throws non-ENOENT error
+
+      // Act & Assert — should re-throw the underlying error, not ENOENT message
+      expect(() => loadFallbackConfig(dirPath)).toThrow();
+    });
+
+    it('11-6-gap: throws when JSON top-level value is not an object (e.g. array)', () => {
+      // Arrange
+      const filePath = path.join(tempDir, 'array.json');
+      fs.writeFileSync(filePath, JSON.stringify([{ provider: 'p0', model: 'm0' }]));
+
+      // Act & Assert
+      expect(() => loadFallbackConfig(filePath)).toThrow(
+        /must be a JSON object with a "chain" array/
+      );
+    });
+
+    it('11-6-gap: throws when JSON top-level value is null', () => {
+      // Arrange
+      const filePath = path.join(tempDir, 'null.json');
+      fs.writeFileSync(filePath, 'null');
+
+      // Act & Assert
+      expect(() => loadFallbackConfig(filePath)).toThrow(/must be a JSON object/);
+    });
+
+    it('11-6-gap: throws when chain entry is not an object (e.g. a string)', () => {
+      // Arrange
+      const filePath = path.join(tempDir, 'bad-entry.json');
+      fs.writeFileSync(filePath, JSON.stringify({ chain: ['not-an-object'] }));
+
+      // Act & Assert
+      expect(() => loadFallbackConfig(filePath)).toThrow(/chain\[0\] must be an object/);
+    });
   });
 });
 
