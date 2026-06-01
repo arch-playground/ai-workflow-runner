@@ -64,8 +64,10 @@ COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
 COPY --from=builder /usr/bin/npm /usr/bin/npm
 COPY --from=builder /usr/bin/npx /usr/bin/npx
 
-# OpenCode CLI is included in /usr/lib/node_modules from the builder stage
-RUN ln -s /usr/lib/node_modules/opencode-ai/bin/opencode /usr/local/bin/opencode
+# OpenCode CLI is included in /usr/lib/node_modules from the builder stage.
+# The opencode-ai package's bin is bin/opencode.exe (per its package.json "bin"
+# mapping), not bin/opencode — symlink the actual binary so `opencode` resolves.
+RUN ln -s /usr/lib/node_modules/opencode-ai/bin/opencode.exe /usr/local/bin/opencode
 
 # Copy Java 21 from builder stage (path varies by architecture: temurin-21-jre-arm64, temurin-21-jre-amd64)
 COPY --from=builder /usr/lib/jvm/temurin-21-jre-* /usr/lib/jvm/temurin-21-jre/
