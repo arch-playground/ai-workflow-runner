@@ -858,6 +858,9 @@ export class OpenCodeService {
     const watcher = this.sessionStartWatchers.get(sessionId);
     if (!watcher) return;
     const state = this.sessionMessageState.get(sessionId);
+    // currentMessageId is ONLY set by handleMessageUpdated when info.role === 'assistant'.
+    // The echoed user-prompt text part arrives before any assistant message.updated, so
+    // currentMessageId is null at that point — this guard ensures the echo never commits.
     if (state?.currentMessageId) {
       watcher.onCommit();
     }

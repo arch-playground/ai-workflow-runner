@@ -126,7 +126,7 @@ development_status:
   11-1-parse-fallback-config-no-credentials: 'done'
   11-2-authenticated-provider-preflight: 'done'
   11-3-start-and-watch-selector: 'done'
-  11-4-commit-boundary-detection: 'backlog'
+  11-4-commit-boundary-detection: 'done'
   11-5-exhaustion-error-and-precedence: 'backlog'
   11-6-tests: 'backlog'
 
