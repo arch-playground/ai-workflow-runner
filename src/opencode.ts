@@ -3,7 +3,7 @@ import type { ToolState } from '@opencode-ai/sdk/v2';
 import * as core from '@actions/core';
 import * as fs from 'fs';
 import * as path from 'path';
-import { OpenCodeSession, INPUT_LIMITS } from './types.js';
+import { OpenCodeSession, ModelListItem, INPUT_LIMITS } from './types.js';
 import { truncateString } from './security.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
 import { getDebugLogWriter } from './debug-log-writer.js';
@@ -205,9 +205,7 @@ export class OpenCodeService {
     }
   }
 
-  async listModels(): Promise<
-    Array<{ id: string; name: string; provider: string; providerId: string }>
-  > {
+  async listModels(): Promise<ModelListItem[]> {
     if (this.isDisposed) {
       throw new Error('OpenCode service disposed - cannot list models');
     }
@@ -216,18 +214,50 @@ export class OpenCodeService {
     const response = await this.client.config.providers();
     if (!response.data) throw new Error('Failed to retrieve providers');
 
-    const models: Array<{ id: string; name: string; provider: string; providerId: string }> = [];
+    const authMap = await this.buildProviderAuthMap();
+
+    const models: ModelListItem[] = [];
     for (const provider of response.data.providers) {
       for (const model of Object.values(provider.models)) {
+        const cost =
+          model.cost !== null && model.cost !== undefined
+            ? { input: model.cost.input, output: model.cost.output }
+            : undefined;
         models.push({
           id: model.id,
           name: model.name,
           provider: provider.name,
           providerId: provider.id,
+          cost,
+          enabledVia: authMap.get(provider.id),
         });
       }
     }
     return models;
+  }
+
+  private async buildProviderAuthMap(): Promise<Map<string, 'env' | 'account' | 'custom'>> {
+    try {
+      const v2Response = await this.client!.v2.provider.list();
+      const rawData = (v2Response as { data?: unknown }).data;
+      const providers = Array.isArray(rawData) ? rawData : [];
+      const map = new Map<string, 'env' | 'account' | 'custom'>();
+      for (const p of providers) {
+        const prov = p as { id: string; enabled: unknown };
+        if (prov.enabled && typeof prov.enabled === 'object' && 'via' in prov.enabled) {
+          const via = (prov.enabled as { via: string }).via;
+          if (via === 'env' || via === 'account' || via === 'custom') {
+            map.set(prov.id, via);
+          }
+        }
+      }
+      return map;
+    } catch (err) {
+      core.debug(
+        `[OpenCode] v2.provider.list() failed — enabledVia will be undefined: ${String(err)}`
+      );
+      return new Map();
+    }
   }
 
   async exportTranscript(sessionId: string): Promise<unknown[]> {

@@ -18,6 +18,11 @@ export interface MockClient {
   permission: {
     reply: jest.Mock;
   };
+  v2: {
+    provider: {
+      list: jest.Mock;
+    };
+  };
 }
 
 export interface MockServer {
@@ -105,6 +110,11 @@ export function createMockClient(): MockClient {
     },
     permission: {
       reply: jest.fn().mockResolvedValue({}),
+    },
+    v2: {
+      provider: {
+        list: jest.fn().mockResolvedValue({ data: [] }),
+      },
     },
   };
 }
