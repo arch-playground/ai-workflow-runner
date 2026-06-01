@@ -12,6 +12,15 @@ export interface ModelListItem {
   enabledVia?: 'env' | 'account' | 'custom';
 }
 
+export interface FallbackChainEntry {
+  provider: string;
+  model: string;
+}
+
+export interface FallbackChain {
+  chain: FallbackChainEntry[];
+}
+
 export interface ActionInputs {
   workflowPath: string;
   prompt: string;
@@ -22,6 +31,7 @@ export interface ActionInputs {
   maxValidationRetries: number;
   opencodeConfig?: string;
   authConfig?: string;
+  fallbackConfig?: string;
   model?: string;
   listModels: boolean;
   disableFreeModels: boolean;

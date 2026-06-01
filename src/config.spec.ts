@@ -421,6 +421,35 @@ describe('config', () => {
       expect(mockValidateConfigPath).not.toHaveBeenCalled();
     });
 
+    describe('fallback_config parsing', () => {
+      it('11-1-AC2: validates fallback_config path and stores as fallbackConfig', () => {
+        // Arrange
+        mockInputs({ fallback_config: 'config/fallback.json' });
+        mockValidateConfigPath.mockReturnValue('/workspace/config/fallback.json');
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(mockValidateConfigPath).toHaveBeenCalledWith(
+          expect.any(String),
+          'config/fallback.json'
+        );
+        expect(inputs.fallbackConfig).toBe('/workspace/config/fallback.json');
+      });
+
+      it('11-1-AC6: fallbackConfig is undefined when fallback_config input is absent', () => {
+        // Arrange
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.fallbackConfig).toBeUndefined();
+      });
+    });
+
     describe('when GITHUB_WORKSPACE is set', () => {
       let originalWorkspace: string | undefined;
 

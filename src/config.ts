@@ -193,6 +193,7 @@ export function getInputs(): ActionInputs {
 
   const opencodeConfigRaw = core.getInput('opencode_config') || undefined;
   const authConfigRaw = core.getInput('auth_config') || undefined;
+  const fallbackConfigRaw = core.getInput('fallback_config') || undefined;
   const model = core.getInput('model') || undefined;
   const listModelsRaw = core.getInput('list_models') || 'false';
   const listModels = listModelsRaw.trim().toLowerCase() === 'true';
@@ -208,6 +209,9 @@ export function getInputs(): ActionInputs {
     ? validateConfigPath(workspacePath, opencodeConfigRaw)
     : undefined;
   const authConfig = authConfigRaw ? validateConfigPath(workspacePath, authConfigRaw) : undefined;
+  const fallbackConfig = fallbackConfigRaw
+    ? validateConfigPath(workspacePath, fallbackConfigRaw)
+    : undefined;
 
   const debugLogInput = core.getInput('debug_log').trim().toLowerCase() === 'true';
   const actionsStepDebug = process.env.ACTIONS_STEP_DEBUG === 'true';
@@ -247,6 +251,7 @@ export function getInputs(): ActionInputs {
     maxValidationRetries,
     opencodeConfig,
     authConfig,
+    fallbackConfig,
     model,
     listModels,
     disableFreeModels,
