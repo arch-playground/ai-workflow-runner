@@ -384,6 +384,17 @@ _Note: Pure open-source community tool with no commercial objectives._
 - **FR64:** System tracks the `@opencode-ai/sdk` latest stable version and signals when the pin lags (CI guard)
 - **FR65:** System keeps the `opencode-ai` CLI binary version aligned with the SDK pin
 
+### Security Hardening (Phase 2 — Epic 13, red-team remediation)
+
+- **FR66:** System scopes the AI agent server's process environment to an allowlist (runtime vars + declared `env_vars`), so the agent cannot read ambient runner secrets it was not given (`GITHUB_TOKEN`, cloud creds)
+- **FR67:** System denies the agent's `bash`, `webfetch`, and `websearch` tools by default while keeping knowledge-extraction tools (read/glob/grep/LSP) enabled, and applies the Action's security permission rules so consumer config cannot weaken them (last-match-wins)
+- **FR68:** User can opt into the dangerous tools via `allow_bash` / `allow_webfetch` inputs (default off) for workflows that legitimately run commands
+- **FR69:** System runs the Action's Node process as a non-root user (privilege drop after entrypoint setup) with the agent's HOME/XDG located outside the workspace
+- **FR70:** System validates consumer-supplied provider `baseURL`/`endpoint` against a host allowlist (https-only, private/metadata ranges blocked), extensible via `allowed_provider_hosts`, and refuses to attach credentials to a non-allowlisted endpoint
+- **FR71:** System enforces `timeout_minutes` as a hard wall-clock ceiling across the entire run including the validation-retry loop, reporting status `timeout` distinctly from `cancelled`
+- **FR72:** System renders untrusted agent output in the job summary as inert preformatted text (no markdown/link rendering)
+- **FR73:** System ships safe-adoption threat-model documentation and pins Docker base images by digest
+
 ## Non-Functional Requirements
 
 ### Performance
@@ -433,11 +444,13 @@ _Note: Pure open-source community tool with no commercial objectives._
 
 ### Security & Logging (Phase 2)
 
-| NFR       | Requirement                                                                                                 | Rationale                             |
-| --------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| **NFR21** | `conversation.json` and job-summary content are secret-scrubbed before write                                | `core.setSecret` masks live log only  |
-| **NFR22** | No single live-log line approaches ~6k chars; full bodies go to artifact/debug file                         | Runner throughput cliff at long lines |
-| **NFR23** | Auth tokens (in `auth_config`) masked via `core.setSecret` before use; `fallback_config` carries no secrets | No field-level auto-redaction of JSON |
+| NFR       | Requirement                                                                                                                                                                                     | Rationale                                                              |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **NFR21** | `conversation.json` and job-summary content are secret-scrubbed before write                                                                                                                    | `core.setSecret` masks live log only                                   |
+| **NFR22** | No single live-log line approaches ~6k chars; full bodies go to artifact/debug file                                                                                                             | Runner throughput cliff at long lines                                  |
+| **NFR23** | Auth tokens (in `auth_config`) masked via `core.setSecret` before use; `fallback_config` carries no secrets                                                                                     | No field-level auto-redaction of JSON                                  |
+| **NFR24** | Ambient runner secrets the Action can enumerate (`GITHUB_TOKEN`, parsed `auth.json` values) are `core.setSecret`-masked; the agent env is allowlist-scoped so undeclared secrets never reach it | Red-team showed the agent could exfiltrate undeclared secrets unmasked |
+| **NFR25** | The Action runs as a non-root user; agent tools default-deny `bash`/`webfetch`/`websearch` (opt-in to enable)                                                                                   | Least-privilege containment of the agent's blast radius                |
 
 ## Risk Mitigation
 
