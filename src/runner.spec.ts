@@ -16,6 +16,8 @@ const mockOpenCodeService = {
   listModels: jest.fn(),
   exportTranscript: jest.fn(),
   dispose: jest.fn(),
+  runSessionWithFallback: jest.fn(),
+  getAuthenticatedProviderIds: jest.fn().mockResolvedValue(new Set<string>()),
 };
 
 jest.mock('./opencode', () => ({
@@ -43,6 +45,13 @@ jest.mock('./summary-writer', () => ({
   writeJobSummary: (...args: unknown[]) => mockWriteJobSummary(...args),
 }));
 
+const mockLoadFallbackConfig = jest.fn();
+const mockPreflightFallbackChain = jest.fn();
+jest.mock('./fallback-config', () => ({
+  loadFallbackConfig: (...args: unknown[]) => mockLoadFallbackConfig(...args),
+  preflightFallbackChain: (...args: unknown[]) => mockPreflightFallbackChain(...args),
+}));
+
 import { executeValidationScript } from './validation';
 
 const mockExecuteValidationScript = executeValidationScript as jest.MockedFunction<
@@ -67,6 +76,22 @@ describe('runner', () => {
       lastMessage: 'Updated response',
     });
     mockOpenCodeService.exportTranscript.mockResolvedValue([]);
+    mockOpenCodeService.getAuthenticatedProviderIds.mockResolvedValue(new Set<string>());
+    mockOpenCodeService.runSessionWithFallback.mockResolvedValue({
+      success: true,
+      session: { sessionId: 'session-fallback', lastMessage: 'Fallback response' },
+      failures: [],
+    });
+    // Default preflight: return all entries as viable
+    mockPreflightFallbackChain.mockImplementation((chain: { chain: unknown[] }) => ({
+      viable: chain.chain,
+      skipped: [],
+      lookupFailed: false,
+    }));
+    // Default chain load
+    mockLoadFallbackConfig.mockReturnValue({
+      chain: [{ provider: 'anthropic', model: 'claude-3-opus' }],
+    });
   });
 
   afterEach(() => {
@@ -1227,6 +1252,146 @@ describe('runner', () => {
       expect(parsed.models.find((m) => m.id === 'gpt-5')?.pricing).toBe('subscription');
       expect(parsed.models.find((m) => m.id === 'big-pickle')?.pricing).toBe('free');
       expect(parsed.models.find((m) => m.id === 'claude-opus-4-5')?.pricing).toBe('paid');
+    });
+  });
+
+  describe('fallback chain — exhaustion error & precedence (11-5)', () => {
+    let workflowFile: string;
+
+    beforeEach(() => {
+      workflowFile = path.join(tempDir, 'test-workflow.md');
+      fs.writeFileSync(workflowFile, '# Test Workflow');
+    });
+
+    it('11-5-AC1: all providers failed at startup → aggregated error with per-provider reasons', async () => {
+      // Arrange
+      mockOpenCodeService.runSessionWithFallback.mockResolvedValue({
+        success: false,
+        session: undefined,
+        failures: [
+          { provider: 'github-copilot', model: 'github-copilot/gpt-5', error: '401 invalid key' },
+          { provider: 'anthropic', model: 'claude-3-opus', error: 'quota exceeded' },
+        ],
+      });
+      const inputs = createValidInputs({ fallbackConfig: '/workspace/fallback.json' });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('2 fallback providers failed');
+      expect(result.error).toContain('github-copilot/github-copilot/gpt-5');
+      expect(result.error).toContain('anthropic/claude-3-opus');
+      expect(mockOpenCodeService.runSession).not.toHaveBeenCalled();
+    });
+
+    it('11-5-AC2: all unauthenticated (preflight empty) → clear auth message listing providers', async () => {
+      // Arrange
+      mockLoadFallbackConfig.mockReturnValue({
+        chain: [
+          { provider: 'github-copilot', model: 'gpt-5' },
+          { provider: 'anthropic', model: 'claude-3-opus' },
+        ],
+      });
+      mockPreflightFallbackChain.mockReturnValue({
+        viable: [],
+        skipped: [
+          { provider: 'github-copilot', model: 'gpt-5' },
+          { provider: 'anthropic', model: 'claude-3-opus' },
+        ],
+        lookupFailed: false,
+      });
+      const inputs = createValidInputs({ fallbackConfig: '/workspace/fallback.json' });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert — AC2 distinct message
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('No fallback providers are authenticated');
+      expect(result.error).toContain('github-copilot');
+      expect(result.error).toContain('anthropic');
+      expect(mockOpenCodeService.runSessionWithFallback).not.toHaveBeenCalled();
+    });
+
+    it('11-5-AC3: both fallback_config and model set → chain used, warning emitted', async () => {
+      // Arrange
+      const inputs = createValidInputs({
+        fallbackConfig: '/workspace/fallback.json',
+        model: 'openai/gpt-4o',
+      });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert — warning issued, chain was used (not single-provider path)
+      expect(result.success).toBe(true);
+      expect(core.warning).toHaveBeenCalledWith(
+        'model input ignored because fallback_config is set',
+        expect.objectContaining({ title: 'fallback_config precedence' })
+      );
+      expect(mockOpenCodeService.runSessionWithFallback).toHaveBeenCalledTimes(1);
+      expect(mockOpenCodeService.runSession).not.toHaveBeenCalled();
+    });
+
+    it('11-5-AC4: fallback_config set without model → chain used, no precedence warning', async () => {
+      // Arrange
+      const inputs = createValidInputs({
+        fallbackConfig: '/workspace/fallback.json',
+        model: undefined,
+      });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert — no warning about model override
+      expect(result.success).toBe(true);
+      expect(core.warning).not.toHaveBeenCalledWith(
+        'model input ignored because fallback_config is set',
+        expect.anything()
+      );
+      expect(mockOpenCodeService.runSessionWithFallback).toHaveBeenCalledTimes(1);
+    });
+
+    it('11-5-AC5: no fallback_config → single-provider path unchanged', async () => {
+      // Arrange
+      const inputs = createValidInputs({ model: 'openai/gpt-4o' });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert — runSession used, not runSessionWithFallback
+      expect(result.success).toBe(true);
+      expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
+      expect(mockOpenCodeService.runSessionWithFallback).not.toHaveBeenCalled();
+      expect(mockLoadFallbackConfig).not.toHaveBeenCalled();
+    });
+
+    it('11-5-AC6: error reason with fake secret/path → sanitized in aggregated error', async () => {
+      // Arrange — error contains a 32+ char token (would be redacted) and a path
+      const secretToken = 'x'.repeat(40);
+      mockOpenCodeService.runSessionWithFallback.mockResolvedValue({
+        success: false,
+        session: undefined,
+        failures: [
+          {
+            provider: 'anthropic',
+            model: 'claude-3-opus',
+            error: `auth failed with token ${secretToken} at /etc/secrets/key`,
+          },
+        ],
+      });
+      const inputs = createValidInputs({ fallbackConfig: '/workspace/fallback.json' });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert — secret token redacted, path replaced
+      expect(result.success).toBe(false);
+      expect(result.error).not.toContain(secretToken);
+      expect(result.error).toContain('[REDACTED]');
+      expect(result.error).not.toContain('/etc/secrets/key');
     });
   });
 
