@@ -1,0 +1,82 @@
+name: SDK Currency Guard
+
+on:
+  schedule:
+    # Weekly on Monday at 06:00 UTC — mirrors scorecard.yml schedule
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  check-sdk-currency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check @opencode-ai/sdk currency
+        shell: bash
+        run: |
+          # Fetch the latest stable version from npm
+          LATEST=$(npm view @opencode-ai/sdk version 2>/dev/null)
+          if [ -z "$LATEST" ]; then
+            echo "::warning title=SDK Currency Guard::Could not fetch @opencode-ai/sdk latest version from npm. Skipping check."
+            exit 0
+          fi
+
+          # Read the exact resolved version from package-lock.json
+          # AC5: compare against the exact lock-file resolution, not the ^-range in package.json,
+          # so any newer stable published to npm (even within the caret range) is flagged as
+          # "a newer release exists — consider re-pinning and rebuilding dist/".
+          PINNED=$(node -e "
+            const lock = require('./package-lock.json');
+            const pkg = lock.packages && lock.packages['node_modules/@opencode-ai/sdk'];
+            console.log(pkg ? pkg.version : (lock.dependencies && lock.dependencies['@opencode-ai/sdk'] ? lock.dependencies['@opencode-ai/sdk'].version : ''));
+          ")
+
+          if [ -z "$PINNED" ]; then
+            echo "::warning title=SDK Currency Guard::Could not read pinned @opencode-ai/sdk version from package-lock.json."
+            exit 1
+          fi
+
+          echo "npm latest : $LATEST"
+          echo "lock-file  : $PINNED"
+
+          # Compare using node semver semantics (node -e exits 0 if equal, 1 if latest > pinned)
+          DRIFT=$(node -e "
+            const [a, b] = ['$LATEST', '$PINNED'].map(v => v.split('.').map(Number));
+            for (let i = 0; i < 3; i++) {
+              if ((a[i]||0) > (b[i]||0)) { process.stdout.write('yes'); process.exit(0); }
+              if ((a[i]||0) < (b[i]||0)) { process.stdout.write('no'); process.exit(0); }
+            }
+            process.stdout.write('no');
+          ")
+
+          if [ "$DRIFT" = "yes" ]; then
+            echo "::error title=SDK Drift Detected::@opencode-ai/sdk latest is $LATEST but lock-file pins $PINNED. Run 'npm install @opencode-ai/sdk@latest' and re-bundle dist/ (see Story 12-2)."
+            echo "## ⚠️ SDK Drift Detected" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| | Version |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| npm latest | \`$LATEST\` |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| lock-file  | \`$PINNED\` |" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Run \`npm install @opencode-ai/sdk@latest\` and re-bundle \`dist/\` (Story 12-2)." >> "$GITHUB_STEP_SUMMARY"
+            # Signal choice: fail the job (no issues:write needed; simple + reliable — AC2).
+            # Maintainer bumps via the 12-2-style workflow.
+            exit 1
+          else
+            echo "@opencode-ai/sdk is current ($PINNED == $LATEST). No drift."
+            echo "## ✅ SDK Currency: current" >> "$GITHUB_STEP_SUMMARY"
+            echo "@opencode-ai/sdk \`$PINNED\` is up-to-date with npm latest." >> "$GITHUB_STEP_SUMMARY"
+          fi

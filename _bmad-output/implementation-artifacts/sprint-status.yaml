@@ -132,6 +132,6 @@ development_status:
   epic-11-retrospective: 'done'
 
   # Epic 12: SDK Currency & Maintenance Guard (Phase 2)
-  epic-12: 'backlog'
-  12-1-ci-currency-guard: 'backlog'
+  epic-12: 'in-progress'
+  12-1-ci-currency-guard: 'done'
   12-2-bump-sdk-and-align-cli-binary: 'backlog'
