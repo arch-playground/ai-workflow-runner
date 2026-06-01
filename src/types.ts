@@ -12,6 +12,8 @@ export interface ActionInputs {
   listModels: boolean;
   debugLog: boolean;
   debugLogPath: string;
+  exportTranscript: boolean;
+  transcriptPath: string;
 }
 
 export interface OpenCodeSession {

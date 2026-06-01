@@ -225,6 +225,16 @@ export class OpenCodeService {
     return models;
   }
 
+  async exportTranscript(sessionId: string): Promise<unknown[]> {
+    if (this.isDisposed) {
+      throw new Error('OpenCode service disposed - cannot export transcript');
+    }
+    if (!this.client) throw new Error('OpenCode client not initialized - call initialize() first');
+
+    const response = await this.client.session.messages({ sessionID: sessionId });
+    return response.data ?? [];
+  }
+
   async runSession(
     prompt: string,
     timeoutMs: number,

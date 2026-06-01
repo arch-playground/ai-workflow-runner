@@ -224,6 +224,8 @@ export function getInputs(): ActionInputs {
     listModels,
     debugLog,
     debugLogPath,
+    exportTranscript: false,
+    transcriptPath: '',
   };
 }
 

@@ -42,6 +42,8 @@ describe('index', () => {
     listModels: false,
     debugLog: false,
     debugLogPath: '',
+    exportTranscript: false,
+    transcriptPath: '',
   });
 
   const setupMocks = (): void => {

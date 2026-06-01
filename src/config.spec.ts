@@ -729,6 +729,8 @@ describe('config', () => {
         listModels: false,
         debugLog: false,
         debugLogPath: '',
+        exportTranscript: false,
+        transcriptPath: '',
       };
 
       // Act
@@ -750,6 +752,8 @@ describe('config', () => {
         listModels: false,
         debugLog: false,
         debugLogPath: '',
+        exportTranscript: false,
+        transcriptPath: '',
       };
 
       // Act
@@ -771,6 +775,8 @@ describe('config', () => {
         listModels: false,
         debugLog: false,
         debugLogPath: '',
+        exportTranscript: false,
+        transcriptPath: '',
       };
 
       // Act
@@ -792,6 +798,8 @@ describe('config', () => {
         listModels: false,
         debugLog: false,
         debugLogPath: '',
+        exportTranscript: false,
+        transcriptPath: '',
       };
 
       // Act
@@ -813,6 +821,8 @@ describe('config', () => {
         listModels: false,
         debugLog: false,
         debugLogPath: '',
+        exportTranscript: false,
+        transcriptPath: '',
       };
 
       // Act

@@ -9,6 +9,7 @@ import {
   maskSecrets,
   sanitizeErrorMessage,
   validateUtf8,
+  scrubSecrets,
 } from './security';
 
 jest.mock('@actions/core');
@@ -261,6 +262,74 @@ describe('security', () => {
     it('rejects incomplete UTF-8 sequences', () => {
       const incompleteSequence = Buffer.from([0xc3]);
       expect(() => validateUtf8(incompleteSequence, 'test.md')).toThrow('File is not valid UTF-8');
+    });
+  });
+
+  describe('scrubSecrets', () => {
+    it('returns content unchanged when secrets list is empty', () => {
+      // Arrange
+      const content = 'some content with no secrets';
+
+      // Act
+      const result = scrubSecrets(content, []);
+
+      // Assert
+      expect(result).toBe('some content with no secrets');
+    });
+
+    it('replaces a secret value with ***', () => {
+      // Arrange
+      const content = 'token=super_secret_value end';
+
+      // Act
+      const result = scrubSecrets(content, ['super_secret_value']);
+
+      // Assert
+      expect(result).toBe('token=*** end');
+    });
+
+    it('replaces all occurrences of a secret', () => {
+      // Arrange
+      const content = 'first super_secret then super_secret again';
+
+      // Act
+      const result = scrubSecrets(content, ['super_secret']);
+
+      // Assert
+      expect(result).toBe('first *** then *** again');
+    });
+
+    it('replaces multiple distinct secrets', () => {
+      // Arrange
+      const content = 'key1=alpha key2=beta extra';
+
+      // Act
+      const result = scrubSecrets(content, ['alpha', 'beta']);
+
+      // Assert
+      expect(result).toBe('key1=*** key2=*** extra');
+    });
+
+    it('skips empty strings in the secrets list', () => {
+      // Arrange
+      const content = 'normal content';
+
+      // Act
+      const result = scrubSecrets(content, ['', '']);
+
+      // Assert
+      expect(result).toBe('normal content');
+    });
+
+    it('handles a secret that is a substring of another value', () => {
+      // Arrange
+      const content = 'value=supersecret';
+
+      // Act — only the exact secret 'secret' is scrubbed, not 'supersecret' as whole
+      const result = scrubSecrets(content, ['secret']);
+
+      // Assert
+      expect(result).toBe('value=super***');
     });
   });
 });

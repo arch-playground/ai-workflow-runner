@@ -117,6 +117,20 @@ export function validateUtf8(buffer: Buffer, filePath: string): string {
   }
 }
 
+/**
+ * Replaces every occurrence of each non-empty secret value in the content with `***`.
+ * Use before writing any file that may contain user-supplied env_vars.
+ */
+export function scrubSecrets(content: string, secrets: string[]): string {
+  let result = content;
+  for (const secret of secrets) {
+    if (secret.length > 0) {
+      result = result.split(secret).join('***');
+    }
+  }
+  return result;
+}
+
 const TRUNCATION_MARKER = '...[truncated]';
 
 /**
