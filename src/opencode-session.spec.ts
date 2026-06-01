@@ -983,4 +983,193 @@ describe('OpenCodeService - session & messages', () => {
       expect(result).toBeDefined();
     });
   });
+
+  describe('stop-command wrapping (9-5)', () => {
+    let stdoutSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    });
+
+    afterEach(() => {
+      stdoutSpy.mockRestore();
+    });
+
+    it('9-5-AC1: brackets text part with stop-commands open and close markers', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.updated',
+        properties: { info: { id: 'msg-1', role: 'assistant', sessionID: 'session-123' } },
+      });
+
+      // Act
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: { type: 'text', text: 'Hello world', messageID: 'msg-1', sessionID: 'session-123' },
+        },
+      });
+      await flushMicrotasks();
+
+      // Assert: stop-commands open written before content, close written after
+      const stdoutCalls = stdoutSpy.mock.calls.map((c) => String(c[0]));
+      const stopOpen = stdoutCalls.find((s) => s.startsWith('::stop-commands::'));
+      const stopClose = stdoutCalls.find(
+        (s) => /^::[^:]+::\n$/.test(s) && !s.startsWith('::stop-commands::')
+      );
+      expect(stopOpen).toBeDefined();
+      expect(stopClose).toBeDefined();
+
+      // Content written between the two markers via core.info
+      expect(mockCore.info).toHaveBeenCalledWith(expect.stringContaining('Hello world'));
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('9-5-AC1/AC2: text with ::set-output:: is bracketed and fully in messageBuffer', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.updated',
+        properties: { info: { id: 'msg-1', role: 'assistant', sessionID: 'session-123' } },
+      });
+
+      // Act
+      const injectionText = '::set-output name=x::injected_value';
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: { type: 'text', text: injectionText, messageID: 'msg-1', sessionID: 'session-123' },
+        },
+      });
+      await flushMicrotasks();
+
+      // Assert: bracketed
+      const stdoutCalls = stdoutSpy.mock.calls.map((c) => String(c[0]));
+      expect(stdoutCalls.some((s) => s.startsWith('::stop-commands::'))).toBe(true);
+
+      // messageBuffer receives full text (AC2)
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      const result = await sessionPromise;
+      expect(result.lastMessage).toContain(injectionText);
+    });
+
+    it('9-5-AC3: text > MAX_LOG_LINE_LENGTH is chunked; messageBuffer gets full text', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.updated',
+        properties: { info: { id: 'msg-1', role: 'assistant', sessionID: 'session-123' } },
+      });
+
+      // Act: emit text longer than 6000 chars
+      const longText = 'A'.repeat(13_000);
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: { type: 'text', text: longText, messageID: 'msg-1', sessionID: 'session-123' },
+        },
+      });
+      await flushMicrotasks();
+
+      // Assert: core.info called multiple times (chunks), each call <= MAX_LOG_LINE_LENGTH+timestamp overhead
+      const infoCalls = mockCore.info.mock.calls as string[][];
+      const textInfoCalls = infoCalls.filter((args) => (args[0] ?? '').includes('AAAA'));
+      expect(textInfoCalls.length).toBeGreaterThanOrEqual(2);
+      for (const [arg] of textInfoCalls) {
+        expect((arg ?? '').length).toBeLessThanOrEqual(6_000 + 60); // 6k content + timestamp prefix overhead
+      }
+
+      // messageBuffer still gets full text
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      const result = await sessionPromise;
+      expect(result.lastMessage).toBe(longText);
+    });
+
+    it('9-5-AC5: short text emits single chunk with [OpenCode] prefix', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.updated',
+        properties: { info: { id: 'msg-1', role: 'assistant', sessionID: 'session-123' } },
+      });
+
+      // Act
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: { type: 'text', text: 'Short text', messageID: 'msg-1', sessionID: 'session-123' },
+        },
+      });
+      await flushMicrotasks();
+
+      // Assert: exactly one info call for the text, contains [OpenCode] prefix
+      const textInfoCalls = (mockCore.info.mock.calls as string[][]).filter((args) =>
+        (args[0] ?? '').includes('Short text')
+      );
+      expect(textInfoCalls).toHaveLength(1);
+      expect(textInfoCalls[0]?.[0]).toMatch(/\[OpenCode\]/);
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('9-5-AC4: tool log path does NOT use stop-command brackets', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      // Act: emit tool part (not text part)
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'bash',
+            state: {
+              status: 'completed',
+              input: { command: 'ls' },
+              output: 'file.txt',
+              title: '',
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        },
+      });
+      await flushMicrotasks();
+
+      // Assert: NO stop-commands written for tool paths
+      const stdoutCalls = stdoutSpy.mock.calls.map((c) => String(c[0]));
+      expect(stdoutCalls.some((s) => s.startsWith('::stop-commands::'))).toBe(false);
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+  });
 });
