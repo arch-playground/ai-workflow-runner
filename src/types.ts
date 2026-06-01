@@ -39,6 +39,7 @@ export interface RunnerResult {
   output: string;
   error?: string;
   exitCode?: number;
+  transcriptJsonPath?: string;
 }
 
 export interface ValidationResult {

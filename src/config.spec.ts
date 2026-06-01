@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import * as core from '@actions/core';
-import { getInputs, validateInputs, validateDebugLogPath } from './config';
+import { getInputs, validateInputs, validateDebugLogPath, validateSafeOutputPath } from './config';
 import { INPUT_LIMITS } from './types';
 import { maskSecrets, validateConfigPath } from './security';
 
@@ -646,6 +646,214 @@ describe('config', () => {
         expect(inputs.debugLogPath).toBe('');
       });
     });
+
+    describe('9.6-AC2: export_transcript parsing', () => {
+      it('sets exportTranscript to true when input is "true"', () => {
+        // Arrange
+        mockInputs({ export_transcript: 'true' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.exportTranscript).toBe(true);
+      });
+
+      it('sets exportTranscript to false when input is "false"', () => {
+        // Arrange
+        mockInputs({ export_transcript: 'false' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.exportTranscript).toBe(false);
+      });
+
+      it('defaults exportTranscript to false when input is absent', () => {
+        // Arrange
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.exportTranscript).toBe(false);
+      });
+
+      it('parses exportTranscript case-insensitively', () => {
+        // Arrange
+        mockInputs({ export_transcript: 'TRUE' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.exportTranscript).toBe(true);
+      });
+
+      it('trims whitespace when parsing exportTranscript', () => {
+        // Arrange
+        mockInputs({ export_transcript: '  true  ' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.exportTranscript).toBe(true);
+      });
+    });
+
+    describe('9.6-AC2: write_job_summary parsing', () => {
+      it('sets writeJobSummary to true when input is "true"', () => {
+        // Arrange
+        mockInputs({ write_job_summary: 'true' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.writeJobSummary).toBe(true);
+      });
+
+      it('sets writeJobSummary to false when input is "false"', () => {
+        // Arrange
+        mockInputs({ write_job_summary: 'false' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.writeJobSummary).toBe(false);
+      });
+
+      it('defaults writeJobSummary to false when input is absent', () => {
+        // Arrange
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.writeJobSummary).toBe(false);
+      });
+
+      it('parses writeJobSummary case-insensitively', () => {
+        // Arrange
+        mockInputs({ write_job_summary: 'TRUE' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.writeJobSummary).toBe(true);
+      });
+    });
+
+    describe('9.6-AC2: transcript_path parsing', () => {
+      let originalRunnerTemp: string | undefined;
+
+      beforeEach(() => {
+        originalRunnerTemp = process.env.RUNNER_TEMP;
+      });
+
+      afterEach(() => {
+        if (originalRunnerTemp === undefined) delete process.env.RUNNER_TEMP;
+        else process.env.RUNNER_TEMP = originalRunnerTemp;
+      });
+
+      it('defaults transcriptPath to $RUNNER_TEMP/conversation.json when export enabled and path absent', () => {
+        // Arrange
+        process.env.RUNNER_TEMP = '/tmp/runner-temp';
+        mockInputs({ export_transcript: 'true' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.transcriptPath).toBe('/tmp/runner-temp/conversation.json');
+      });
+
+      it('defaults transcriptPath to /tmp/conversation.json when RUNNER_TEMP unset and export enabled', () => {
+        // Arrange
+        delete process.env.RUNNER_TEMP;
+        mockInputs({ export_transcript: 'true' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.transcriptPath).toBe('/tmp/conversation.json');
+      });
+
+      it('leaves transcriptPath empty when export is disabled (even if path provided)', () => {
+        // Arrange
+        mockInputs({
+          export_transcript: 'false',
+          transcript_path: '/etc/bad-path/transcript.json',
+        });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.exportTranscript).toBe(false);
+        expect(inputs.transcriptPath).toBe('');
+      });
+
+      it('validates and resolves transcript_path under /tmp', () => {
+        // Arrange
+        mockInputs({ export_transcript: 'true', transcript_path: '/tmp/my-transcript.json' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.transcriptPath).toBe('/tmp/my-transcript.json');
+      });
+
+      it('accepts workspace-relative transcript_path', () => {
+        // Arrange
+        mockInputs({ export_transcript: 'true', transcript_path: 'artifacts/transcript.json' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.transcriptPath).toBe(
+          require('path').join(process.cwd(), 'artifacts/transcript.json')
+        );
+      });
+
+      it('rejects transcript_path escaping workspace', () => {
+        // Arrange
+        mockInputs({ export_transcript: 'true', transcript_path: '../../etc/transcript.json' });
+
+        // Act & Assert
+        expect(() => getInputs()).toThrow('path escapes the workspace directory');
+      });
+
+      it('rejects absolute transcript_path outside safe directories', () => {
+        // Arrange
+        mockInputs({ export_transcript: 'true', transcript_path: '/etc/transcript.json' });
+
+        // Act & Assert
+        expect(() => getInputs()).toThrow('Invalid transcript_path');
+      });
+
+      it('9.6-AC5: omitting new inputs leaves existing behavior unchanged', () => {
+        // Arrange
+        mockInputs({ workflow_path: 'test.md' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert (backward-compat: defaults off)
+        expect(inputs.exportTranscript).toBe(false);
+        expect(inputs.writeJobSummary).toBe(false);
+        expect(inputs.transcriptPath).toBe('');
+      });
+    });
   });
 
   describe('action.yml schema', () => {
@@ -711,6 +919,43 @@ describe('config', () => {
       expect(input).toBeDefined();
       expect(input.required).toBe(false);
       expect(input.default).toBe('');
+    });
+
+    it('9.6-AC1: defines export_transcript as optional boolean with false default', () => {
+      // Assert
+      const input = actionInputs['export_transcript']!;
+      expect(input).toBeDefined();
+      expect(input.required).toBe(false);
+      expect(input.default).toBe('false');
+    });
+
+    it('9.6-AC1: defines write_job_summary as optional boolean with false default', () => {
+      // Assert
+      const input = actionInputs['write_job_summary']!;
+      expect(input).toBeDefined();
+      expect(input.required).toBe(false);
+      expect(input.default).toBe('false');
+    });
+
+    it('9.6-AC1: defines transcript_path as optional string with empty default', () => {
+      // Assert
+      const input = actionInputs['transcript_path']!;
+      expect(input).toBeDefined();
+      expect(input.required).toBe(false);
+      expect(input.default).toBe('');
+    });
+
+    it('9.6-AC1: declares transcript_json_path output', () => {
+      // Arrange
+      const actionYmlPath = path.resolve(__dirname, '..', 'action.yml');
+      const actionYml = yaml.load(fs.readFileSync(actionYmlPath, 'utf8')) as {
+        outputs: Record<string, { description: string }>;
+      };
+
+      // Assert
+      const output = actionYml.outputs['transcript_json_path'];
+      expect(output).toBeDefined();
+      expect(output!.description).toBeTruthy();
     });
   });
 
@@ -898,6 +1143,152 @@ describe('config', () => {
 
       // Assert
       expect(fs.mkdirSync).toHaveBeenCalledWith('/workspace/deep/nested/dir', { recursive: true });
+    });
+  });
+
+  describe('validateSafeOutputPath', () => {
+    it('accepts absolute path under /tmp with custom inputName', () => {
+      const result = validateSafeOutputPath(
+        '/workspace',
+        '/tmp/conversation.json',
+        'transcript_path'
+      );
+      expect(result).toBe('/tmp/conversation.json');
+    });
+
+    it('rejects unsafe absolute path with inputName in error', () => {
+      expect(() =>
+        validateSafeOutputPath('/workspace', '/etc/conversation.json', 'transcript_path')
+      ).toThrow('Invalid transcript_path');
+    });
+
+    it('accepts workspace-relative path', () => {
+      const result = validateSafeOutputPath(
+        '/workspace',
+        'output/transcript.json',
+        'transcript_path'
+      );
+      expect(result).toBe('/workspace/output/transcript.json');
+    });
+
+    it('rejects path escaping workspace', () => {
+      expect(() =>
+        validateSafeOutputPath('/workspace', '../../etc/out.json', 'transcript_path')
+      ).toThrow('Invalid transcript_path: path escapes the workspace directory');
+    });
+  });
+
+  describe('getInputs — new conversation-logging inputs', () => {
+    let originalRunnerTemp: string | undefined;
+
+    beforeEach(() => {
+      originalRunnerTemp = process.env.RUNNER_TEMP;
+      delete process.env['GITHUB_WORKSPACE'];
+    });
+
+    afterEach(() => {
+      if (originalRunnerTemp === undefined) delete process.env.RUNNER_TEMP;
+      else process.env.RUNNER_TEMP = originalRunnerTemp;
+    });
+
+    it('9-6-AC2: export_transcript "true" sets exportTranscript = true', () => {
+      // Arrange
+      mockInputs({ export_transcript: 'true' });
+
+      // Act
+      const inputs = getInputs();
+
+      // Assert
+      expect(inputs.exportTranscript).toBe(true);
+    });
+
+    it('9-6-AC2: export_transcript absent defaults to false', () => {
+      // Arrange
+      mockInputs({});
+
+      // Act
+      const inputs = getInputs();
+
+      // Assert
+      expect(inputs.exportTranscript).toBe(false);
+    });
+
+    it('9-6-AC2: write_job_summary "true" sets writeJobSummary = true', () => {
+      // Arrange
+      mockInputs({ write_job_summary: 'true' });
+
+      // Act
+      const inputs = getInputs();
+
+      // Assert
+      expect(inputs.writeJobSummary).toBe(true);
+    });
+
+    it('9-6-AC2: write_job_summary absent defaults to false', () => {
+      // Arrange
+      mockInputs({});
+
+      // Act
+      const inputs = getInputs();
+
+      // Assert
+      expect(inputs.writeJobSummary).toBe(false);
+    });
+
+    it('9-6-AC2: transcript_path is validated when export_transcript is true and path provided', () => {
+      // Arrange
+      process.env.RUNNER_TEMP = '/tmp/runner';
+      mockInputs({ export_transcript: 'true', transcript_path: '/tmp/runner/custom.json' });
+
+      // Act
+      const inputs = getInputs();
+
+      // Assert
+      expect(inputs.transcriptPath).toBe('/tmp/runner/custom.json');
+    });
+
+    it('9-6-AC2: transcript_path defaults to RUNNER_TEMP/conversation.json when export_transcript true and no path set', () => {
+      // Arrange
+      process.env.RUNNER_TEMP = '/tmp/runner-temp';
+      mockInputs({ export_transcript: 'true' });
+
+      // Act
+      const inputs = getInputs();
+
+      // Assert
+      expect(inputs.transcriptPath).toBe('/tmp/runner-temp/conversation.json');
+    });
+
+    it('9-6-AC2: transcript_path empty when export_transcript false', () => {
+      // Arrange
+      mockInputs({ export_transcript: 'false', transcript_path: '' });
+
+      // Act
+      const inputs = getInputs();
+
+      // Assert
+      expect(inputs.transcriptPath).toBe('');
+    });
+
+    it('9-6-AC2: transcript_path rejects unsafe path', () => {
+      // Arrange
+      mockInputs({ export_transcript: 'true', transcript_path: '/etc/evil.json' });
+
+      // Act & Assert
+      expect(() => getInputs()).toThrow('Invalid transcript_path');
+    });
+
+    it('9-6-AC5: all new inputs default off (backward compatible)', () => {
+      // Arrange
+      mockInputs({ workflow_path: 'test.md' });
+
+      // Act
+      const inputs = getInputs();
+
+      // Assert
+      expect(inputs.exportTranscript).toBe(false);
+      expect(inputs.writeJobSummary).toBe(false);
+      expect(inputs.transcriptPath).toBe('');
     });
   });
 });

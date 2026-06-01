@@ -55,12 +55,26 @@ inputs:
     description: 'Path for debug log file. Defaults to $RUNNER_TEMP/opencode-debug.log. Accepts workspace-relative or absolute paths under RUNNER_TEMP/tmp.'
     required: false
     default: ''
+  export_transcript:
+    description: 'If "true", export the full AI conversation to a JSON file after the run. Use the transcript_json_path output to upload it as a workflow artifact.'
+    required: false
+    default: 'false'
+  write_job_summary:
+    description: 'If "true", write a GitHub job summary with run status, token/cost totals, tool activity, and the final assistant message.'
+    required: false
+    default: 'false'
+  transcript_path:
+    description: 'Path for the transcript JSON file. Defaults to $RUNNER_TEMP/conversation.json. Accepts workspace-relative or absolute paths under RUNNER_TEMP/tmp.'
+    required: false
+    default: ''
 
 outputs:
   status:
     description: 'Execution status: success, failure, cancelled, or timeout'
   result:
     description: 'Workflow execution result as JSON string (max 900KB)'
+  transcript_json_path:
+    description: 'Resolved path of the exported transcript JSON file. Empty when export_transcript is false.'
 
 runs:
   using: 'docker'

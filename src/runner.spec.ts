@@ -726,6 +726,43 @@ describe('runner', () => {
         expect.any(Array)
       );
     });
+
+    it('9-6-AC3: returns transcriptJsonPath in RunnerResult when exportTranscript is true', async () => {
+      // Arrange
+      const transcriptPath = path.join(tempDir, 'conversation.json');
+      const inputs = createValidInputs({ exportTranscript: true, transcriptPath });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.transcriptJsonPath).toBe(transcriptPath);
+    });
+
+    it('9-6-AC3: transcriptJsonPath is empty string when exportTranscript is false', async () => {
+      // Arrange
+      const inputs = createValidInputs({ exportTranscript: false });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.transcriptJsonPath).toBe('');
+    });
+
+    it('9-6-AC3: transcriptJsonPath uses RUNNER_TEMP default when transcriptPath empty', async () => {
+      // Arrange
+      const runnerTemp = path.join(tempDir, 'runner_temp2');
+      fs.mkdirSync(runnerTemp);
+      process.env['RUNNER_TEMP'] = runnerTemp;
+      const inputs = createValidInputs({ exportTranscript: true, transcriptPath: '' });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.transcriptJsonPath).toBe(path.join(runnerTemp, 'conversation.json'));
+    });
   });
 
   describe('job summary', () => {
@@ -797,6 +834,66 @@ describe('runner', () => {
       // Assert
       expect(mockOpenCodeService.exportTranscript).not.toHaveBeenCalled();
       expect(mockWriteJobSummary).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('9.6-AC3: transcript_json_path output in RunnerResult', () => {
+    let workflowFile: string;
+
+    beforeEach(() => {
+      workflowFile = path.join(tempDir, 'test-workflow.md');
+      fs.writeFileSync(workflowFile, '# Workflow');
+    });
+
+    it('returns transcriptJsonPath in result when exportTranscript is enabled', async () => {
+      // Arrange
+      const transcriptPath = path.join(tempDir, 'conversation.json');
+      const inputs = createValidInputs({ exportTranscript: true, transcriptPath });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.transcriptJsonPath).toBe(transcriptPath);
+    });
+
+    it('returns empty transcriptJsonPath when exportTranscript is disabled', async () => {
+      // Arrange
+      const inputs = createValidInputs({ exportTranscript: false });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(result.transcriptJsonPath).toBeFalsy();
+    });
+
+    it('uses RUNNER_TEMP default path in transcriptJsonPath when transcriptPath is empty', async () => {
+      // Arrange
+      const runnerTemp = path.join(tempDir, 'runner_temp');
+      fs.mkdirSync(runnerTemp);
+      process.env['RUNNER_TEMP'] = runnerTemp;
+      const inputs = createValidInputs({ exportTranscript: true, transcriptPath: '' });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.transcriptJsonPath).toBe(path.join(runnerTemp, 'conversation.json'));
+    });
+
+    it('9.6-AC5: omitting new inputs leaves RunnerResult transcriptJsonPath falsy', async () => {
+      // Arrange
+      const inputs = createValidInputs(); // exportTranscript: false by default
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert (backward-compat)
+      expect(result.success).toBe(true);
+      expect(result.transcriptJsonPath).toBeFalsy();
     });
   });
 });

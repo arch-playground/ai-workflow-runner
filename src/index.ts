@@ -72,6 +72,7 @@ async function run(): Promise<void> {
     status = result.success ? 'success' : 'failure';
     core.setOutput('status', status);
     core.setOutput('result', result.output);
+    core.setOutput('transcript_json_path', result.transcriptJsonPath ?? '');
     outputsSet = true;
 
     if (!result.success && result.error) {

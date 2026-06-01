@@ -117,9 +117,13 @@ function parseValidationMaxRetry(maxValidationRetriesRaw: string): number {
   return maxValidationRetries;
 }
 
-export function validateDebugLogPath(workspacePath: string, debugLogPath: string): string {
-  if (path.isAbsolute(debugLogPath)) {
-    const normalized = path.normalize(debugLogPath);
+export function validateSafeOutputPath(
+  workspacePath: string,
+  outputPath: string,
+  inputName: string
+): string {
+  if (path.isAbsolute(outputPath)) {
+    const normalized = path.normalize(outputPath);
     const parentDir = path.dirname(normalized);
     const safePrefixes = [...SAFE_DEBUG_LOG_PREFIXES];
     const runnerTemp = process.env.RUNNER_TEMP;
@@ -133,7 +137,7 @@ export function validateDebugLogPath(workspacePath: string, debugLogPath: string
     );
     if (!isSafe) {
       throw new Error(
-        `Invalid debug_log_path: absolute paths are only allowed under RUNNER_TEMP, /tmp, or /github/runner_temp`
+        `Invalid ${inputName}: absolute paths are only allowed under RUNNER_TEMP, /tmp, or /github/runner_temp`
       );
     }
 
@@ -141,13 +145,17 @@ export function validateDebugLogPath(workspacePath: string, debugLogPath: string
     return normalized;
   }
 
-  const resolved = path.resolve(workspacePath, path.normalize(debugLogPath));
+  const resolved = path.resolve(workspacePath, path.normalize(outputPath));
   if (!resolved.startsWith(workspacePath + path.sep) && resolved !== workspacePath) {
-    throw new Error('Invalid debug_log_path: path escapes the workspace directory');
+    throw new Error(`Invalid ${inputName}: path escapes the workspace directory`);
   }
 
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
   return resolved;
+}
+
+export function validateDebugLogPath(workspacePath: string, debugLogPath: string): string {
+  return validateSafeOutputPath(workspacePath, debugLogPath, 'debug_log_path');
 }
 
 export function getInputs(): ActionInputs {
@@ -210,6 +218,19 @@ export function getInputs(): ActionInputs {
     }
   }
 
+  const exportTranscript = core.getInput('export_transcript').trim().toLowerCase() === 'true';
+  const writeJobSummary = core.getInput('write_job_summary').trim().toLowerCase() === 'true';
+
+  let transcriptPath = '';
+  if (exportTranscript) {
+    const transcriptPathRaw = core.getInput('transcript_path') || '';
+    if (transcriptPathRaw) {
+      transcriptPath = validateSafeOutputPath(workspacePath, transcriptPathRaw, 'transcript_path');
+    } else {
+      transcriptPath = path.join(process.env['RUNNER_TEMP'] || '/tmp', 'conversation.json');
+    }
+  }
+
   return {
     workflowPath,
     prompt,
@@ -224,9 +245,9 @@ export function getInputs(): ActionInputs {
     listModels,
     debugLog,
     debugLogPath,
-    exportTranscript: false,
-    transcriptPath: '',
-    writeJobSummary: false,
+    exportTranscript,
+    transcriptPath,
+    writeJobSummary,
   };
 }
 
