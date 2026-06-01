@@ -566,6 +566,67 @@ describe('config', () => {
       });
     });
 
+    describe('subscription_providers parsing', () => {
+      it('10-5-AC2: parses single provider id', () => {
+        // Arrange
+        mockInputs({ subscription_providers: 'my-gateway' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.subscriptionProviders).toEqual(['my-gateway']);
+      });
+
+      it('10-5-AC2: parses comma-separated list', () => {
+        // Arrange
+        mockInputs({ subscription_providers: 'my-gateway,bedrock-custom,enterprise-proxy' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.subscriptionProviders).toEqual([
+          'my-gateway',
+          'bedrock-custom',
+          'enterprise-proxy',
+        ]);
+      });
+
+      it('10-5-AC2: trims whitespace around each entry', () => {
+        // Arrange
+        mockInputs({ subscription_providers: ' my-gateway , bedrock-custom ' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.subscriptionProviders).toEqual(['my-gateway', 'bedrock-custom']);
+      });
+
+      it('10-5-AC2: drops empty entries (e.g. trailing comma)', () => {
+        // Arrange
+        mockInputs({ subscription_providers: 'my-gateway,' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.subscriptionProviders).toEqual(['my-gateway']);
+      });
+
+      it('10-5-AC2: returns [] when input is empty (default)', () => {
+        // Arrange
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.subscriptionProviders).toEqual([]);
+      });
+    });
+
     describe('debug_log parsing', () => {
       let originalActionsStepDebug: string | undefined;
       let originalRunnerDebug: string | undefined;
@@ -1008,6 +1069,7 @@ describe('config', () => {
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
         disableFreeModels: false,
+        subscriptionProviders: [],
         debugLog: false,
         debugLogPath: '',
         exportTranscript: false,
@@ -1033,6 +1095,7 @@ describe('config', () => {
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
         disableFreeModels: false,
+        subscriptionProviders: [],
         debugLog: false,
         debugLogPath: '',
         exportTranscript: false,
@@ -1058,6 +1121,7 @@ describe('config', () => {
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
         disableFreeModels: false,
+        subscriptionProviders: [],
         debugLog: false,
         debugLogPath: '',
         exportTranscript: false,
@@ -1083,6 +1147,7 @@ describe('config', () => {
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
         disableFreeModels: false,
+        subscriptionProviders: [],
         debugLog: false,
         debugLogPath: '',
         exportTranscript: false,
@@ -1108,6 +1173,7 @@ describe('config', () => {
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
         disableFreeModels: false,
+        subscriptionProviders: [],
         debugLog: false,
         debugLogPath: '',
         exportTranscript: false,

@@ -41,6 +41,7 @@ describe('index', () => {
     maxValidationRetries: 5,
     listModels: false,
     disableFreeModels: false,
+    subscriptionProviders: [],
     debugLog: false,
     debugLogPath: '',
     exportTranscript: false,

@@ -25,6 +25,7 @@ export interface ActionInputs {
   model?: string;
   listModels: boolean;
   disableFreeModels: boolean;
+  subscriptionProviders: string[];
   debugLog: boolean;
   debugLogPath: string;
   exportTranscript: boolean;

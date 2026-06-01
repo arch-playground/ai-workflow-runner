@@ -197,6 +197,11 @@ export function getInputs(): ActionInputs {
   const listModelsRaw = core.getInput('list_models') || 'false';
   const listModels = listModelsRaw.trim().toLowerCase() === 'true';
   const disableFreeModels = core.getInput('disable_free_models').trim().toLowerCase() === 'true';
+  const subscriptionProviders = core
+    .getInput('subscription_providers')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
   const workspacePath = process.env.GITHUB_WORKSPACE || process.cwd();
   const opencodeConfig = opencodeConfigRaw
@@ -245,6 +250,7 @@ export function getInputs(): ActionInputs {
     model,
     listModels,
     disableFreeModels,
+    subscriptionProviders,
     debugLog,
     debugLogPath,
     exportTranscript,
