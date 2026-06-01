@@ -1,3 +1,17 @@
+export interface ModelCost {
+  input: number;
+  output: number;
+}
+
+export interface ModelListItem {
+  id: string;
+  name: string;
+  provider: string;
+  providerId: string;
+  cost?: ModelCost;
+  enabledVia?: 'env' | 'account' | 'custom';
+}
+
 export interface ActionInputs {
   workflowPath: string;
   prompt: string;

@@ -270,6 +270,158 @@ describe('OpenCodeService', () => {
       // Assert
       expect(result).toEqual([]);
     });
+
+    it('10-1-AC1: enriches models with cost and enabledVia from v2 provider join', async () => {
+      // Arrange
+      mockClient.config.providers.mockResolvedValue({
+        data: {
+          providers: [
+            {
+              id: 'anthropic',
+              name: 'Anthropic',
+              models: {
+                'claude-3-opus': {
+                  id: 'claude-3-opus',
+                  name: 'Claude 3 Opus',
+                  cost: { input: 15, output: 75 },
+                },
+              },
+            },
+          ],
+        },
+      });
+      mockClient.v2.provider.list.mockResolvedValue({
+        data: [{ id: 'anthropic', enabled: { via: 'account', service: 'anthropic' } }],
+      });
+      const target = await createInitializedService();
+
+      // Act
+      const result = await target.listModels();
+
+      // Assert
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        id: 'claude-3-opus',
+        name: 'Claude 3 Opus',
+        provider: 'Anthropic',
+        providerId: 'anthropic',
+        cost: { input: 15, output: 75 },
+        enabledVia: 'account',
+      });
+      expect(mockClient.v2.provider.list).toHaveBeenCalledTimes(1);
+    });
+
+    it('10-1-AC2: enabledVia is undefined for provider absent from v2 list', async () => {
+      // Arrange
+      mockClient.config.providers.mockResolvedValue({
+        data: {
+          providers: [
+            {
+              id: 'opencode-zen',
+              name: 'OpenCode Zen',
+              models: {
+                'zen-1': { id: 'zen-1', name: 'Zen 1', cost: { input: 0, output: 0 } },
+              },
+            },
+          ],
+        },
+      });
+      mockClient.v2.provider.list.mockResolvedValue({
+        data: [{ id: 'anthropic', enabled: { via: 'account', service: 'anthropic' } }],
+      });
+      const target = await createInitializedService();
+
+      // Act
+      const result = await target.listModels();
+
+      // Assert
+      expect(result[0]).toMatchObject({ providerId: 'opencode-zen', enabledVia: undefined });
+    });
+
+    it('10-1-AC3: gracefully degrades when v2.provider.list() throws', async () => {
+      // Arrange
+      mockClient.config.providers.mockResolvedValue({
+        data: {
+          providers: [
+            {
+              id: 'anthropic',
+              name: 'Anthropic',
+              models: {
+                'claude-3-opus': { id: 'claude-3-opus', name: 'Claude 3 Opus' },
+              },
+            },
+          ],
+        },
+      });
+      mockClient.v2.provider.list.mockRejectedValue(new Error('v2 unavailable'));
+      const target = await createInitializedService();
+
+      // Act
+      const result = await target.listModels();
+
+      // Assert
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ id: 'claude-3-opus', enabledVia: undefined });
+      expect(mockCore.debug).toHaveBeenCalledWith(
+        expect.stringContaining('v2.provider.list() failed')
+      );
+    });
+
+    it('10-1-AC5: cost is undefined for models without cost field, no crash', async () => {
+      // Arrange
+      mockClient.config.providers.mockResolvedValue({
+        data: {
+          providers: [
+            {
+              id: 'local',
+              name: 'Local',
+              models: {
+                'local-model': { id: 'local-model', name: 'Local Model' },
+              },
+            },
+          ],
+        },
+      });
+      mockClient.v2.provider.list.mockResolvedValue({ data: [] });
+      const target = await createInitializedService();
+
+      // Act
+      const result = await target.listModels();
+
+      // Assert
+      expect(result[0]).toMatchObject({
+        id: 'local-model',
+        cost: undefined,
+        enabledVia: undefined,
+      });
+    });
+
+    it('10-1-AC3: v2 enabled===false provider is excluded from auth map (enabledVia undefined)', async () => {
+      // Arrange
+      mockClient.config.providers.mockResolvedValue({
+        data: {
+          providers: [
+            {
+              id: 'github-copilot',
+              name: 'GitHub Copilot',
+              models: {
+                'copilot-1': { id: 'copilot-1', name: 'Copilot 1', cost: { input: 0, output: 0 } },
+              },
+            },
+          ],
+        },
+      });
+      mockClient.v2.provider.list.mockResolvedValue({
+        data: [{ id: 'github-copilot', enabled: false }],
+      });
+      const target = await createInitializedService();
+
+      // Act
+      const result = await target.listModels();
+
+      // Assert
+      expect(result[0]).toMatchObject({ enabledVia: undefined });
+    });
   });
 
   describe('exportTranscript()', () => {
