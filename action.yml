@@ -55,6 +55,10 @@ inputs:
     description: 'Comma-separated provider IDs to always treat as paid subscriptions (their cost-0 models are never classified as free). Use for enterprise gateways or flat-subscription providers that OpenCode does not report as account-authenticated. E.g. "my-gateway,bedrock-custom". Default: empty.'
     required: false
     default: ''
+  fallback_config:
+    description: 'Path to a JSON file with an ordered provider/model fallback chain (relative to workspace, or absolute under runner.temp/tmp). Each entry is {provider, model}. IMPORTANT: this file must NOT contain credentials or API keys — auth is configured separately via auth_config.'
+    required: false
+    default: ''
   debug_log:
     description: 'Enable verbose debug logging to file. Also activated by ACTIONS_STEP_DEBUG=true or RUNNER_DEBUG=1.'
     required: false
