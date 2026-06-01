@@ -66,6 +66,7 @@ export const INPUT_LIMITS = {
   SIGKILL_GRACE_PERIOD_MS: 5_000, // 5 seconds to wait before SIGKILL
   MAX_STDERR_SIZE: 10_000, // 10KB for stderr capture
   EVENT_STREAM_HEARTBEAT_MS: 90_000, // Must exceed LLM inference pause (~60s)
+  MAX_LOG_LINE_LENGTH: 6_000, // Runner log throughput collapses past ~6k chars/line (§3a)
 } as const;
 
 export type ShutdownSignal = 'SIGTERM' | 'SIGINT';

@@ -14,6 +14,11 @@ export interface InitializeOptions {
   model?: string;
 }
 
+// Fixed token for stop-commands bracketing. A constant is acceptable here because the
+// wrapped content is the agent's own output — the goal is preventing accidental/incidental
+// `::command::` sequences from being parsed by the Actions runner, not secrets protection.
+const STOP_TOKEN = 'opencode-stop-43f8a2b1';
+
 const SESSION_STATUS = {
   IDLE: 'idle',
   RETRY: 'retry',
@@ -612,11 +617,20 @@ export class OpenCodeService {
     return `[${new Date().toISOString()}] [OpenCode] ${message}`;
   }
 
+  private emitTextSafe(text: string): void {
+    const prefixed = this.formatTimestampedLog(text);
+    process.stdout.write(`::stop-commands::${STOP_TOKEN}\n`);
+    for (let offset = 0; offset < prefixed.length; offset += INPUT_LIMITS.MAX_LOG_LINE_LENGTH) {
+      core.info(prefixed.slice(offset, offset + INPUT_LIMITS.MAX_LOG_LINE_LENGTH));
+    }
+    process.stdout.write(`::${STOP_TOKEN}::\n`);
+  }
+
   private handleTextPart(part: { text?: string; messageID?: string; sessionID?: string }): void {
     const state = this.sessionMessageState.get(part.sessionID!);
     if (state) {
       if (!state.currentMessageId || part.messageID === state.currentMessageId) {
-        core.info(this.formatTimestampedLog(part.text!));
+        this.emitTextSafe(part.text!);
         state.messageBuffer += part.text;
       }
     }
