@@ -1076,6 +1076,160 @@ describe('runner', () => {
     });
   });
 
+  describe('Epic 10 real-data end-to-end compose (10-6)', () => {
+    // Real-data shapes: Copilot (cost 0, account), Zen-free (cost 0, no auth), paid Anthropic
+    const copilotGpt5 = {
+      id: 'gpt-5',
+      name: 'GPT-5',
+      provider: 'GitHub Copilot',
+      providerId: 'github-copilot',
+      cost: { input: 0, output: 0 },
+      enabledVia: 'account' as const,
+    };
+    const zenBigPickle = {
+      id: 'big-pickle',
+      name: 'Big Pickle',
+      provider: 'OpenCode Zen',
+      providerId: 'opencode',
+      cost: { input: 0, output: 0 },
+      enabledVia: undefined,
+    };
+    const anthropicPaid = {
+      id: 'claude-opus-4-5',
+      name: 'Claude Opus 4.5',
+      provider: 'Anthropic',
+      providerId: 'anthropic',
+      cost: { input: 15, output: 75 },
+      enabledVia: 'account' as const,
+    };
+
+    it('10-6-AC3: handleListModels disable_free_models — Zen-free omitted, Copilot+paid kept+tagged', async () => {
+      // Arrange
+      mockOpenCodeService.listModels.mockResolvedValue([copilotGpt5, zenBigPickle, anthropicPaid]);
+      const inputs = createValidInputs({ listModels: true, disableFreeModels: true });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert — only 2 survivors (Copilot + paid); Zen-free omitted
+      const parsed = JSON.parse(result.output) as {
+        models: Array<{ id: string; pricing: string }>;
+      };
+      expect(parsed.models).toHaveLength(2);
+      expect(parsed.models.find((m) => m.id === 'gpt-5')?.pricing).toBe('subscription');
+      expect(parsed.models.find((m) => m.id === 'claude-opus-4-5')?.pricing).toBe('paid');
+      expect(parsed.models.find((m) => m.id === 'big-pickle')).toBeUndefined();
+
+      // Lines printed
+      expect(core.info).toHaveBeenCalledWith(
+        '  - github-copilot/gpt-5: GPT-5 (GitHub Copilot) [subscription]'
+      );
+      expect(core.info).toHaveBeenCalledWith(
+        '  - anthropic/claude-opus-4-5: Claude Opus 4.5 (Anthropic) [paid]'
+      );
+      expect(core.info).not.toHaveBeenCalledWith(expect.stringContaining('big-pickle'));
+      expect(core.info).toHaveBeenCalledWith('1 free model(s) hidden (disable_free_models)');
+    });
+
+    it('10-6-AC4: COPILOT-NEVER-BLOCKED — checkFreeModelGuard does NOT block a Copilot model', async () => {
+      // Arrange — the most critical correctness invariant of Epic 10
+      const workflowFile = path.join(tempDir, 'test-workflow.md');
+      fs.writeFileSync(workflowFile, '# Workflow');
+      mockOpenCodeService.listModels.mockResolvedValue([copilotGpt5]);
+      const inputs = createValidInputs({
+        model: 'gpt-5',
+        disableFreeModels: true,
+      });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert — Copilot model with cost 0 AND enabledVia 'account' must NEVER be blocked
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+      expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('10-6-AC4: COPILOT-NEVER-BLOCKED — providerId/id form also not blocked', async () => {
+      // Arrange — model specified as "github-copilot/gpt-5"
+      const workflowFile = path.join(tempDir, 'test-workflow.md');
+      fs.writeFileSync(workflowFile, '# Workflow');
+      mockOpenCodeService.listModels.mockResolvedValue([copilotGpt5]);
+      const inputs = createValidInputs({
+        model: 'github-copilot/gpt-5',
+        disableFreeModels: true,
+      });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('10-6-AC5: subscription_providers override — Zen-free model kept when provider overridden', async () => {
+      // Arrange — opencode provider in override; zen big-pickle treated as subscription
+      mockOpenCodeService.listModels.mockResolvedValue([zenBigPickle, anthropicPaid]);
+      const inputs = createValidInputs({
+        listModels: true,
+        disableFreeModels: true,
+        subscriptionProviders: ['opencode'],
+      });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert — both models kept; big-pickle tagged [subscription] due to override
+      const parsed = JSON.parse(result.output) as {
+        models: Array<{ id: string; pricing: string }>;
+      };
+      expect(parsed.models).toHaveLength(2);
+      expect(parsed.models.find((m) => m.id === 'big-pickle')?.pricing).toBe('subscription');
+      expect(parsed.models.find((m) => m.id === 'claude-opus-4-5')?.pricing).toBe('paid');
+      expect(core.info).toHaveBeenCalledWith(
+        '  - opencode/big-pickle: Big Pickle (OpenCode Zen) [subscription]'
+      );
+    });
+
+    it('10-6-AC5: subscription_providers override — run guard does NOT block overridden provider', async () => {
+      // Arrange
+      const workflowFile = path.join(tempDir, 'test-workflow.md');
+      fs.writeFileSync(workflowFile, '# Workflow');
+      mockOpenCodeService.listModels.mockResolvedValue([zenBigPickle]);
+      const inputs = createValidInputs({
+        model: 'big-pickle',
+        disableFreeModels: true,
+        subscriptionProviders: ['opencode'],
+      });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert — override means this is subscription, not free → not blocked
+      expect(result.success).toBe(true);
+      expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('10-6-AC3: without disable_free_models — all models shown with correct tags', async () => {
+      // Arrange — flag off: all present, tags still appear
+      mockOpenCodeService.listModels.mockResolvedValue([copilotGpt5, zenBigPickle, anthropicPaid]);
+      const inputs = createValidInputs({ listModels: true, disableFreeModels: false });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert — all 3 present, correct pricing tags
+      const parsed = JSON.parse(result.output) as {
+        models: Array<{ id: string; pricing: string }>;
+      };
+      expect(parsed.models).toHaveLength(3);
+      expect(parsed.models.find((m) => m.id === 'gpt-5')?.pricing).toBe('subscription');
+      expect(parsed.models.find((m) => m.id === 'big-pickle')?.pricing).toBe('free');
+      expect(parsed.models.find((m) => m.id === 'claude-opus-4-5')?.pricing).toBe('paid');
+    });
+  });
+
   describe('transcript export', () => {
     let workflowFile: string;
 
