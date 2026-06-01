@@ -531,6 +531,41 @@ describe('config', () => {
       expect(inputs.listModels).toBe(true);
     });
 
+    describe('disable_free_models parsing', () => {
+      it('10-3-AC2: parses disable_free_models "true" as boolean true', () => {
+        // Arrange
+        mockInputs({ disable_free_models: 'true' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.disableFreeModels).toBe(true);
+      });
+
+      it('10-3-AC2: parses disable_free_models "false" as boolean false', () => {
+        // Arrange
+        mockInputs({ disable_free_models: 'false' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.disableFreeModels).toBe(false);
+      });
+
+      it('10-3-AC2: defaults disableFreeModels to false when input absent', () => {
+        // Arrange
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.disableFreeModels).toBe(false);
+      });
+    });
+
     describe('debug_log parsing', () => {
       let originalActionsStepDebug: string | undefined;
       let originalRunnerDebug: string | undefined;
@@ -972,6 +1007,7 @@ describe('config', () => {
         timeoutMs: DEFAULT_TIMEOUT,
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
+        disableFreeModels: false,
         debugLog: false,
         debugLogPath: '',
         exportTranscript: false,
@@ -996,6 +1032,7 @@ describe('config', () => {
         timeoutMs: DEFAULT_TIMEOUT,
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
+        disableFreeModels: false,
         debugLog: false,
         debugLogPath: '',
         exportTranscript: false,
@@ -1020,6 +1057,7 @@ describe('config', () => {
         timeoutMs: DEFAULT_TIMEOUT,
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
+        disableFreeModels: false,
         debugLog: false,
         debugLogPath: '',
         exportTranscript: false,
@@ -1044,6 +1082,7 @@ describe('config', () => {
         timeoutMs: DEFAULT_TIMEOUT,
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
+        disableFreeModels: false,
         debugLog: false,
         debugLogPath: '',
         exportTranscript: false,
@@ -1068,6 +1107,7 @@ describe('config', () => {
         timeoutMs: DEFAULT_TIMEOUT,
         maxValidationRetries: DEFAULT_VALIDATION_RETRY,
         listModels: false,
+        disableFreeModels: false,
         debugLog: false,
         debugLogPath: '',
         exportTranscript: false,

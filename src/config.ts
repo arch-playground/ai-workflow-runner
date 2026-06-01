@@ -196,6 +196,7 @@ export function getInputs(): ActionInputs {
   const model = core.getInput('model') || undefined;
   const listModelsRaw = core.getInput('list_models') || 'false';
   const listModels = listModelsRaw.trim().toLowerCase() === 'true';
+  const disableFreeModels = core.getInput('disable_free_models').trim().toLowerCase() === 'true';
 
   const workspacePath = process.env.GITHUB_WORKSPACE || process.cwd();
   const opencodeConfig = opencodeConfigRaw
@@ -243,6 +244,7 @@ export function getInputs(): ActionInputs {
     authConfig,
     model,
     listModels,
+    disableFreeModels,
     debugLog,
     debugLogPath,
     exportTranscript,

@@ -81,6 +81,7 @@ describe('runner', () => {
     timeoutMs: INPUT_LIMITS.DEFAULT_TIMEOUT_MINUTES * 60 * 1000,
     maxValidationRetries: INPUT_LIMITS.DEFAULT_VALIDATION_RETRY,
     listModels: false,
+    disableFreeModels: false,
     debugLog: false,
     debugLogPath: '',
     exportTranscript: false,
@@ -636,6 +637,210 @@ describe('runner', () => {
           model: 'claude-sonnet-4-5-20250929',
         });
       });
+    });
+
+    describe('disable_free_models listing (AC3)', () => {
+      it('10-3-AC3: omits free models from listing when disableFreeModels is true', async () => {
+        // Arrange
+        mockOpenCodeService.listModels.mockResolvedValue([
+          {
+            id: 'zen-free',
+            name: 'Zen Free',
+            provider: 'OpenCode Zen',
+            providerId: 'opencode-zen',
+            cost: { input: 0, output: 0 },
+            enabledVia: undefined,
+          },
+          {
+            id: 'copilot-model',
+            name: 'Copilot Model',
+            provider: 'GitHub Copilot',
+            providerId: 'github-copilot',
+            cost: { input: 0, output: 0 },
+            enabledVia: 'account',
+          },
+        ]);
+        const inputs = createValidInputs({ listModels: true, disableFreeModels: true });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert
+        expect(result.success).toBe(true);
+        const parsed = JSON.parse(result.output) as { models: unknown[] };
+        expect(parsed.models).toHaveLength(1);
+        expect(parsed.models[0]).toMatchObject({ id: 'copilot-model' });
+        expect(core.info).toHaveBeenCalledWith('1 free model(s) hidden (disable_free_models)');
+      });
+
+      it('10-3-AC3: all models present in listing when disableFreeModels is false', async () => {
+        // Arrange
+        mockOpenCodeService.listModels.mockResolvedValue([
+          {
+            id: 'zen-free',
+            name: 'Zen Free',
+            provider: 'OpenCode Zen',
+            providerId: 'opencode-zen',
+            cost: { input: 0, output: 0 },
+            enabledVia: undefined,
+          },
+          {
+            id: 'copilot-model',
+            name: 'Copilot Model',
+            provider: 'GitHub Copilot',
+            providerId: 'github-copilot',
+            cost: { input: 0, output: 0 },
+            enabledVia: 'account',
+          },
+        ]);
+        const inputs = createValidInputs({ listModels: true, disableFreeModels: false });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert
+        expect(result.success).toBe(true);
+        const parsed = JSON.parse(result.output) as { models: unknown[] };
+        expect(parsed.models).toHaveLength(2);
+      });
+    });
+  });
+
+  describe('disable_free_models run guard (AC4, AC5, AC6)', () => {
+    let workflowFile: string;
+
+    beforeEach(() => {
+      workflowFile = path.join(tempDir, 'test-workflow.md');
+      fs.writeFileSync(workflowFile, '# Test Workflow');
+    });
+
+    it('10-3-AC4: fails fast when resolved model is free — session NOT run', async () => {
+      // Arrange
+      mockOpenCodeService.listModels.mockResolvedValue([
+        {
+          id: 'opencode-zen/zen-1-free',
+          name: 'Zen 1 Free',
+          provider: 'OpenCode Zen',
+          providerId: 'opencode-zen',
+          cost: { input: 0, output: 0 },
+          enabledVia: undefined,
+        },
+      ]);
+      const inputs = createValidInputs({
+        model: 'opencode-zen/zen-1-free',
+        disableFreeModels: true,
+      });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('opencode-zen/zen-1-free');
+      expect(result.error).toContain('disable_free_models');
+      expect(mockOpenCodeService.runSession).not.toHaveBeenCalled();
+    });
+
+    it('10-3-AC5: subscription model (account, cost 0) is NOT blocked', async () => {
+      // Arrange
+      mockOpenCodeService.listModels.mockResolvedValue([
+        {
+          id: 'copilot-gpt-4o',
+          name: 'GPT-4o',
+          provider: 'GitHub Copilot',
+          providerId: 'github-copilot',
+          cost: { input: 0, output: 0 },
+          enabledVia: 'account',
+        },
+      ]);
+      const inputs = createValidInputs({ model: 'copilot-gpt-4o', disableFreeModels: true });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('10-3-AC5: paid model (non-zero cost) is NOT blocked', async () => {
+      // Arrange
+      mockOpenCodeService.listModels.mockResolvedValue([
+        {
+          id: 'claude-3-opus',
+          name: 'Claude 3 Opus',
+          provider: 'Anthropic',
+          providerId: 'anthropic',
+          cost: { input: 15, output: 75 },
+          enabledVia: 'account',
+        },
+      ]);
+      const inputs = createValidInputs({ model: 'claude-3-opus', disableFreeModels: true });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('10-3-AC6: no model input — proceeds without blocking (unresolvable)', async () => {
+      // Arrange
+      const inputs = createValidInputs({ model: undefined, disableFreeModels: true });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('10-3-AC6: model not in listModels results — proceeds without blocking', async () => {
+      // Arrange
+      mockOpenCodeService.listModels.mockResolvedValue([
+        {
+          id: 'claude-3-opus',
+          name: 'Claude 3 Opus',
+          provider: 'Anthropic',
+          providerId: 'anthropic',
+          cost: { input: 15, output: 75 },
+          enabledVia: 'account',
+        },
+      ]);
+      const inputs = createValidInputs({ model: 'unknown-model', disableFreeModels: true });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('10-3: disableFreeModels false — guard not applied at all', async () => {
+      // Arrange — free model but flag off
+      mockOpenCodeService.listModels.mockResolvedValue([
+        {
+          id: 'zen-free',
+          name: 'Zen Free',
+          provider: 'OpenCode Zen',
+          providerId: 'opencode-zen',
+          cost: { input: 0, output: 0 },
+          enabledVia: undefined,
+        },
+      ]);
+      const inputs = createValidInputs({ model: 'zen-free', disableFreeModels: false });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
+      // listModels should NOT have been called (guard not invoked)
+      expect(mockOpenCodeService.listModels).not.toHaveBeenCalled();
     });
   });
 

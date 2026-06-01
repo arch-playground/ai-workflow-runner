@@ -10,6 +10,7 @@ import {
   sanitizeErrorMessage,
 } from './security.js';
 import { getOpenCodeService, OpenCodeService } from './opencode.js';
+import { isFilterableFree } from './model-filter.js';
 import { executeValidationScript } from './validation.js';
 import { initDebugLogWriter } from './debug-log-writer.js';
 import { writeTranscript } from './transcript-writer.js';
@@ -81,6 +82,12 @@ export async function runWorkflow(
       authConfig: inputs.authConfig,
       model: inputs.model,
     });
+
+    if (inputs.disableFreeModels) {
+      const freeGuardResult = await checkFreeModelGuard(inputs, opencode);
+      if (freeGuardResult) return freeGuardResult;
+    }
+
     session = await opencode.runSession(fullPrompt, timeoutMs, abortSignal);
 
     if (inputs.validationScript) {
@@ -161,6 +168,46 @@ export async function runWorkflow(
   }
 }
 
+async function checkFreeModelGuard(
+  inputs: ActionInputs,
+  opencode: ReturnType<typeof getOpenCodeService>
+): Promise<RunnerResult | null> {
+  const resolvedModelId = inputs.model;
+  if (!resolvedModelId) {
+    core.debug('[OpenCode] disable_free_models: no explicit model input — skipping guard (AC6)');
+    return null;
+  }
+
+  let models;
+  try {
+    models = await opencode.listModels();
+  } catch {
+    core.debug('[OpenCode] disable_free_models: listModels() failed — skipping guard (AC6)');
+    return null;
+  }
+
+  const resolvedModel = models.find(
+    (m) => m.id === resolvedModelId || `${m.providerId}/${m.id}` === resolvedModelId
+  );
+
+  if (!resolvedModel) {
+    core.debug(
+      `[OpenCode] disable_free_models: model "${resolvedModelId}" not found in list — skipping guard (AC6)`
+    );
+    return null;
+  }
+
+  if (isFilterableFree(resolvedModel)) {
+    return {
+      success: false,
+      output: '',
+      error: `Model '${resolvedModelId}' is a free model and disable_free_models is enabled. Choose a paid or subscription model.`,
+    };
+  }
+
+  return null;
+}
+
 async function handleListModels(inputs: ActionInputs): Promise<RunnerResult> {
   try {
     const opencode = getOpenCodeService();
@@ -170,7 +217,17 @@ async function handleListModels(inputs: ActionInputs): Promise<RunnerResult> {
       model: inputs.model,
     });
 
-    const models = await opencode.listModels();
+    const allModels = await opencode.listModels();
+    const models = inputs.disableFreeModels
+      ? allModels.filter((m) => !isFilterableFree(m))
+      : allModels;
+
+    if (inputs.disableFreeModels) {
+      const hiddenCount = allModels.length - models.length;
+      if (hiddenCount > 0) {
+        core.info(`${hiddenCount} free model(s) hidden (disable_free_models)`);
+      }
+    }
 
     core.info('=== Available Models ===');
     for (const model of models) {

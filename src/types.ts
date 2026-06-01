@@ -24,6 +24,7 @@ export interface ActionInputs {
   authConfig?: string;
   model?: string;
   listModels: boolean;
+  disableFreeModels: boolean;
   debugLog: boolean;
   debugLogPath: string;
   exportTranscript: boolean;
