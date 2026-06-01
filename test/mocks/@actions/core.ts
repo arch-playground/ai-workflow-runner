@@ -8,3 +8,14 @@ export const error = jest.fn();
 export const setSecret = jest.fn();
 export const startGroup = jest.fn();
 export const endGroup = jest.fn();
+
+const summaryObject = {
+  addHeading: jest.fn().mockReturnThis(),
+  addTable: jest.fn().mockReturnThis(),
+  addRaw: jest.fn().mockReturnThis(),
+  addDetails: jest.fn().mockReturnThis(),
+  addEOL: jest.fn().mockReturnThis(),
+  addBreak: jest.fn().mockReturnThis(),
+  write: jest.fn().mockResolvedValue(undefined),
+};
+export const summary = summaryObject;

@@ -226,6 +226,7 @@ export function getInputs(): ActionInputs {
     debugLogPath,
     exportTranscript: false,
     transcriptPath: '',
+    writeJobSummary: false,
   };
 }
 

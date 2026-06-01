@@ -38,6 +38,11 @@ jest.mock('./transcript-writer', () => ({
   writeTranscript: (...args: unknown[]) => mockWriteTranscript(...args),
 }));
 
+const mockWriteJobSummary = jest.fn().mockResolvedValue(undefined);
+jest.mock('./summary-writer', () => ({
+  writeJobSummary: (...args: unknown[]) => mockWriteJobSummary(...args),
+}));
+
 import { executeValidationScript } from './validation';
 
 const mockExecuteValidationScript = executeValidationScript as jest.MockedFunction<
@@ -80,6 +85,7 @@ describe('runner', () => {
     debugLogPath: '',
     exportTranscript: false,
     transcriptPath: '',
+    writeJobSummary: false,
     ...overrides,
   });
 
@@ -719,6 +725,78 @@ describe('runner', () => {
         expect.any(Array),
         expect.any(Array)
       );
+    });
+  });
+
+  describe('job summary', () => {
+    let workflowFile: string;
+
+    beforeEach(() => {
+      workflowFile = path.join(tempDir, 'test-workflow.md');
+      fs.writeFileSync(workflowFile, '# Workflow');
+    });
+
+    it('9-4-AC1: calls writeJobSummary when writeJobSummary is enabled', async () => {
+      // Arrange
+      const messages = [{ info: { role: 'assistant' }, parts: [] }];
+      mockOpenCodeService.exportTranscript.mockResolvedValue(messages);
+      const inputs = createValidInputs({ writeJobSummary: true });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(mockWriteJobSummary).toHaveBeenCalledWith(
+        messages,
+        expect.objectContaining({
+          success: true,
+          finalMessage: 'Test response',
+          secrets: ['test_value'],
+        })
+      );
+    });
+
+    it('9-4-AC4: messages fetched ONCE when both exportTranscript and writeJobSummary enabled', async () => {
+      // Arrange
+      const inputs = createValidInputs({
+        exportTranscript: true,
+        transcriptPath: path.join(tempDir, 'conversation.json'),
+        writeJobSummary: true,
+      });
+
+      // Act
+      await runWorkflow(inputs);
+
+      // Assert: session.messages called exactly once
+      expect(mockOpenCodeService.exportTranscript).toHaveBeenCalledTimes(1);
+      expect(mockWriteTranscript).toHaveBeenCalledTimes(1);
+      expect(mockWriteJobSummary).toHaveBeenCalledTimes(1);
+    });
+
+    it('9-4-AC6: summary failure does NOT fail the run', async () => {
+      // Arrange
+      mockWriteJobSummary.mockRejectedValueOnce(new Error('Summary error'));
+      const inputs = createValidInputs({ writeJobSummary: true });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Note: writeJobSummary is called inside a try/catch in runner; the mock rejection
+      // is caught and logged — run result is still success
+      expect(result.success).toBe(true);
+    });
+
+    it('9-4-AC4: does NOT call writeJobSummary or exportTranscript when both flags false', async () => {
+      // Arrange
+      const inputs = createValidInputs({ exportTranscript: false, writeJobSummary: false });
+
+      // Act
+      await runWorkflow(inputs);
+
+      // Assert
+      expect(mockOpenCodeService.exportTranscript).not.toHaveBeenCalled();
+      expect(mockWriteJobSummary).not.toHaveBeenCalled();
     });
   });
 });

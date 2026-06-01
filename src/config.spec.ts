@@ -731,6 +731,7 @@ describe('config', () => {
         debugLogPath: '',
         exportTranscript: false,
         transcriptPath: '',
+        writeJobSummary: false,
       };
 
       // Act
@@ -754,6 +755,7 @@ describe('config', () => {
         debugLogPath: '',
         exportTranscript: false,
         transcriptPath: '',
+        writeJobSummary: false,
       };
 
       // Act
@@ -777,6 +779,7 @@ describe('config', () => {
         debugLogPath: '',
         exportTranscript: false,
         transcriptPath: '',
+        writeJobSummary: false,
       };
 
       // Act
@@ -800,6 +803,7 @@ describe('config', () => {
         debugLogPath: '',
         exportTranscript: false,
         transcriptPath: '',
+        writeJobSummary: false,
       };
 
       // Act
@@ -823,6 +827,7 @@ describe('config', () => {
         debugLogPath: '',
         exportTranscript: false,
         transcriptPath: '',
+        writeJobSummary: false,
       };
 
       // Act

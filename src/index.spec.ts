@@ -44,6 +44,7 @@ describe('index', () => {
     debugLogPath: '',
     exportTranscript: false,
     transcriptPath: '',
+    writeJobSummary: false,
   });
 
   const setupMocks = (): void => {
