@@ -13,6 +13,7 @@ import { getOpenCodeService, OpenCodeService } from './opencode.js';
 import { executeValidationScript } from './validation.js';
 import { initDebugLogWriter } from './debug-log-writer.js';
 import { writeTranscript } from './transcript-writer.js';
+import { writeJobSummary } from './summary-writer.js';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 
@@ -72,6 +73,7 @@ export async function runWorkflow(
   }
 
   let session: OpenCodeSession;
+  const startTime = Date.now();
 
   try {
     await opencode.initialize({
@@ -91,15 +93,29 @@ export async function runWorkflow(
       });
     }
 
-    if (inputs.exportTranscript) {
+    if (inputs.exportTranscript || inputs.writeJobSummary) {
       try {
         const messages = await opencode.exportTranscript(session.sessionId);
-        const transcriptPath =
-          inputs.transcriptPath ||
-          path.join(process.env['RUNNER_TEMP'] || '/tmp', 'conversation.json');
-        writeTranscript(transcriptPath, messages, Object.values(inputs.envVars));
+        const secrets = Object.values(inputs.envVars);
+        const durationMs = Date.now() - startTime;
+
+        if (inputs.exportTranscript) {
+          const transcriptPath =
+            inputs.transcriptPath ||
+            path.join(process.env['RUNNER_TEMP'] || '/tmp', 'conversation.json');
+          writeTranscript(transcriptPath, messages, secrets);
+        }
+
+        if (inputs.writeJobSummary) {
+          await writeJobSummary(messages, {
+            success: true,
+            durationMs,
+            finalMessage: session.lastMessage,
+            secrets,
+          });
+        }
       } catch (error) {
-        core.warning(`[OpenCode] Transcript export failed: ${String(error)}`, {
+        core.warning(`[OpenCode] Post-run export failed: ${String(error)}`, {
           title: 'Transcript export',
         });
       }

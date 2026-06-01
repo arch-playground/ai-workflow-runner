@@ -14,6 +14,7 @@ export interface ActionInputs {
   debugLogPath: string;
   exportTranscript: boolean;
   transcriptPath: string;
+  writeJobSummary: boolean;
 }
 
 export interface OpenCodeSession {

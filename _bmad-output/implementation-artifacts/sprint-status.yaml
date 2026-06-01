@@ -105,7 +105,7 @@ development_status:
   9-1-log-group-wrapping-around-tool-calls: 'done'
   9-2-ration-github-annotations: 'done'
   9-3-transcript-writer-conversation-json: 'done'
-  9-4-job-summary-writer: 'ready-for-dev'
+  9-4-job-summary-writer: 'done'
   9-5-stop-command-wrapping-and-long-line-guard: 'backlog'
   9-6-action-inputs-outputs-and-examples: 'backlog'
   9-7-tests: 'backlog'
