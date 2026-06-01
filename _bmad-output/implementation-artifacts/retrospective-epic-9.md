@@ -38,7 +38,11 @@ Final: **561 unit+integration tests, coverage 92.24% stmts / 84.74% branches** (
 
 ### MEDIUM
 
-- **M1 — Docker integration test deferred to CI.** Epic 9 full validation ran format + 561 unit/integration tests + bundle, but the containerized `test:integration` (needs a docker daemon + `DOCKER_IMAGE`) could not run locally → logged PARTIAL. _For Epic 10:_ same constraint applies; rely on CI for the container runtime check. Not blocking (Epic 9 is pure logging logic, fully unit/integration covered), but note it.
+- **M1 — RESOLVED: Docker functional validation run, caught a HIGH bug.** Initially logged PARTIAL (no local docker). When docker became available, the full container validation was run and **caught a real pre-existing HIGH defect**: the Dockerfile symlinked `opencode` → `bin/opencode` but the `opencode-ai` package binary is `bin/opencode.exe` (per its `package.json` "bin"), so the image **failed to build** and the action would have been broken at runtime in production (it spawns `opencode serve`). Pre-existing since the SDK-v2 migration (`1256eaa`); NOT introduced by Epic 9. **Fixed** (symlink → `opencode.exe`) + **CI guard added** (explicit "verify runtime binaries resolve in image" step in `ci.yml` after the docker build — hard gate on `opencode/node/python3/java --version`). After the fix, the full Epic 9 feature set was validated end-to-end in the real container against github-copilot: assistant returned `pong`, `conversation.json` written (valid JSON, 0600, secret scrubbed to 0 raw occurrences), job summary rendered (token table + final message), stop-commands bracketed, titled annotations, success/error paths both correct. **This is the strongest evidence the epic works — and validates the "always run functional + manual tests after an epic" discipline.**
+
+### Lesson (process)
+
+- **L1 — Functional/container validation is mandatory at epic close, not "deferred to CI".** 561 green unit tests (which mock the SDK, fs, and @actions/core) did NOT catch a broken Docker image. Running the real action in its real runtime did. For every epic going forward: build the image, run the action end-to-end, verify real artifacts on disk — before declaring the epic done.
 
 ## Pre-flight checklist for Epic 10 (Model Selection & Free-Model Filtering)
 

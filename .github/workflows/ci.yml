@@ -199,6 +199,19 @@ jobs:
       - name: Build Docker image
         run: docker build -t ai-workflow-runner:test .
 
+      - name: Verify runtime binaries resolve in image
+        # Guards against a broken opencode symlink / missing runtime in the final
+        # image (the action spawns `opencode serve`, so an unresolved binary breaks
+        # every run). Hard gate — must exit non-zero if any binary is missing.
+        run: |
+          docker run --rm --entrypoint bash ai-workflow-runner:test -c '
+            set -euo pipefail
+            opencode --version
+            node --version
+            python3 --version
+            java --version
+          '
+
       - name: Capture Docker image metadata
         id: docker
         run: |
