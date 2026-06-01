@@ -4,7 +4,8 @@
     "bmad-auto": {
       "source": "bmad-labs/skills",
       "sourceType": "github",
-      "computedHash": "3e1d3ae360fca55bee5df5fefb46a55f311103a4661165e3cd3b2f8ce3712a22"
+      "skillPath": "skills/bmad-auto/SKILL.md",
+      "computedHash": "0a27f37fc06254c287997170d1c7a112e0ca0d80d68b6f2db801ce184f55bd26"
     },
     "load-docs": {
       "source": "bmad-labs/skills",
