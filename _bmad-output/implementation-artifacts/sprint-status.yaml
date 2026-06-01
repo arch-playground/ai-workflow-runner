@@ -101,14 +101,14 @@ development_status:
   epic-8-retrospective: 'backlog'
 
   # Epic 9: Conversation Logging & Transcript Export (Phase 2 — Sprint Change Proposal 2026-06-01)
-  epic-9: 'in-progress'
+  epic-9: 'done'
   9-1-log-group-wrapping-around-tool-calls: 'done'
   9-2-ration-github-annotations: 'done'
   9-3-transcript-writer-conversation-json: 'done'
   9-4-job-summary-writer: 'done'
   9-5-stop-command-wrapping-and-long-line-guard: 'done'
   9-6-action-inputs-outputs-and-examples: 'done'
-  9-7-tests: 'backlog'
+  9-7-tests: 'done'
 
   # Epic 10: Model Selection & Free-Model Filtering (Phase 2)
   epic-10: 'backlog'

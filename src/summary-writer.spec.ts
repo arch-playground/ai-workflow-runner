@@ -209,6 +209,192 @@ describe('writeJobSummary', () => {
     expect(mockCore.summary.write).toHaveBeenCalledTimes(1);
   });
 
+  it('9.7-AC6: skips null/non-object entries in messages array (lines 38-42)', async () => {
+    // Arrange — mixed messages array with null, primitive, and valid entries
+    const messages = [
+      null,
+      'string entry',
+      42,
+      { info: { role: 'assistant', cost: 0.005, tokens: { input: 50, output: 25 } }, parts: [] },
+    ];
+
+    // Act
+    await writeJobSummary(messages as unknown[], baseMeta);
+
+    // Assert — only the valid assistant message is aggregated
+    const tableCall = (mockCore.summary.addTable as jest.Mock).mock.calls[0] as unknown[][];
+    const rows = tableCall[0] as Array<Array<{ data: string }>>;
+    const costRow = rows.find((r) => r[0]?.data === 'Cost');
+    expect(costRow?.[1]?.data).toBe('$0.005000');
+    const inputRow = rows.find((r) => r[0]?.data === 'Input tokens');
+    expect(inputRow?.[1]?.data).toBe('50');
+  });
+
+  it('9.7-AC6: handles assistant message with missing tokens object (lines 51-67)', async () => {
+    // Arrange — tokens field absent → all token totals default to 0
+    const messages = [{ info: { role: 'assistant', cost: 0.002 }, parts: [] }];
+
+    // Act
+    await writeJobSummary(messages, baseMeta);
+
+    // Assert
+    const tableCall = (mockCore.summary.addTable as jest.Mock).mock.calls[0] as unknown[][];
+    const rows = tableCall[0] as Array<Array<{ data: string }>>;
+    const inputRow = rows.find((r) => r[0]?.data === 'Input tokens');
+    expect(inputRow?.[1]?.data).toBe('0');
+    const costRow = rows.find((r) => r[0]?.data === 'Cost');
+    expect(costRow?.[1]?.data).toBe('$0.002000');
+  });
+
+  it('9.7-AC6: handles non-object tokens value gracefully (lines 51-67)', async () => {
+    // Arrange — tokens is a string (non-object) → tokens default to 0
+    const messages = [{ info: { role: 'assistant', cost: 0, tokens: 'invalid' }, parts: [] }];
+
+    // Act
+    await writeJobSummary(messages, baseMeta);
+
+    // Assert — no throw, tokens default to 0
+    const tableCall = (mockCore.summary.addTable as jest.Mock).mock.calls[0] as unknown[][];
+    const rows = tableCall[0] as Array<Array<{ data: string }>>;
+    const inputRow = rows.find((r) => r[0]?.data === 'Input tokens');
+    expect(inputRow?.[1]?.data).toBe('0');
+  });
+
+  it('9.7-AC6: handles missing cache object inside tokens (lines 54-59)', async () => {
+    // Arrange — cache field absent → cacheRead/cacheWrite default to 0
+    const messages = [
+      {
+        info: {
+          role: 'assistant',
+          cost: 0,
+          tokens: { input: 10, output: 5, reasoning: 0 }, // no cache key
+        },
+        parts: [],
+      },
+    ];
+
+    // Act
+    await writeJobSummary(messages, baseMeta);
+
+    // Assert — no throw, cache totals are 0
+    const tableCall = (mockCore.summary.addTable as jest.Mock).mock.calls[0] as unknown[][];
+    const rows = tableCall[0] as Array<Array<{ data: string }>>;
+    const cacheReadRow = rows.find((r) => r[0]?.data === 'Cache read tokens');
+    expect(cacheReadRow?.[1]?.data).toBe('0');
+    const cacheWriteRow = rows.find((r) => r[0]?.data === 'Cache write tokens');
+    expect(cacheWriteRow?.[1]?.data).toBe('0');
+  });
+
+  it('9.7-AC6: handles non-object cache value gracefully (lines 54-59)', async () => {
+    // Arrange — cache is a string (non-object) → cacheRead/cacheWrite default to 0
+    const messages = [
+      {
+        info: {
+          role: 'assistant',
+          cost: 0,
+          tokens: { input: 10, output: 5, reasoning: 0, cache: 'invalid' },
+        },
+        parts: [],
+      },
+    ];
+
+    // Act
+    await writeJobSummary(messages, baseMeta);
+
+    // Assert
+    const tableCall = (mockCore.summary.addTable as jest.Mock).mock.calls[0] as unknown[][];
+    const rows = tableCall[0] as Array<Array<{ data: string }>>;
+    const cacheReadRow = rows.find((r) => r[0]?.data === 'Cache read tokens');
+    expect(cacheReadRow?.[1]?.data).toBe('0');
+  });
+
+  it('9.7-AC6: skips non-object parts entries (line 67)', async () => {
+    // Arrange — parts contains a null entry
+    const messages = [
+      {
+        info: { role: 'assistant', cost: 0 },
+        parts: [null, { type: 'tool', tool: 'bash' }],
+      },
+    ];
+
+    // Act
+    await writeJobSummary(messages as unknown[], baseMeta);
+
+    // Assert — only valid tool part counted
+    expect(mockCore.summary.addDetails).toHaveBeenCalledWith(
+      'Tool activity',
+      expect.stringContaining('bash: 1')
+    );
+  });
+
+  it('9.7-AC6: skips message with no info field (line 42 false branch)', async () => {
+    // Arrange — message has no info key at all → should not crash and contributes 0 to totals
+    const messages = [{ parts: [{ type: 'tool', tool: 'bash' }] }];
+
+    // Act
+    await writeJobSummary(messages, baseMeta);
+
+    // Assert — writes fine, bash tool is counted, cost defaults to 0
+    expect(mockCore.summary.addDetails).toHaveBeenCalledWith(
+      'Tool activity',
+      expect.stringContaining('bash: 1')
+    );
+    const tableCall = (mockCore.summary.addTable as jest.Mock).mock.calls[0] as unknown[][];
+    const rows = tableCall[0] as Array<Array<{ data: string }>>;
+    const costRow = rows.find((r) => r[0]?.data === 'Cost');
+    expect(costRow?.[1]?.data).toBe('$0.000000');
+  });
+
+  it('9.7-AC6: skips parts when parts is not an array (line 65 false branch)', async () => {
+    // Arrange — parts is a non-array value → Array.isArray returns false, skipped
+    const messages = [{ info: { role: 'assistant', cost: 0 }, parts: 'not-an-array' }];
+
+    // Act
+    await writeJobSummary(messages as unknown[], baseMeta);
+
+    // Assert — writes fine, no tools counted
+    expect(mockCore.summary.addDetails).toHaveBeenCalledWith(
+      'Tool activity',
+      'No tool calls recorded.'
+    );
+  });
+
+  it('9.7-AC6: handles non-number token field values via ternary else branches (lines 51-52)', async () => {
+    // Arrange — token sub-fields are strings (non-number) → ternary else arm hit → defaults to 0
+    const messages = [
+      {
+        info: {
+          role: 'assistant',
+          cost: 0.001,
+          tokens: {
+            input: 'not-a-number',
+            output: null,
+            reasoning: undefined,
+            cache: { read: 'x', write: false },
+          },
+        },
+        parts: [],
+      },
+    ];
+
+    // Act
+    await writeJobSummary(messages as unknown[], baseMeta);
+
+    // Assert — all non-number fields default to 0; no throw
+    const tableCall = (mockCore.summary.addTable as jest.Mock).mock.calls[0] as unknown[][];
+    const rows = tableCall[0] as Array<Array<{ data: string }>>;
+    const inputRow = rows.find((r) => r[0]?.data === 'Input tokens');
+    expect(inputRow?.[1]?.data).toBe('0');
+    const outputRow = rows.find((r) => r[0]?.data === 'Output tokens');
+    expect(outputRow?.[1]?.data).toBe('0');
+    const reasoningRow = rows.find((r) => r[0]?.data === 'Reasoning tokens');
+    expect(reasoningRow?.[1]?.data).toBe('0');
+    const cacheReadRow = rows.find((r) => r[0]?.data === 'Cache read tokens');
+    expect(cacheReadRow?.[1]?.data).toBe('0');
+    const cacheWriteRow = rows.find((r) => r[0]?.data === 'Cache write tokens');
+    expect(cacheWriteRow?.[1]?.data).toBe('0');
+  });
+
   it('shows "No tool calls recorded." when no tools used', async () => {
     // Arrange
     const messages = [
