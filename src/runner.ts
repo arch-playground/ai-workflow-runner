@@ -10,7 +10,7 @@ import {
   sanitizeErrorMessage,
 } from './security.js';
 import { getOpenCodeService, OpenCodeService } from './opencode.js';
-import { isFilterableFree } from './model-filter.js';
+import { isFilterableFree, classifyPricing } from './model-filter.js';
 import { executeValidationScript } from './validation.js';
 import { initDebugLogWriter } from './debug-log-writer.js';
 import { writeTranscript } from './transcript-writer.js';
@@ -230,12 +230,18 @@ async function handleListModels(inputs: ActionInputs): Promise<RunnerResult> {
     }
 
     core.info('=== Available Models ===');
-    for (const model of models) {
-      core.info(`  - ${model.providerId}/${model.id}: ${model.name} (${model.provider})`);
+    const taggedModels = models.map((model) => {
+      const pricing = classifyPricing(model);
+      return { ...model, pricing };
+    });
+    for (const model of taggedModels) {
+      core.info(
+        `  - ${model.providerId}/${model.id}: ${model.name} (${model.provider}) [${model.pricing}]`
+      );
     }
     core.info('========================');
 
-    return { success: true, output: JSON.stringify({ models }) };
+    return { success: true, output: JSON.stringify({ models: taggedModels }) };
   } catch (error) {
     const errorMessage =
       error instanceof Error ? sanitizeErrorMessage(error) : 'Unknown error occurred';

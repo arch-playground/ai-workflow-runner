@@ -1,4 +1,4 @@
-import { isFilterableFree } from './model-filter.js';
+import { isFilterableFree, classifyPricing } from './model-filter.js';
 import type { ModelListItem } from './types.js';
 
 function makeModel(overrides: Partial<ModelListItem>): ModelListItem {
@@ -161,5 +161,111 @@ describe('isFilterableFree', () => {
       // Assert
       expect(result).toBe(true);
     });
+  });
+});
+
+describe('classifyPricing', () => {
+  it('10-4-AC4: returns "unknown" when cost is undefined', () => {
+    // Arrange
+    const model = makeModel({ cost: undefined });
+
+    // Act
+    const result = classifyPricing(model);
+
+    // Assert
+    expect(result).toBe('unknown');
+  });
+
+  it('10-4-AC4: returns "paid" when cost.input is non-zero', () => {
+    // Arrange
+    const model = makeModel({ cost: { input: 15, output: 75 } });
+
+    // Act
+    const result = classifyPricing(model);
+
+    // Assert
+    expect(result).toBe('paid');
+  });
+
+  it('10-4-AC4: returns "paid" when cost.output is non-zero (input 0)', () => {
+    // Arrange
+    const model = makeModel({ cost: { input: 0, output: 1.5 } });
+
+    // Act
+    const result = classifyPricing(model);
+
+    // Assert
+    expect(result).toBe('paid');
+  });
+
+  it('10-4-AC1: returns "subscription" when cost 0 and enabledVia "account" (Copilot-like)', () => {
+    // Arrange
+    const model = makeModel({
+      providerId: 'github-copilot',
+      cost: { input: 0, output: 0 },
+      enabledVia: 'account',
+    });
+
+    // Act
+    const result = classifyPricing(model);
+
+    // Assert
+    expect(result).toBe('subscription');
+  });
+
+  it('10-4-AC4: returns "free" when cost 0 and enabledVia undefined (public free-tier)', () => {
+    // Arrange
+    const model = makeModel({
+      providerId: 'opencode-zen',
+      cost: { input: 0, output: 0 },
+      enabledVia: undefined,
+    });
+
+    // Act
+    const result = classifyPricing(model);
+
+    // Assert
+    expect(result).toBe('free');
+  });
+
+  it('10-4-AC4: returns "free" when cost 0 and enabledVia "env"', () => {
+    // Arrange
+    const model = makeModel({ cost: { input: 0, output: 0 }, enabledVia: 'env' });
+
+    // Act
+    const result = classifyPricing(model);
+
+    // Assert
+    expect(result).toBe('free');
+  });
+
+  it('10-4-AC4: returns "subscription" when providerId in subscriptionProviders override', () => {
+    // Arrange
+    const model = makeModel({
+      providerId: 'openrouter',
+      cost: { input: 0, output: 0 },
+      enabledVia: undefined,
+    });
+    const subscriptionProviders = new Set(['openrouter']);
+
+    // Act
+    const result = classifyPricing(model, subscriptionProviders);
+
+    // Assert
+    expect(result).toBe('subscription');
+  });
+
+  it('10-4-AC4: invariant — isFilterableFree agrees with classifyPricing==="free"', () => {
+    // Arrange — free model
+    const freeModel = makeModel({ cost: { input: 0, output: 0 }, enabledVia: undefined });
+    const subModel = makeModel({ cost: { input: 0, output: 0 }, enabledVia: 'account' });
+    const paidModel = makeModel({ cost: { input: 3, output: 15 } });
+    const unknownModel = makeModel({ cost: undefined });
+
+    // Act & Assert — invariant: isFilterableFree ⟺ classifyPricing === 'free'
+    expect(isFilterableFree(freeModel)).toBe(classifyPricing(freeModel) === 'free');
+    expect(isFilterableFree(subModel)).toBe(classifyPricing(subModel) === 'free');
+    expect(isFilterableFree(paidModel)).toBe(classifyPricing(paidModel) === 'free');
+    expect(isFilterableFree(unknownModel)).toBe(classifyPricing(unknownModel) === 'free');
   });
 });
