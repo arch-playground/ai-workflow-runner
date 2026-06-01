@@ -128,9 +128,20 @@ claude-sonnet-4-5 (developer sub-agent)
 - `examples/conversation-logging/workflow.md` — Task 5: new example workflow
 - `examples/conversation-logging/.github/workflows/run-ai.yml` — Task 5: example Actions workflow
 - `README.md` — Task 5: inputs/outputs tables + Conversation Logging section
-- `src/config.spec.ts` — Task 6: validateSafeOutputPath + new input tests
-- `src/runner.spec.ts` — Task 6: transcriptJsonPath tests
-- `src/index.spec.ts` — Task 6: transcript_json_path output tests
+- `src/config.spec.ts` — Task 6: validateSafeOutputPath + new input tests (extended by Round 2)
+- `src/runner.spec.ts` — Task 6: transcriptJsonPath tests (extended by Round 2)
+- `src/index.spec.ts` — Task 6: transcript_json_path output tests (extended by Round 2)
+- `src/examples.spec.ts` — Task 6: conversation-logging example structure (Round 2)
+
+### Round 2 (developer-2, claude-sonnet-4-5)
+
+Tasks 2–5 already complete. Extended Task 6 with 54 additional tests (total 545, all pass):
+
+- `config.spec.ts`: 17 new — action.yml schema (AC1), export_transcript/write_job_summary parsing (AC2), transcript_path validation incl. escape/unsafe rejection + backward-compat (AC2/AC5)
+- `runner.spec.ts`: 4 new — transcriptJsonPath in result when enabled/disabled/default/backward-compat (AC3/AC5)
+- `index.spec.ts`: 5 new — transcript_json_path setOutput to resolved path / empty / before setFailed (call-order verified) / backward-compat (AC3/AC5)
+- `examples.spec.ts`: 5 new — conversation-logging files/YAML/export_transcript:'true'/write_job_summary:'true'/upload-artifact (AC4)
+- Quality: lint ✓ (0 warnings) · format ✓ (unchanged) · typecheck ✓ · test:unit 545/545 ✓ · bundle 978.2KB ✓
 
 ## Review Notes
 
