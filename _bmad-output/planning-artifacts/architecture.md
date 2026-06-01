@@ -161,17 +161,27 @@ shutdownController (index.ts)
 
 **Decision:** Flat module structure with clear responsibilities
 
-| Module          | Responsibility                                   | Dependencies                           |
-| --------------- | ------------------------------------------------ | -------------------------------------- |
-| `index.ts`      | Entry point, signal handling, orchestration      | All modules                            |
-| `runner.ts`     | Workflow execution, validation loop, list models | opencode, validation, config, security |
-| `config.ts`     | Input parsing, validation                        | types, security                        |
-| `security.ts`   | Path validation, secret masking                  | @actions/core                          |
-| `opencode.ts`   | SDK integration, session management, config load | @opencode-ai/sdk, types                |
-| `validation.ts` | Script execution engine                          | security, types                        |
-| `types.ts`      | Type definitions, constants                      | None                                   |
+| Module                            | Responsibility                                               | Dependencies                           |
+| --------------------------------- | ------------------------------------------------------------ | -------------------------------------- |
+| `index.ts`                        | Entry point, signal handling, orchestration                  | All modules                            |
+| `runner.ts`                       | Workflow execution, validation loop, list models             | opencode, validation, config, security |
+| `config.ts`                       | Input parsing, validation                                    | types, security                        |
+| `security.ts`                     | Path validation, secret masking                              | @actions/core                          |
+| `opencode.ts`                     | SDK integration, session management, config load             | @opencode-ai/sdk, types                |
+| `validation.ts`                   | Script execution engine                                      | security, types                        |
+| `types.ts`                        | Type definitions, constants                                  | None                                   |
+| `transcript-writer.ts` _(Epic 9)_ | Fetch `session.messages()`, scrub, write `conversation.json` | security, types                        |
+| `summary-writer.ts` _(Epic 9)_    | Build `core.summary` job report (token/cost/duration)        | @actions/core, types                   |
+| `provider-chain.ts` _(Epic 11)_   | Start-of-conversation provider selector (start-and-watch)    | opencode, types                        |
 
-**Rationale:** Flat structure preferred over deep nesting for a tool of this size. Each module has single responsibility. Circular dependencies avoided via careful import ordering.
+**Rationale:** Flat structure preferred over deep nesting for a tool of this size. Each module has single responsibility. Circular dependencies avoided via careful import ordering. The Phase 2 modules (`transcript-writer`, `summary-writer`, `provider-chain`) sit beside `opencode` and depend only on `security`+`types` (plus `opencode` for `provider-chain`); `security.ts` remains a leaf.
+
+**Phase 2 integration notes (Epics 9–11):**
+
+- **Model metadata is a two-endpoint join.** Free-model filtering (Epic 10) needs both `client.v2.provider.list()` (carries `provider.enabled.via`, no models) and `client.config.providers()` (carries models + `cost`, no `enabled.via`), joined by provider id. A model is "filterable free" iff `cost.input===0 && cost.output===0 && enabled.via !== "account"` — OpenCode's own subscription signal, no hardcoded provider list.
+- **`auth.set` is PUT** (idempotent, one credential per provider id). The fallback chain (Epic 11) references **distinct, separately-authenticated** provider ids; auth stays in `auth_config` — `fallback_config` carries no credentials (D8).
+- **`createOpencode()` spawns an external `opencode` binary** (`spawn opencode serve`). The SDK package has no bin; the Dockerfile installs `opencode-ai` globally and symlinks `/usr/local/bin/opencode`. Real-server e2e (Epics 9/11) require the binary present.
+- **Secret scrubbing for files:** `core.setSecret()` masks the live log only. `transcript-writer` output and any artifact file must run content through the redaction pass (`security.ts`) before write (NFR21).
 
 ### Async Coordination
 
