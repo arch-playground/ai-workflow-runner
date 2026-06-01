@@ -474,7 +474,12 @@ export class OpenCodeService {
         onEarlyError: wrappedError,
       });
 
-      const promptModel = { providerID: entry.provider, modelID: entry.model };
+      // Strip provider prefix if model is provider-qualified (e.g. "github-copilot/gpt-5-mini" → "gpt-5-mini").
+      // Tolerant of both "provider/model" and bare "model" forms in the chain entry.
+      const bareModelId = entry.model.startsWith(`${entry.provider}/`)
+        ? entry.model.slice(entry.provider.length + 1)
+        : entry.model;
+      const promptModel = { providerID: entry.provider, modelID: bareModelId };
 
       this.client!.session.promptAsync({
         sessionID: sessionId,

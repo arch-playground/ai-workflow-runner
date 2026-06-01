@@ -238,6 +238,129 @@ describe('OpenCodeService.runSessionWithFallback()', () => {
     // Assert — warning logged for failed provider
     expect(mockCore.warning).toHaveBeenCalledWith(expect.stringContaining('p0'));
   });
+
+  describe('R2 fix: bare modelID extraction for promptAsync model pinning', () => {
+    it('R2: provider-qualified model "prov/mod" → same result as bare "mod" (strip is idempotent)', async () => {
+      // This test verifies the stripping logic is safe: qualified and bare produce the same SDK call.
+      // Detailed promptAsync arg assertion is in the two tests below using fresh MockClient.
+      const mockClient = createMockClient();
+      const mockServer = createMockServer();
+      const ctl = createEventGenerator();
+      setupMockCreateOpencode(mockClient, mockServer, ctl);
+      mockClient.session.create.mockResolvedValue({ data: { id: 'session-1' } });
+
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const qualifiedEntry = [{ provider: 'prov', model: 'prov/mod' }];
+      const fallbackPromise = target.runSessionWithFallback('prompt', qualifiedEntry, 5000);
+
+      await flushMicrotasks();
+      ctl.emit({
+        type: 'message.updated',
+        properties: { info: { id: 'm1', role: 'assistant', sessionID: 'session-1' } },
+      });
+      ctl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: { type: 'text', text: 'Hi', messageID: 'm1', sessionID: 'session-1' },
+        },
+      });
+      await flushMicrotasks();
+      ctl.emit({ type: 'session.idle', properties: { sessionID: 'session-1' } });
+      await fallbackPromise;
+      ctl.stop();
+
+      // Assert — bare modelID used (no double prefix)
+      expect(mockClient.session.promptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ model: { providerID: 'prov', modelID: 'mod' } })
+      );
+    });
+
+    it('R2: bare model "gpt-5-mini" → promptAsync called with {providerID:"prov", modelID:"gpt-5-mini"}', async () => {
+      // Arrange — entry.model is bare (not provider-qualified)
+      const mockClient = createMockClient();
+      const mockServer = createMockServer();
+      const ctl = createEventGenerator();
+      setupMockCreateOpencode(mockClient, mockServer, ctl);
+      mockClient.session.create.mockResolvedValue({ data: { id: 'session-1' } });
+
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const bareEntry = [{ provider: 'github-copilot', model: 'gpt-5-mini' }];
+      const fallbackPromise = target.runSessionWithFallback('prompt', bareEntry, 5000);
+
+      await flushMicrotasks();
+      ctl.emit({
+        type: 'message.updated',
+        properties: { info: { id: 'msg-1', role: 'assistant', sessionID: 'session-1' } },
+      });
+      ctl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: { type: 'text', text: 'Hello', messageID: 'msg-1', sessionID: 'session-1' },
+        },
+      });
+      await flushMicrotasks();
+      ctl.emit({ type: 'session.idle', properties: { sessionID: 'session-1' } });
+
+      await fallbackPromise;
+      ctl.stop();
+
+      // Assert — promptAsync called with bare modelID
+      expect(mockClient.session.promptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: { providerID: 'github-copilot', modelID: 'gpt-5-mini' },
+        })
+      );
+    });
+
+    it('R2: qualified model "github-copilot/gpt-5-mini" → promptAsync called with bare {modelID:"gpt-5-mini"}', async () => {
+      // Arrange
+      const mockClient = createMockClient();
+      const mockServer = createMockServer();
+      const ctl = createEventGenerator();
+      setupMockCreateOpencode(mockClient, mockServer, ctl);
+      mockClient.session.create.mockResolvedValue({ data: { id: 'session-1' } });
+
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const qualifiedEntry = [{ provider: 'github-copilot', model: 'github-copilot/gpt-5-mini' }];
+      const fallbackPromise = target.runSessionWithFallback('prompt', qualifiedEntry, 5000);
+
+      await flushMicrotasks();
+      ctl.emit({
+        type: 'message.updated',
+        properties: { info: { id: 'msg-1', role: 'assistant', sessionID: 'session-1' } },
+      });
+      ctl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: { type: 'text', text: 'Hello', messageID: 'msg-1', sessionID: 'session-1' },
+        },
+      });
+      await flushMicrotasks();
+      ctl.emit({ type: 'session.idle', properties: { sessionID: 'session-1' } });
+
+      await fallbackPromise;
+      ctl.stop();
+
+      // Assert — promptAsync received stripped modelID, not the full provider/model string
+      expect(mockClient.session.promptAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: { providerID: 'github-copilot', modelID: 'gpt-5-mini' },
+        })
+      );
+      // Explicitly confirm no double-prefix
+      expect(mockClient.session.promptAsync).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: { providerID: 'github-copilot', modelID: 'github-copilot/gpt-5-mini' },
+        })
+      );
+    });
+  });
 });
 
 /**

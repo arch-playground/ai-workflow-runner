@@ -90,9 +90,30 @@ claude-sonnet-4-5 (dev-e10 sub-agent, 2026-06-01)
 - `src/opencode-fallback.spec.ts` — new: 6 selector integration tests
 - `_bmad-output/implementation-artifacts/11-3-start-and-watch-selector.md` — this file
 
+### Round 1/2 Fix (R2)
+
+- **R2 applied** (`src/opencode.ts` `watchForCommitOrEarlyError`): Before building `promptModel`, derives `bareModelId` by stripping `entry.provider + "/"` prefix when `entry.model` is provider-qualified (e.g. `"github-copilot/gpt-5-mini"` → `"gpt-5-mini"`). Falls through to `entry.model` unchanged for bare-id entries. One line of logic; comment documents the tolerance for both forms. `promptModel = { providerID: entry.provider, modelID: bareModelId }`.
+- **Tests** (`src/opencode-fallback.spec.ts`): Added 3 R2 tests: (1) `"prov/mod"` entry → promptAsync `{providerID:'prov', modelID:'mod'}`; (2) bare `"gpt-5-mini"` → `{providerID:'github-copilot', modelID:'gpt-5-mini'}`; (3) `"github-copilot/gpt-5-mini"` → bare `{modelID:'gpt-5-mini'}` + explicit negative assertion that `modelID:'github-copilot/gpt-5-mini'` was NOT used. All via fresh MockClient with promptAsync call-arg inspection.
+- **Quality**: lint zero, typecheck clean, format no changes, 692/692 tests pass (+3 new).
+
 ## Review Notes
 
-_(leader fills in during code review, if any)_
+**Round 2 (leader, 2026-06-01) — HIGH defect found during Epic 11 functional/e2e validation:**
+
+Finding R2 — **double provider-prefix in per-prompt model pinning.** `runSessionWithFallback` builds `const promptModel = { providerID: entry.provider, modelID: entry.model }` (opencode.ts ~line 477). But `entry.model` is **provider-qualified** (`"github-copilot/gpt-5-mini"`) per the design doc's own `fallback_config` examples — so the SDK gets `modelID: "github-copilot/gpt-5-mini"` under `providerID: "github-copilot"`, resolving to invalid `github-copilot/github-copilot/gpt-5-mini`. A real, authenticated, working provider (proven in Epic 10 e2e) FAILS at startup → the whole fallback run fails. The fallback feature cannot run a provider-qualified chain entry — exactly the format the docs show. Caught by the Epic 11 fallback e2e; unit tests used bare modelIDs so missed it.
+
+**Fix (Round 1/2):** derive the BARE modelID when building promptModel — strip `entry.provider + "/"` prefix if present, else use as-is (tolerant of both forms):
+
+```ts
+const bareModelId = entry.model.startsWith(`${entry.provider}/`)
+  ? entry.model.slice(entry.provider.length + 1)
+  : entry.model;
+const promptModel = { providerID: entry.provider, modelID: bareModelId };
+```
+
+Add a unit test asserting a provider-qualified entry produces `{providerID:'prov', modelID:'mod'}` (via MockClient promptAsync call args), and a bare entry still works. Re-run full suite.
+
+Note: preflight-skip, advance, and aggregated exhaustion all worked correctly in the real container — only model-pinning was wrong.
 
 ## QA Results
 
