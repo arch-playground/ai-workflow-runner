@@ -424,6 +424,131 @@ describe('OpenCodeService', () => {
     });
   });
 
+  describe('getProviderAuthMap()', () => {
+    async function createInitializedService(): Promise<OpenCodeService> {
+      const target = new OpenCodeService();
+      await target.initialize();
+      return target;
+    }
+
+    it('11-2-AC5: returns same provider auth map as 10-1 (reuse, not duplicate)', async () => {
+      // Arrange
+      mockClient.v2.provider.list.mockResolvedValue({
+        data: [
+          { id: 'anthropic', enabled: { via: 'account', service: 'anthropic' } },
+          { id: 'opencode', enabled: { via: 'env', name: 'opencode' } },
+          { id: 'custom-gw', enabled: { via: 'custom', data: {} } },
+        ],
+      });
+      const target = await createInitializedService();
+
+      // Act
+      const map = await target.getProviderAuthMap();
+
+      // Assert — same data as buildProviderAuthMap used in listModels
+      expect(map.get('anthropic')).toBe('account');
+      expect(map.get('opencode')).toBe('env');
+      expect(map.get('custom-gw')).toBe('custom');
+      expect(map.size).toBe(3);
+    });
+
+    it('11-2-AC4: returns empty map when v2 call fails (graceful degradation)', async () => {
+      // Arrange
+      mockClient.v2.provider.list.mockRejectedValue(new Error('v2 unavailable'));
+      const target = await createInitializedService();
+
+      // Act
+      const map = await target.getProviderAuthMap();
+
+      // Assert
+      expect(map.size).toBe(0);
+      expect(mockCore.debug).toHaveBeenCalledWith(expect.stringContaining('v2.provider.list()'));
+    });
+
+    it('throws when service is disposed', async () => {
+      // Arrange
+      const target = await createInitializedService();
+      target.dispose();
+
+      // Act & Assert
+      await expect(target.getProviderAuthMap()).rejects.toThrow('OpenCode service disposed');
+    });
+
+    it('throws when client not initialized', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+
+      // Act & Assert
+      await expect(target.getProviderAuthMap()).rejects.toThrow('OpenCode client not initialized');
+    });
+  });
+
+  describe('getAuthenticatedProviderIds()', () => {
+    async function createInitializedService(): Promise<OpenCodeService> {
+      const target = new OpenCodeService();
+      await target.initialize();
+      return target;
+    }
+
+    it('11-2-AC1: returns set of all authenticated provider ids', async () => {
+      // Arrange — enabled!==false means authenticated (any via, or even just truthy object)
+      mockClient.v2.provider.list.mockResolvedValue({
+        data: [
+          { id: 'anthropic', enabled: { via: 'account', service: 'anthropic' } },
+          { id: 'opencode', enabled: { via: 'env', name: 'opencode' } },
+          { id: 'disabled-provider', enabled: false },
+        ],
+      });
+      const target = await createInitializedService();
+
+      // Act
+      const ids = await target.getAuthenticatedProviderIds();
+
+      // Assert — disabled-provider excluded; anthropic + opencode included
+      expect(ids).not.toBeNull();
+      expect(ids!.has('anthropic')).toBe(true);
+      expect(ids!.has('opencode')).toBe(true);
+      expect(ids!.has('disabled-provider')).toBe(false);
+      expect(ids!.size).toBe(2);
+    });
+
+    it('11-2-AC4: returns null when v2 call fails (sentinel for graceful degradation)', async () => {
+      // Arrange
+      mockClient.v2.provider.list.mockRejectedValue(new Error('v2 lookup failed'));
+      const target = await createInitializedService();
+
+      // Act
+      const ids = await target.getAuthenticatedProviderIds();
+
+      // Assert — null signals "treat all providers as viable"
+      expect(ids).toBeNull();
+      expect(mockCore.debug).toHaveBeenCalledWith(
+        expect.stringContaining('treating all providers as viable')
+      );
+    });
+
+    it('throws when service is disposed', async () => {
+      // Arrange
+      const target = await createInitializedService();
+      target.dispose();
+
+      // Act & Assert
+      await expect(target.getAuthenticatedProviderIds()).rejects.toThrow(
+        'OpenCode service disposed'
+      );
+    });
+
+    it('throws when client not initialized', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+
+      // Act & Assert
+      await expect(target.getAuthenticatedProviderIds()).rejects.toThrow(
+        'OpenCode client not initialized'
+      );
+    });
+  });
+
   describe('exportTranscript()', () => {
     async function createInitializedService(): Promise<OpenCodeService> {
       const target = new OpenCodeService();
