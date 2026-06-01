@@ -103,7 +103,7 @@ development_status:
   # Epic 9: Conversation Logging & Transcript Export (Phase 2 — Sprint Change Proposal 2026-06-01)
   epic-9: 'in-progress'
   9-1-log-group-wrapping-around-tool-calls: 'done'
-  9-2-ration-github-annotations: 'backlog'
+  9-2-ration-github-annotations: 'done'
   9-3-transcript-writer-conversation-json: 'backlog'
   9-4-job-summary-writer: 'backlog'
   9-5-stop-command-wrapping-and-long-line-guard: 'backlog'
