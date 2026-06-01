@@ -90,6 +90,12 @@ export async function runWorkflow(
     }
 
     if (inputs.fallbackConfig) {
+      if (inputs.model) {
+        core.warning('model input ignored because fallback_config is set', {
+          title: 'fallback_config precedence',
+        });
+      }
+
       const chain = loadFallbackConfig(inputs.fallbackConfig);
       const authedIds = await opencode.getAuthenticatedProviderIds();
       const preflight = preflightFallbackChain(chain, authedIds);
@@ -101,11 +107,11 @@ export async function runWorkflow(
       }
       const viableChain = preflight.viable;
       if (viableChain.length === 0) {
+        const allProviders = chain.chain.map((e) => e.provider).join(', ');
         return {
           success: false,
           output: '',
-          error:
-            'All fallback chain providers are unauthenticated. Check auth_config covers all chain entries.',
+          error: `No fallback providers are authenticated — configure credentials in auth_config for: ${allProviders}`,
         };
       }
       const fallbackResult = await opencode.runSessionWithFallback(
@@ -115,13 +121,14 @@ export async function runWorkflow(
         abortSignal
       );
       if (!fallbackResult.success || !fallbackResult.session) {
+        const count = fallbackResult.failures.length;
         const reasons = fallbackResult.failures
-          .map((f) => `${f.provider}/${f.model}: ${f.error}`)
+          .map((f) => `${f.provider}/${f.model} (${sanitizeErrorMessage(new Error(f.error))})`)
           .join('; ');
         return {
           success: false,
           output: '',
-          error: `All fallback providers failed at startup. Failures: ${reasons}`,
+          error: `All ${count} fallback provider${count === 1 ? '' : 's'} failed: ${reasons}`,
         };
       }
       session = fallbackResult.session;
