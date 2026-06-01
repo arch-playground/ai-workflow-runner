@@ -129,7 +129,7 @@ development_status:
   11-4-commit-boundary-detection: 'done'
   11-5-exhaustion-error-and-precedence: 'done'
   11-6-tests: 'done'
-  epic-11-retrospective: 'backlog'
+  epic-11-retrospective: 'done'
 
   # Epic 12: SDK Currency & Maintenance Guard (Phase 2)
   epic-12: 'backlog'
