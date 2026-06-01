@@ -48,4 +48,52 @@ describe('Example Workflows', () => {
       expect(fs.existsSync(path.join(dir, 'workflow.md'))).toBe(true);
     });
   });
+
+  describe('9.6-AC4: conversation-logging', () => {
+    const dir = path.join(EXAMPLES_DIR, 'conversation-logging');
+
+    it('required files exist', () => {
+      expect(fs.existsSync(path.join(dir, 'README.md'))).toBe(true);
+      expect(fs.existsSync(path.join(dir, 'workflow.md'))).toBe(true);
+    });
+
+    it('run-ai.yml is valid YAML', () => {
+      const ymlPath = path.join(dir, '.github', 'workflows', 'run-ai.yml');
+      expect(fs.existsSync(ymlPath)).toBe(true);
+      const content = fs.readFileSync(ymlPath, 'utf8');
+      expect(() => yaml.load(content)).not.toThrow();
+    });
+
+    it('run-ai.yml sets export_transcript to true', () => {
+      const ymlPath = path.join(dir, '.github', 'workflows', 'run-ai.yml');
+      const content = fs.readFileSync(ymlPath, 'utf8');
+      const parsed = yaml.load(content) as {
+        jobs: Record<string, { steps: Array<{ with?: Record<string, string> }> }>;
+      };
+      const steps = Object.values(parsed.jobs)[0]!.steps;
+      const aiStep = steps.find((s) => s.with?.['export_transcript']);
+      expect(aiStep).toBeDefined();
+      expect(aiStep!.with!['export_transcript']).toBe('true');
+    });
+
+    it('run-ai.yml sets write_job_summary to true', () => {
+      const ymlPath = path.join(dir, '.github', 'workflows', 'run-ai.yml');
+      const content = fs.readFileSync(ymlPath, 'utf8');
+      const parsed = yaml.load(content) as {
+        jobs: Record<string, { steps: Array<{ with?: Record<string, string> }> }>;
+      };
+      const steps = Object.values(parsed.jobs)[0]!.steps;
+      const aiStep = steps.find((s) => s.with?.['write_job_summary']);
+      expect(aiStep).toBeDefined();
+      expect(aiStep!.with!['write_job_summary']).toBe('true');
+    });
+
+    it('run-ai.yml includes upload-artifact step referencing transcript_json_path output', () => {
+      const ymlPath = path.join(dir, '.github', 'workflows', 'run-ai.yml');
+      const content = fs.readFileSync(ymlPath, 'utf8');
+      // Check that the YAML references transcript_json_path output and upload-artifact
+      expect(content).toContain('transcript_json_path');
+      expect(content).toContain('upload-artifact');
+    });
+  });
 });
