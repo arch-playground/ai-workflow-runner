@@ -83,26 +83,60 @@ jobs:
 
 ## Inputs
 
-| Input                    | Description                                                                                                                            | Required | Default   |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------- |
-| `workflow_path`          | Path to the workflow.md file (relative to workspace root). Required unless `list_models` is `'true'`.                                  | No       | `''`      |
-| `prompt`                 | Input prompt to pass to the workflow (max 100KB)                                                                                       | No       | `''`      |
-| `env_vars`               | JSON object of environment variables (max 64KB, 100 entries)                                                                           | No       | `'{}'`    |
-| `timeout_minutes`        | Maximum execution time in minutes                                                                                                      | No       | `30`      |
-| `validation_script`      | Validation script path or inline code (see below)                                                                                      | No       | `''`      |
-| `validation_script_type` | Script type: `python` or `javascript` (auto-detected)                                                                                  | No       | `''`      |
-| `validation_max_retry`   | Maximum validation retry attempts (1-20)                                                                                               | No       | `5`       |
-| `opencode_config`        | Path to OpenCode config.json file (relative to workspace). Contains provider and model settings.                                       | No       | `''`      |
-| `auth_config`            | Path to OpenCode auth.json file (relative to workspace). Contains API keys and authentication. Store in GitHub Secrets, not Variables. | No       | `''`      |
-| `model`                  | Model to use for AI execution (e.g., "anthropic/claude-3-opus"). Overrides config file default.                                        | No       | `''`      |
-| `list_models`            | If "true", print available models and exit without running workflow                                                                    | No       | `'false'` |
+| Input                    | Description                                                                                                                                    | Required | Default   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------- |
+| `workflow_path`          | Path to the workflow.md file (relative to workspace root). Required unless `list_models` is `'true'`.                                          | No       | `''`      |
+| `prompt`                 | Input prompt to pass to the workflow (max 100KB)                                                                                               | No       | `''`      |
+| `env_vars`               | JSON object of environment variables (max 64KB, 100 entries)                                                                                   | No       | `'{}'`    |
+| `timeout_minutes`        | Maximum execution time in minutes                                                                                                              | No       | `30`      |
+| `validation_script`      | Validation script path or inline code (see below)                                                                                              | No       | `''`      |
+| `validation_script_type` | Script type: `python` or `javascript` (auto-detected)                                                                                          | No       | `''`      |
+| `validation_max_retry`   | Maximum validation retry attempts (1-20)                                                                                                       | No       | `5`       |
+| `opencode_config`        | Path to OpenCode config.json file (relative to workspace). Contains provider and model settings.                                               | No       | `''`      |
+| `auth_config`            | Path to OpenCode auth.json file (relative to workspace). Contains API keys and authentication. Store in GitHub Secrets, not Variables.         | No       | `''`      |
+| `model`                  | Model to use for AI execution (e.g., "anthropic/claude-3-opus"). Overrides config file default.                                                | No       | `''`      |
+| `list_models`            | If "true", print available models and exit without running workflow                                                                            | No       | `'false'` |
+| `debug_log`              | Enable verbose debug logging to file. Also activated by `ACTIONS_STEP_DEBUG=true` or `RUNNER_DEBUG=1`.                                         | No       | `'false'` |
+| `debug_log_path`         | Path for debug log file. Defaults to `$RUNNER_TEMP/opencode-debug.log`. Accepts workspace-relative or absolute paths under RUNNER_TEMP/tmp.    | No       | `''`      |
+| `export_transcript`      | If "true", export the full AI conversation to a JSON file. Use `transcript_json_path` output to upload it as a workflow artifact.              | No       | `'false'` |
+| `write_job_summary`      | If "true", write a GitHub job summary with run status, token/cost totals, tool activity, and the final assistant message.                      | No       | `'false'` |
+| `transcript_path`        | Path for the transcript JSON file. Defaults to `$RUNNER_TEMP/conversation.json`. Accepts workspace-relative or absolute under RUNNER_TEMP/tmp. | No       | `''`      |
 
 ## Outputs
 
-| Output   | Description                                                       |
-| -------- | ----------------------------------------------------------------- |
-| `status` | Execution status: `success`, `failure`, `cancelled`, or `timeout` |
-| `result` | Workflow execution result as JSON string (max 900KB)              |
+| Output                 | Description                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `status`               | Execution status: `success`, `failure`, `cancelled`, or `timeout`                                |
+| `result`               | Workflow execution result as JSON string (max 900KB)                                             |
+| `transcript_json_path` | Resolved path of the exported transcript JSON file. Empty when `export_transcript` is `'false'`. |
+
+## Conversation Logging & Artifacts
+
+Enable transcript export and the job summary to capture the full AI conversation:
+
+```yaml
+- name: Run AI workflow
+  id: ai-run
+  uses: arch-playground/ai-workflow-runner@v1
+  with:
+    workflow_path: 'workflows/workflow.md'
+    export_transcript: 'true'
+    write_job_summary: 'true'
+
+- name: Upload conversation transcript
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: conversation-transcript
+    path: ${{ steps.ai-run.outputs.transcript_json_path }}
+    if-no-files-found: warn
+```
+
+- **`export_transcript`** — writes `conversation.json` (full message array with tool I/O, reasoning, token/cost). Secret values in `env_vars` are scrubbed before writing.
+- **`write_job_summary`** — writes a job summary with status, token/cost/duration totals, per-tool activity, and the final assistant message. Secrets scrubbed.
+- **`transcript_json_path`** — the resolved path of the JSON file. Pass it to `actions/upload-artifact` to make it downloadable from the Actions run page. (The action itself cannot self-upload artifacts.)
+
+See [`examples/conversation-logging/`](examples/conversation-logging/) for a complete working example.
 
 ## Configuration
 

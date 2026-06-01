@@ -181,6 +181,72 @@ describe('index', () => {
       expect(mockCore.setOutput).toHaveBeenCalledWith('result', '{"result":"done"}');
     });
 
+    it('9.6-AC3: sets transcript_json_path output to resolved path when exportTranscript enabled', async () => {
+      // Arrange
+      mockRunWorkflow.mockResolvedValue({
+        success: true,
+        output: '{}',
+        transcriptJsonPath: '/tmp/conversation.json',
+      });
+
+      // Act
+      await loadAndFlush();
+
+      // Assert
+      expect(mockCore.setOutput).toHaveBeenCalledWith(
+        'transcript_json_path',
+        '/tmp/conversation.json'
+      );
+    });
+
+    it('9.6-AC3: sets transcript_json_path to empty string when exportTranscript disabled', async () => {
+      // Arrange
+      mockRunWorkflow.mockResolvedValue({ success: true, output: '{}' });
+
+      // Act
+      await loadAndFlush();
+
+      // Assert
+      expect(mockCore.setOutput).toHaveBeenCalledWith('transcript_json_path', '');
+    });
+
+    it('9.6-AC3: sets transcript_json_path BEFORE setFailed on workflow failure', async () => {
+      // Arrange
+      const callOrder: string[] = [];
+      mockCore.setOutput.mockImplementation((name: string) => {
+        callOrder.push(`setOutput:${name}`);
+      });
+      mockCore.setFailed.mockImplementation(() => {
+        callOrder.push('setFailed');
+      });
+      mockRunWorkflow.mockResolvedValue({
+        success: false,
+        output: '',
+        error: 'Workflow failed',
+        transcriptJsonPath: '/tmp/conversation.json',
+      });
+
+      // Act
+      await loadAndFlush();
+
+      // Assert: transcript_json_path set before setFailed
+      const transcriptIdx = callOrder.indexOf('setOutput:transcript_json_path');
+      const setFailedIdx = callOrder.indexOf('setFailed');
+      expect(transcriptIdx).toBeGreaterThanOrEqual(0);
+      expect(setFailedIdx).toBeGreaterThan(transcriptIdx);
+    });
+
+    it('9.6-AC5: backward compatible — result without transcriptJsonPath sets empty transcript output', async () => {
+      // Arrange (simulates RunnerResult from old code paths)
+      mockRunWorkflow.mockResolvedValue({ success: true, output: '{"result":"ok"}' });
+
+      // Act
+      await loadAndFlush();
+
+      // Assert
+      expect(mockCore.setOutput).toHaveBeenCalledWith('transcript_json_path', '');
+    });
+
     it('sets output status to failure and calls setFailed on workflow failure', async () => {
       // Arrange
       mockRunWorkflow.mockResolvedValue({
@@ -517,6 +583,83 @@ describe('index', () => {
       // Assert
       expect(mockCore.setOutput).toHaveBeenCalledWith('status', 'failure');
       expect(mockCore.setFailed).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('transcript_json_path output (9-6)', () => {
+    beforeEach(() => {
+      setupMocks();
+    });
+
+    it('9-6-AC3: sets transcript_json_path to resolved path when export enabled', async () => {
+      // Arrange
+      mockRunWorkflow.mockResolvedValue({
+        success: true,
+        output: '{}',
+        transcriptJsonPath: '/tmp/conversation.json',
+      });
+
+      // Act
+      await loadAndFlush();
+
+      // Assert: output set BEFORE setFailed (setFailed not called here, but order verified by call sequence)
+      expect(mockCore.setOutput).toHaveBeenCalledWith(
+        'transcript_json_path',
+        '/tmp/conversation.json'
+      );
+    });
+
+    it('9-6-AC3: sets transcript_json_path to empty string when not exported', async () => {
+      // Arrange
+      mockRunWorkflow.mockResolvedValue({
+        success: true,
+        output: '{}',
+        transcriptJsonPath: '',
+      });
+
+      // Act
+      await loadAndFlush();
+
+      // Assert
+      expect(mockCore.setOutput).toHaveBeenCalledWith('transcript_json_path', '');
+    });
+
+    it('9-6-AC3: sets transcript_json_path empty when transcriptJsonPath is undefined', async () => {
+      // Arrange
+      mockRunWorkflow.mockResolvedValue({
+        success: true,
+        output: '{}',
+      });
+
+      // Act
+      await loadAndFlush();
+
+      // Assert
+      expect(mockCore.setOutput).toHaveBeenCalledWith('transcript_json_path', '');
+    });
+
+    it('9-6-AC3: transcript_json_path output is set before setFailed on failure', async () => {
+      // Arrange
+      mockRunWorkflow.mockResolvedValue({
+        success: false,
+        output: '',
+        error: 'Run failed',
+        transcriptJsonPath: '/tmp/conversation.json',
+      });
+
+      // Act
+      await loadAndFlush();
+
+      // Assert: check call order — setOutput before setFailed
+      const setOutputCalls = mockCore.setOutput.mock.invocationCallOrder;
+      const setFailedCalls = mockCore.setFailed.mock.invocationCallOrder;
+      const transcriptCallOrder =
+        setOutputCalls[
+          (mockCore.setOutput.mock.calls as string[][]).findIndex(
+            (c) => c[0] === 'transcript_json_path'
+          )
+        ];
+      expect(transcriptCallOrder).toBeLessThan(setFailedCalls[0] ?? Infinity);
     });
   });
 });

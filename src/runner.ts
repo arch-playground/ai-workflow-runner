@@ -93,6 +93,8 @@ export async function runWorkflow(
       });
     }
 
+    let transcriptJsonPath = '';
+
     if (inputs.exportTranscript || inputs.writeJobSummary) {
       try {
         const messages = await opencode.exportTranscript(session.sessionId);
@@ -100,10 +102,11 @@ export async function runWorkflow(
         const durationMs = Date.now() - startTime;
 
         if (inputs.exportTranscript) {
-          const transcriptPath =
+          const resolvedTranscriptPath =
             inputs.transcriptPath ||
             path.join(process.env['RUNNER_TEMP'] || '/tmp', 'conversation.json');
-          writeTranscript(transcriptPath, messages, secrets);
+          writeTranscript(resolvedTranscriptPath, messages, secrets);
+          transcriptJsonPath = resolvedTranscriptPath;
         }
 
         if (inputs.writeJobSummary) {
@@ -129,6 +132,7 @@ export async function runWorkflow(
     return {
       success: true,
       output: truncateString(output, INPUT_LIMITS.MAX_OUTPUT_SIZE),
+      transcriptJsonPath,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';

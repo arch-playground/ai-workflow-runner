@@ -1,0 +1,42 @@
+name: AI Workflow with Conversation Logging
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Additional prompt to append to the workflow'
+        required: false
+        default: ''
+
+jobs:
+  run-ai-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run AI workflow
+        id: ai-run
+        uses: arch-playground/ai-workflow-runner@v1
+        with:
+          workflow_path: 'workflows/workflow.md'
+          prompt: ${{ inputs.prompt }}
+          env_vars: |
+            {
+              "OPENCODE_API_KEY": "${{ secrets.OPENCODE_API_KEY }}"
+            }
+          export_transcript: 'true'
+          write_job_summary: 'true'
+          timeout_minutes: '30'
+
+      - name: Upload conversation transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conversation-transcript
+          path: ${{ steps.ai-run.outputs.transcript_json_path }}
+          if-no-files-found: warn
+
+      - name: Show run status
+        run: |
+          echo "Status: ${{ steps.ai-run.outputs.status }}"
