@@ -94,8 +94,41 @@ development_status:
   epic-7-retrospective: 'backlog'
 
   # Epic 8: Distribution & Marketplace Publishing
-  epic-8: 'in-progress'
+  epic-8: 'done'
   8-1-add-docker-image-build-and-push-to-release-pipeline: 'done'
   8-2-update-action-yml-to-reference-prebuilt-ghcr-image: 'done'
-  8-3-publish-action-to-github-marketplace: 'in-progress'
+  8-3-publish-action-to-github-marketplace: 'done'
   epic-8-retrospective: 'backlog'
+
+  # Epic 9: Conversation Logging & Transcript Export (Phase 2 — Sprint Change Proposal 2026-06-01)
+  epic-9: 'backlog'
+  9-1-log-group-wrapping-around-tool-calls: 'backlog'
+  9-2-ration-github-annotations: 'backlog'
+  9-3-transcript-writer-conversation-json: 'backlog'
+  9-4-job-summary-writer: 'backlog'
+  9-5-stop-command-wrapping-and-long-line-guard: 'backlog'
+  9-6-action-inputs-outputs-and-examples: 'backlog'
+  9-7-tests: 'backlog'
+
+  # Epic 10: Model Selection & Free-Model Filtering (Phase 2)
+  epic-10: 'backlog'
+  10-1-join-provider-auth-state-with-model-cost: 'backlog'
+  10-2-provider-aware-free-predicate: 'backlog'
+  10-3-disable-free-models-input: 'backlog'
+  10-4-enrich-list-models-output: 'backlog'
+  10-5-subscription-providers-override: 'backlog'
+  10-6-tests: 'backlog'
+
+  # Epic 11: Provider Fallback Chain (Phase 2)
+  epic-11: 'backlog'
+  11-1-parse-fallback-config-no-credentials: 'backlog'
+  11-2-authenticated-provider-preflight: 'backlog'
+  11-3-start-and-watch-selector: 'backlog'
+  11-4-commit-boundary-detection: 'backlog'
+  11-5-exhaustion-error-and-precedence: 'backlog'
+  11-6-tests: 'backlog'
+
+  # Epic 12: SDK Currency & Maintenance Guard (Phase 2)
+  epic-12: 'backlog'
+  12-1-ci-currency-guard: 'backlog'
+  12-2-bump-sdk-and-align-cli-binary: 'backlog'

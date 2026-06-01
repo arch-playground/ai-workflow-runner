@@ -13,8 +13,8 @@ inputDocuments:
   - 'docs/index.md'
   - '_bmad-output/implementation-artifacts/tech-spec-opencode-sdk-runner.md'
   - '_bmad-output/implementation-artifacts/tech-spec-ai-workflow-runner-init.md'
-implementationStatus: 'MVP Complete - Epic 7 (Stories 7.1-7.4 done, 7.5-7.6 pending) and Epic 8 (Stories 8.1-8.2 done, 8.3 pending)'
-lastUpdated: '2026-03-10'
+implementationStatus: 'MVP Complete - Epic 7 (Stories 7.1-7.4 done, 7.5-7.6 pending) and Epic 8 (Stories 8.1-8.2 done, 8.3 pending). Phase 2 enhancement Epics 9-12 added to backlog (Sprint Change Proposal 2026-06-01).'
+lastUpdated: '2026-06-01'
 ---
 
 # AI Workflow Runner - Epic Breakdown
@@ -266,6 +266,30 @@ Users can customize OpenCode SDK configuration (providers, auth, models) and hav
 
 The action is distributed via pre-built Docker image on GHCR and listed on GitHub Marketplace for discoverability.
 **FRs covered:** FR45, FR46, FR47, FR48, FR49
+**Status:** 🔲 NOT STARTED
+
+### Epic 9: Conversation Logging & Transcript Export
+
+Users get a scannable GitHub Actions console (log groups, rationed annotations, job summary) and a full `conversation.json` transcript exported for artifact upload.
+**FRs covered:** FR50, FR51, FR52, FR53, FR54 · **NFRs:** NFR21, NFR22
+**Status:** 🔲 NOT STARTED
+
+### Epic 10: Model Selection & Free-Model Filtering
+
+Users can list models with cost/free tags and disable free models, while paid subscriptions (Copilot etc.) are never mis-classified as free — via OpenCode's own `enabled.via === "account"` signal (no hardcoded list).
+**FRs covered:** FR55, FR56, FR57, FR58
+**Status:** 🔲 NOT STARTED
+
+### Epic 11: Provider Fallback Chain
+
+Users can define an ordered cross-provider fallback chain (provider/model references; auth stays in `auth_config`); the runner selects the first healthy provider at conversation start (no mid-run failover) and fails over on startup errors.
+**FRs covered:** FR59, FR60, FR61, FR62, FR63 · **NFRs:** NFR23
+**Status:** 🔲 NOT STARTED
+
+### Epic 12: SDK Currency & Maintenance Guard
+
+The project stays on the latest stable `@opencode-ai/sdk` with a CI guard that signals when the pin lags, and keeps the `opencode-ai` CLI binary aligned.
+**FRs covered:** FR64, FR65
 **Status:** 🔲 NOT STARTED
 
 ---
@@ -1449,3 +1473,137 @@ So that **I can discover it when searching for AI workflow tools**.
 **Given** a new release is published
 **When** the Marketplace listing is updated
 **Then** the latest version is shown on the Marketplace page
+
+---
+
+## Epic 9: Conversation Logging & Transcript Export
+
+**Goal:** Users get a scannable GitHub Actions console and a full `conversation.json` transcript exported for artifact upload.
+
+**Design reference:** `research/opencode-upgrade-design-2026-05-29.md` §3 (D3).
+
+### Story 9.1: Add Log-Group Wrapping Around Tool Calls
+
+As a user, I want each tool call collapsed into a GitHub Actions log group so the console stays scannable.
+**AC:** `handleMessagePartUpdated` wraps each tool's verbose body in `core.startGroup(formatLog)` / `core.endGroup()`; assistant narrative stays top-level; groups not nested. (FR50)
+
+### Story 9.2: Ration GitHub Annotations
+
+As a user, I want only run-level outcomes as annotations so real failures aren't buried.
+**AC:** Routine tool errors → `core.info` inside their group; `core.error/warning/notice` (with `title=`) reserved for final failure / validation-exhausted / fatal SDK error; stays under 10/type/step and 50/job caps. (FR51)
+
+### Story 9.3: Transcript Writer (`conversation.json`)
+
+As a user, I want the full conversation saved to a file for artifact upload.
+**AC:** New `src/transcript-writer.ts` fetches `session.messages()` after run (and each validation turn), scrubs secrets, writes `conversation.json` (raw messages array incl. text, tool I/O, reasoning, token/cost). (FR52, FR53, NFR21)
+
+### Story 9.4: Job Summary Writer
+
+As a user, I want a readable run report in the GitHub job summary.
+**AC:** New `src/summary-writer.ts` builds status heading + token/cost/duration table + collapsed `<details>` per tool category + final message + artifact link via `core.summary`; written once at run end. (FR54)
+
+### Story 9.5: Stop-Command Wrapping & Long-Line Guard
+
+As a maintainer, I want streamed assistant text safe and the log fast.
+**AC:** `handleTextPart` wraps streamed text with `::stop-commands::`/`::{token}::`; no single live-log line approaches ~6k chars (full bodies to debug/transcript file only). (NFR22)
+
+### Story 9.6: Action Inputs/Outputs & Examples
+
+As a user, I want to enable transcript export and know how to upload it.
+**AC:** `action.yml` adds `export_transcript` input + `transcript_json_path` output; README + example workflow shows `actions/upload-artifact` step (upload stays in consuming workflow — D6).
+
+### Story 9.7: Tests
+
+**AC:** Unit tests for transcript-writer (incl. secret-scrubbing) and summary-writer; e2e exercises real-server transcript fetch.
+
+---
+
+## Epic 10: Model Selection & Free-Model Filtering
+
+**Goal:** List models with cost/free tags and disable free models without ever mis-classifying a paid subscription.
+
+**Design reference:** `research/opencode-upgrade-design-2026-05-29.md` §4 (D4, D7).
+
+### Story 10.1: Join Provider Auth State With Model Cost
+
+As the runner, I need `enabled.via` alongside per-model `cost`.
+**AC:** `listModels()` calls `client.v2.provider.list()` (provider `enabled.via`) and `client.config.providers()` (models + cost) and joins by provider id; a provider absent from the v2 list is treated as non-account. (FR57)
+
+### Story 10.2: Provider-Aware Free Predicate
+
+As the runner, I need to identify free models correctly.
+**AC:** `isFilterableFree(model, provider) = cost?.input===0 && cost?.output===0 && enabled.via!=="account"`; missing `cost` → "unknown pricing", NOT free. Unit-covered with the Copilot/Zen/OpenRouter cases. (FR57, D4)
+
+### Story 10.3: `disable_free_models` Input
+
+As a user, I want to exclude free models.
+**AC:** New `disable_free_models` input (default false); when true, `list_models` omits free models AND a resolved free model fails fast with a clear error. (FR56)
+
+### Story 10.4: Enrich `list_models` Output
+
+As a user, I want to see pricing when listing models.
+**AC:** `list_models` output annotates each model `free`/`paid`/`unknown-pricing` with cost. (FR55)
+
+### Story 10.5: `subscription_providers` Override
+
+As a user with a non-standard flat-subscription provider, I want to extend protection.
+**AC:** Optional `subscription_providers` config key adds provider ids to the keep-set; defaults empty (the `enabled.via` rule covers observed providers). (FR58)
+
+### Story 10.6: Tests
+
+**AC:** Unit tests assert Copilot (`via:account`, cost 0) kept, Zen `*-free` filtered, OpenAI free-tier kept, missing-cost kept; the proven real-data cases.
+
+---
+
+## Epic 11: Provider Fallback Chain
+
+**Goal:** Select the first healthy provider at conversation start from an ordered cross-provider chain; auth stays separate.
+
+**Design reference:** `research/opencode-upgrade-design-2026-05-29.md` §5 (D1, D2, D5, D8) + §7 spike.
+
+### Story 11.1: Parse `fallback_config` (No Credentials)
+
+As a user, I want an ordered provider/model chain.
+**AC:** New `fallback_config` input parses an ordered `[{provider, model}]` list; **rejects any `auth`/credential field** (D8); validates shape and size. (FR59)
+
+### Story 11.2: Authenticated-Provider Preflight
+
+As the runner, I skip chain entries that can't start.
+**AC:** Before selection, each chain provider is checked against `v2.provider.list()` (`enabled !== false`); unauthenticated references are skipped with a `core.warning`. Auth itself is applied from `auth_config` as today. (FR60)
+
+### Story 11.3: Start-and-Watch Selector
+
+As the runner, I pick the first provider that starts cleanly.
+**AC:** `src/provider-chain.ts` creates a session pinned to chain[i], sends the first prompt, watches the event stream; a `session.error` (whole error union) before the first assistant part → abort, advance to chain[i+1]. (FR61, FR62)
+
+### Story 11.4: Commit-Boundary Detection
+
+As the runner, I must not switch after the conversation commits.
+**AC:** "Committed" = first **assistant-role** text/tool/reasoning part (NOT the user-prompt echo, per spike finding); once committed, no provider switching (D2).
+
+### Story 11.5: Exhaustion Error & Precedence
+
+As a user, I get a clear failure and predictable precedence.
+**AC:** Chain exhausted → aggregated error listing per-provider skip reason; when `fallback_config` is present it supersedes the single `model` input (D5), with a `core.warning` on conflict. (FR63)
+
+### Story 11.6: Tests
+
+**AC:** Unit + e2e (real server): invalid/unauthenticated provider is skipped; startup `session.error` advances the chain; committed conversation does not switch.
+
+---
+
+## Epic 12: SDK Currency & Maintenance Guard
+
+**Goal:** Stay on latest stable SDK with a CI signal when the pin lags; keep the CLI binary aligned.
+
+**Design reference:** `research/opencode-upgrade-design-2026-05-29.md` §2.
+
+### Story 12.1: CI Currency Guard
+
+As a maintainer, I want a signal when a newer stable SDK ships.
+**AC:** A scheduled CI job compares `npm view @opencode-ai/sdk version` to the pinned version and opens an issue / emits a warning when it lags. (FR64)
+
+### Story 12.2: Bump SDK + Align CLI Binary
+
+As a maintainer, I want the SDK and Docker CLI binary in lockstep.
+**AC:** Bump `@opencode-ai/sdk` to current latest (1.15.13 at time of writing); Dockerfile `npm install -g opencode-ai` version matches the SDK pin; `dist/index.js` rebundled. (FR64, FR65)

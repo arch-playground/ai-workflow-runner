@@ -114,8 +114,12 @@ _Note: Pure open-source community tool with no commercial objectives._
 | Capability                                             | Status  |
 | ------------------------------------------------------ | ------- |
 | Custom OpenCode configuration (config.json, auth.json) | Planned |
-| Model selection input                                  | Planned |
-| List available models feature                          | Planned |
+| Model selection input                                  | Epic 10 |
+| List available models feature                          | Epic 10 |
+| Disable free models (provider-aware)                   | Epic 10 |
+| Conversation logging + JSON transcript export          | Epic 9  |
+| Provider fallback chain (start-of-conversation)        | Epic 11 |
+| SDK currency guard + binary alignment                  | Epic 12 |
 | Pre-built Docker image published to GHCR               | Planned |
 | GitHub Marketplace listing (basic, free)               | Planned |
 | Example workflows folder                               | Planned |
@@ -352,6 +356,34 @@ _Note: Pure open-source community tool with no commercial objectives._
 - **FR37:** System can return clear error messages for validation script failures
 - **FR38:** System can distinguish runner errors from workflow/AI errors
 
+### Conversation Logging & Export (Phase 2 — Epic 9)
+
+- **FR50:** System can render a scannable console log using GitHub Actions log groups (one group per tool call)
+- **FR51:** System can ration GitHub annotations to run-level outcomes (stay under 10/type/step, 50/job caps)
+- **FR52:** System can fetch the full session transcript via `session.messages()` after run completion
+- **FR53:** System can write the full conversation to a JSON file (`conversation.json`) for artifact upload
+- **FR54:** System can write a job summary (token/cost/duration table + final message + artifact link) via `core.summary`
+
+### Model Selection & Free-Model Filtering (Phase 2 — Epic 10)
+
+- **FR55:** System can enrich `list_models` output with per-model cost and a free/paid/unknown-pricing tag
+- **FR56:** User can disable free models via a `disable_free_models` input
+- **FR57:** System can identify free models as `cost.input===0 && cost.output===0` AND `provider.enabled.via !== "account"` (no hardcoded provider list)
+- **FR58:** User can extend subscription-provider protection via an optional `subscription_providers` config key
+
+### Provider Fallback Chain (Phase 2 — Epic 11)
+
+- **FR59:** User can define an ordered, cross-provider fallback chain via a `fallback_config` input (provider/model references only — no credentials)
+- **FR60:** System validates each chain entry's provider is authenticated (via `auth_config`/`enabled.via`) before selection, skipping unauthenticated references with a warning
+- **FR61:** System can select the first healthy provider at conversation start by watching for `session.error` before the first assistant part
+- **FR62:** System can advance to the next chain entry on a startup `session.error` and start fresh
+- **FR63:** System fails with an aggregated error when the entire chain is exhausted
+
+### SDK Currency & Maintenance (Phase 2 — Epic 12)
+
+- **FR64:** System tracks the `@opencode-ai/sdk` latest stable version and signals when the pin lags (CI guard)
+- **FR65:** System keeps the `opencode-ai` CLI binary version aligned with the SDK pin
+
 ## Non-Functional Requirements
 
 ### Performance
@@ -398,6 +430,14 @@ _Note: Pure open-source community tool with no commercial objectives._
 | **NFR18** | Unit test coverage >= 80% on validation logic | Code quality         |
 | **NFR19** | Dependabot with weekly updates                | Security maintenance |
 | **NFR20** | TypeScript strict mode enabled                | Type safety          |
+
+### Security & Logging (Phase 2)
+
+| NFR       | Requirement                                                                                                 | Rationale                             |
+| --------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| **NFR21** | `conversation.json` and job-summary content are secret-scrubbed before write                                | `core.setSecret` masks live log only  |
+| **NFR22** | No single live-log line approaches ~6k chars; full bodies go to artifact/debug file                         | Runner throughput cliff at long lines |
+| **NFR23** | Auth tokens (in `auth_config`) masked via `core.setSecret` before use; `fallback_config` carries no secrets | No field-level auto-redaction of JSON |
 
 ## Risk Mitigation
 
