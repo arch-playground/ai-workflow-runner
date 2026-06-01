@@ -47,6 +47,10 @@ inputs:
     description: 'If "true", print available models and exit without running workflow'
     required: false
     default: 'false'
+  disable_free_models:
+    description: 'If "true", exclude genuinely-free models (cost 0 and not account-authenticated) from listings and fail fast if one would be run. Paid subscriptions with cost 0 (e.g. GitHub Copilot) are never affected.'
+    required: false
+    default: 'false'
   debug_log:
     description: 'Enable verbose debug logging to file. Also activated by ACTIONS_STEP_DEBUG=true or RUNNER_DEBUG=1.'
     required: false

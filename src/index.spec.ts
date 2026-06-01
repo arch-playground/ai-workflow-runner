@@ -40,6 +40,7 @@ describe('index', () => {
     timeoutMs: 60000,
     maxValidationRetries: 5,
     listModels: false,
+    disableFreeModels: false,
     debugLog: false,
     debugLogPath: '',
     exportTranscript: false,
