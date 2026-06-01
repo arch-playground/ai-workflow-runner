@@ -440,7 +440,8 @@ export class OpenCodeService {
 
   private handleEventLoopFailure(): void {
     core.error(
-      '[OpenCode] Event loop failed after max reconnection attempts. Session idle detection may not work.'
+      '[OpenCode] Event loop failed after max reconnection attempts. Session idle detection may not work.',
+      { title: 'Event loop failure' }
     );
     for (const [, callbacks] of this.sessionCompletionCallbacks) {
       if (callbacks.abortCleanup) callbacks.abortCleanup();
@@ -512,7 +513,9 @@ export class OpenCodeService {
       typeof props?.error === 'string'
         ? props.error
         : (props?.error as { message?: string })?.message || 'unknown error';
-    core.error(this.formatTimestampedLog(`Session error for ${sessionID}: ${errorMessage}`));
+    core.error(this.formatTimestampedLog(`Session error for ${sessionID}: ${errorMessage}`), {
+      title: 'Session error',
+    });
     this.finalizeSession(sessionID, true, errorMessage);
   }
 
@@ -582,11 +585,7 @@ export class OpenCodeService {
         core.debug(logLine);
       } else {
         core.startGroup(logLine);
-        if (part.state.status === 'error') {
-          core.warning(logLine);
-        } else {
-          core.info(logLine);
-        }
+        core.info(logLine);
         core.endGroup();
       }
 

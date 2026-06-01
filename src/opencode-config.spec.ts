@@ -94,7 +94,8 @@ describe('OpenCodeService - config & reconnection', () => {
       await new Promise((resolve) => setTimeout(resolve, 4000));
 
       expect(mockCore.error).toHaveBeenCalledWith(
-        '[OpenCode] Event loop failed after max reconnection attempts. Session idle detection may not work.'
+        '[OpenCode] Event loop failed after max reconnection attempts. Session idle detection may not work.',
+        { title: 'Event loop failure' }
       );
 
       expect(mockCore.warning).toHaveBeenCalledWith(expect.stringContaining('Event loop error'));
@@ -253,7 +254,8 @@ describe('OpenCodeService - config & reconnection', () => {
 
       // Assert: heartbeat timeouts exhaust reconnection attempts like any other error
       expect(mockCore.error).toHaveBeenCalledWith(
-        expect.stringContaining('Event loop failed after max reconnection attempts')
+        expect.stringContaining('Event loop failed after max reconnection attempts'),
+        { title: 'Event loop failure' }
       );
       // initial subscribe + 2 reconnect attempts (attempt 1 and 2 pass < 3 check, attempt 3 fails)
       expect(subscribeMock).toHaveBeenCalledTimes(3);

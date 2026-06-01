@@ -300,6 +300,32 @@ describe('OpenCodeService - session & messages', () => {
       await expect(sessionPromise).rejects.toThrow('Session error: Connection lost');
     });
 
+    it('9-2-AC2: session.error emits core.error with a title annotation', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      // Act
+      eventControl.emit({
+        type: 'session.error',
+        properties: {
+          sessionID: 'session-123',
+          error: 'Something failed',
+        },
+      });
+
+      // Assert: run-level core.error called with title (AC2)
+      await expect(sessionPromise).rejects.toThrow('Session error: Something failed');
+      expect(mockCore.error).toHaveBeenCalledWith(
+        expect.stringContaining('Session error for session-123'),
+        expect.objectContaining({ title: 'Session error' })
+      );
+      expect(mockCore.error).toHaveBeenCalledTimes(1);
+    });
+
     it('streams message content via core.info()', async () => {
       const target = new OpenCodeService();
       await target.initialize();
@@ -364,7 +390,7 @@ describe('OpenCodeService - session & messages', () => {
       await sessionPromise;
     });
 
-    it('logs tool error event via core.warning() with error cause', async () => {
+    it('logs tool error event via core.info() (not core.warning()) with error cause', async () => {
       const target = new OpenCodeService();
       await target.initialize();
 
@@ -388,10 +414,13 @@ describe('OpenCodeService - session & messages', () => {
       });
 
       await flushMicrotasks();
-      expect(mockCore.warning).toHaveBeenCalledWith(
+      expect(mockCore.info).toHaveBeenCalledWith(
         expect.stringMatching(
           /^\[\d{4}-\d{2}-\d{2}T[^\]]+Z\] \[OpenCode\] Tool: read - error - \.\/missing\.ts - File not found$/
         )
+      );
+      expect(mockCore.warning).not.toHaveBeenCalledWith(
+        expect.stringMatching(/Tool: read - error/)
       );
 
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
@@ -496,7 +525,7 @@ describe('OpenCodeService - session & messages', () => {
       await sessionPromise;
     });
 
-    it('9-1-AC1: wraps error tool log in startGroup/endGroup and keeps core.warning channel', async () => {
+    it('9-1-AC1 / 9-2-AC1: wraps error tool log in startGroup/endGroup and routes to core.info (not core.warning)', async () => {
       // Arrange
       const target = new OpenCodeService();
       await target.initialize();
@@ -523,10 +552,55 @@ describe('OpenCodeService - session & messages', () => {
 
       await flushMicrotasks();
 
-      // Assert
+      // Assert: group wrapping preserved (Story 9-1), warning channel removed (Story 9-2)
       expect(mockCore.startGroup).toHaveBeenCalledTimes(1);
       expect(mockCore.endGroup).toHaveBeenCalledTimes(1);
-      expect(mockCore.warning).toHaveBeenCalledTimes(1);
+      expect(mockCore.info).toHaveBeenCalledWith(expect.stringMatching(/Tool: read - error/));
+      expect(mockCore.warning).not.toHaveBeenCalledWith(
+        expect.stringMatching(/Tool: read - error/)
+      );
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('9-2-AC1: N error tool parts produce 0 core.warning calls', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      // Act: emit 3 error tool parts
+      for (let i = 0; i < 3; i++) {
+        eventControl.emit({
+          type: 'message.part.updated',
+          properties: {
+            part: {
+              type: 'tool',
+              tool: 'bash',
+              state: {
+                status: 'error',
+                input: { command: `cmd-${i}` },
+                error: `Error ${i}`,
+                time: { start: i, end: i + 1 },
+              },
+            },
+          },
+        });
+        await flushMicrotasks();
+      }
+
+      // Assert: warning never called for any per-tool error
+      expect(mockCore.warning).not.toHaveBeenCalledWith(
+        expect.stringMatching(/Tool: bash - error/)
+      );
+      // Each error tool part emits exactly one core.info call (inside the group)
+      const toolErrorInfoCalls = (mockCore.info.mock.calls as string[][]).filter((args) =>
+        /Tool: bash - error/.test(args[0] ?? '')
+      );
+      expect(toolErrorInfoCalls).toHaveLength(3);
 
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
       await sessionPromise;
