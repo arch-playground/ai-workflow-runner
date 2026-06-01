@@ -36,7 +36,7 @@ RUN apt-get update && \
     && apt-get install -y --no-install-recommends nodejs temurin-21-jre
 
 # Install OpenCode CLI globally (required for @opencode-ai/sdk)
-RUN npm install -g opencode-ai
+RUN npm install -g opencode-ai@1.15.13
 
 # Stage 3: Runtime stage - minimal image with only necessary files
 FROM debian:bookworm-slim AS runtime
