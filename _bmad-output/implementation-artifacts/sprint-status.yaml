@@ -136,3 +136,15 @@ development_status:
   12-1-ci-currency-guard: 'done'
   12-2-bump-sdk-and-align-cli-binary: 'done'
   epic-12-retrospective: 'done'
+
+  # Epic 13: Security Hardening (Red-Team Remediation) — added 2026-06-02
+  epic-13: 'backlog'
+  13-1-scope-agent-server-environment: 'backlog'
+  13-2-default-deny-tools-and-fix-permission-merge: 'backlog'
+  13-3-non-root-container-and-home-relocation: 'backlog'
+  13-4-provider-baseurl-allowlist-and-refuse-auth: 'backlog'
+  13-5-global-wall-clock-timeout: 'backlog'
+  13-6-inert-summary-and-ambient-secret-masking: 'backlog'
+  13-7-threat-model-docs-and-digest-pin: 'backlog'
+  13-8-tests-and-epic-end-security-revalidation: 'backlog'
+  epic-13-retrospective: 'optional'

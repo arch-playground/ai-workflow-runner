@@ -13,8 +13,8 @@ inputDocuments:
   - 'docs/index.md'
   - '_bmad-output/implementation-artifacts/tech-spec-opencode-sdk-runner.md'
   - '_bmad-output/implementation-artifacts/tech-spec-ai-workflow-runner-init.md'
-implementationStatus: 'MVP Complete - Epic 7 (Stories 7.1-7.4 done, 7.5-7.6 pending) and Epic 8 (Stories 8.1-8.2 done, 8.3 pending). Phase 2 enhancement Epics 9-12 added to backlog (Sprint Change Proposal 2026-06-01).'
-lastUpdated: '2026-06-01'
+implementationStatus: 'MVP Complete - Epic 7 (Stories 7.1-7.4 done, 7.5-7.6 pending) and Epic 8 (Stories 8.1-8.2 done, 8.3 pending). Phase 2 enhancement Epics 9-12 done (Sprint Change Proposal 2026-06-01). Epic 13 Security Hardening added to backlog 2026-06-02 (red-team remediation: 3 CRITICAL, 2 HIGH, 2 MEDIUM, 2 doc).'
+lastUpdated: '2026-06-02'
 ---
 
 # AI Workflow Runner - Epic Breakdown
@@ -1607,3 +1607,55 @@ As a maintainer, I want a signal when a newer stable SDK ships.
 
 As a maintainer, I want the SDK and Docker CLI binary in lockstep.
 **AC:** Bump `@opencode-ai/sdk` to current latest (1.15.13 at time of writing); Dockerfile `npm install -g opencode-ai` version matches the SDK pin; `dist/index.js` rebundled. (FR64, FR65)
+
+---
+
+## Epic 13: Security Hardening (Red-Team Remediation)
+
+**Goal:** Close the verified security findings from the manual/security/whitehat testing (3 CRITICAL, 2 HIGH, 2 MEDIUM, 2 doc) with layered, secure-by-default containment — without breaking the tool's purpose (run a workflow over source code to extract knowledge/patterns), the Copilot-never-blocked invariant, the fallback chain (Epic 11), or the transcript/summary features (Epic 9).
+
+**Design reference:** `research/security-hardening-design-2026-06-02.md` (architect judgement, ai-memory aligned) + `research/security-hardening-research-2026-06-01.md` (best-practice research). Findings: `docs/tests/test-run-redteam-2026-06-01.md`, `docs/tests/TC-REDTEAM-agent-execution.md`.
+
+**Test design reference:** `_bmad-output/implementation-artifacts/test-design-epic-13.md` (to be created in Story 13-8).
+
+**Product decisions (confirmed with user 2026-06-02):** default-deny the dangerous tools (`bash`/`webfetch`/`websearch`) but keep the knowledge-extraction tools (read/glob/grep/LSP) — the tool's purpose needs read, not shell — with opt-in inputs for workflows that genuinely run commands; baseURL = host allowlist + `allowed_provider_hosts` opt-in + refuse-auth for non-allowlisted endpoints.
+
+### Story 13.1: Scope the Agent Server Environment (RC-A / A1)
+
+As an operator, I want the AI agent to never see ambient runner secrets it wasn't given, so a malicious prompt cannot dump `GITHUB_TOKEN`/cloud creds via the agent.
+**AC:** A shared `buildScopedEnv()` allowlist helper in `security.ts` (mirroring the existing `validation.ts:buildChildEnv` pattern); `process.env` is sanitized to the allowlist (PATH/HOME/LANG/TERM + runtime vars JAVA*HOME/GOPATH/GOROOT/XDG*\* + declared `env_vars` + RUNNER_TEMP) around `createOpencode` in `opencode.ts:doInitialize` and restored in `finally`. Verified: agent `bash: env|grep` no longer surfaces undeclared secrets; declared `env_vars` and env-authenticated providers still work; Java/Go LSP autoinstall unaffected. (FR66, NFR24) [Fixes AGENT-01, AGENT-06; partial FINDING-5]
+
+### Story 13.2: Default-Deny Dangerous Tools + Opt-In + Fix Permission Merge (RC-A / A2)
+
+As an operator, I want the agent's `bash`/`webfetch`/`websearch` denied by default with explicit opt-in, and consumer config unable to weaken our hardening.
+**AC:** `buildPermissionConfig` sets read-family `allow`, `bash`/`webfetch`/`websearch` `deny` by default; new action inputs `allow_bash`/`allow_webfetch` (default `false`) opt in; **merge direction inverted** so Action security rules win under OpenCode's last-match-wins semantics (consumer `permission` applied first, Action rules overlaid last); the `handlePermissionAsked` auto-approve handler reviewed so it cannot silently re-allow a denied tool. Verified: prompt-driven `bash` is refused by default; opt-in re-enables it; consumer `opencode_config` cannot override a denied tool. (FR67, FR68) [Fixes AGENT-09 RCE, AGENT-02/03 on-disk reads via bash; primary FINDING-5]
+
+### Story 13.3: Non-Root Container + HOME/XDG Relocation (RC-A / A3+A4)
+
+As an operator, I want the Action to run as a non-root user with the agent's HOME/XDG outside the workspace, so agent bash (if opted in) has minimal blast radius and `auth.json` isn't under the agent tree.
+**AC:** `entrypoint.sh` starts as root, `chown`s workspace/RUNNER_TEMP/HOME/GOPATH/XDG as needed, then drops to a non-root user via `gosu` for the Node process (chosen over hardcoded `USER 1001` for runner-UID resilience per `runner-service-install-user` lesson); agent child `HOME`/`XDG_DATA_HOME` point outside `/github/workspace`. Verified on a real container run: workspace + `$GITHUB_OUTPUT` writes still succeed; `id` inside agent bash is non-root. (FR69, NFR25) [Fixes AGENT-05 root writes; defense-in-depth for AGENT-02]
+
+### Story 13.4: Provider baseURL Allowlist + Refuse-Auth (RC-B)
+
+As an operator, I want the Action to refuse to send provider credentials to an attacker-chosen endpoint.
+**AC:** `buildSdkConfig` validates every consumer-supplied `provider.<id>.options.{baseURL,endpoint}`: require `https:`, block private/loopback/link-local/metadata ranges (incl. 169.254.169.254), allowlist known provider hosts (incl. `api.githubcopilot.com` — Copilot-never-blocked) plus a new `allowed_provider_hosts` opt-in input for enterprise gateways; fail-closed (reject) on mismatch. `applyAuth` skips `client.auth.set` for any provider whose effective baseURL isn't allowlisted (belt-and-suspenders). The host allowlist is a curated, override-able security constant in `security.ts` — NOT a provider-classification list (preserves D7/D8: must not bleed into model-filter or fallback auth logic). Verified: redirected baseURL no longer receives the org key; Azure `resourceName` derivation + Bedrock hosts accommodated; `allowed_provider_hosts` re-enables a custom gateway. (FR70) [Fixes AGENT-04, FINDING-1]
+
+### Story 13.5: Global Wall-Clock Timeout (MEDIUM-1)
+
+As an operator, I want `timeout_minutes` to be a hard ceiling on the whole run, including the validation-retry loop.
+**AC:** `index.ts` creates `AbortSignal.timeout(inputs.timeoutMs)` merged with `shutdownController.signal` via `AbortSignal.any`; the combined signal threads everywhere the shutdown signal flows; `runValidationLoop` guards its head with `combined.aborted`; `TimeoutError` reason maps to status `timeout` (distinct from `cancelled`). Verified: an infinite-loop validation script is aborted at `timeout_minutes`, not after `retries × per-call timeout`. (FR71) [Fixes FINDING-2]
+
+### Story 13.6: Inert Summary Rendering + Ambient-Secret Masking Backstop (MEDIUM-2 + cross-cutting)
+
+As an operator, I want untrusted agent output rendered safely and runner secrets masked even if the agent surfaces them.
+**AC:** `summary-writer.ts` renders the final assistant message via `addCodeBlock` (inert; neutralizes markdown phishing links/images) keeping `scrubSecrets`+`truncateString`; `security.ts` extends the mask/scrub set with secrets the Action can enumerate (`GITHUB_TOKEN` if present + values parsed from `auth.json` in `applyAuth`) via `core.setSecret()` so they're masked in transcript/summary. Verified: an agent-emitted phishing link does not render as a clickable link; enumerable runner secrets are masked in artifacts. (FR72, NFR24) [Fixes AGENT-08; backstop for FINDING-5 output path]
+
+### Story 13.7: Threat-Model Docs + Digest-Pin Base Images (FINDING-3, FINDING-4)
+
+As an adopter, I want safe-deployment guidance and tamper-evident builds.
+**AC:** README + `SECURITY.md` gain a "Security Considerations / Threat Model" section covering: minimal `permissions:`, never `pull_request_target` + untrusted PR + secrets, `opencode_config` is trusted/credential-adjacent, `allow_bash` implications, egress filtering (`step-security/harden-runner`) for consumers who need it; Dockerfile base images pinned by `@sha256:` digest (aligns with `supply-chain-branch-remediation` decision on artifact integrity). (FR73) [Fixes FINDING-3, FINDING-4]
+
+### Story 13.8: Tests + Epic-End Security Re-Validation
+
+As a maintainer, I want unit coverage for every fix and proof that each red-team finding now PASSES.
+**AC:** Unit tests for `buildScopedEnv`, permission merge, baseURL allowlist (incl. private-range/metadata rejection + `allowed_provider_hosts` opt-in), global-timeout mapping, summary code-block, ambient-secret masking (≥80% on new logic). Create `_bmad-output/implementation-artifacts/test-design-epic-13.md`. At epic end (per validation policy): re-run the real `TC-REDTEAM-*`/`TC-AGENT-*` cases against the **live container** (authoritative-evidence-validation) using `github-copilot/gpt-5-mini` for funcval/manual and an opencode free model for e2e — every prior FAIL must flip to PASS, with regression confirmation that Copilot runs, fallback chain, transcript/summary, and free-model filtering still work. (covers all Epic 13 FRs/NFRs)
