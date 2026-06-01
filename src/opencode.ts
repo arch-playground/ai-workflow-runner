@@ -580,10 +580,14 @@ export class OpenCodeService {
       const logLine = this.formatTimestampedLog(message);
       if (part.state.status === 'pending') {
         core.debug(logLine);
-      } else if (part.state.status === 'error') {
-        core.warning(logLine);
       } else {
-        core.info(logLine);
+        core.startGroup(logLine);
+        if (part.state.status === 'error') {
+          core.warning(logLine);
+        } else {
+          core.info(logLine);
+        }
+        core.endGroup();
       }
 
       if (part.state.status !== 'pending') {

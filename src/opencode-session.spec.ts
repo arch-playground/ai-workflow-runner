@@ -448,6 +448,219 @@ describe('OpenCodeService - session & messages', () => {
     });
   });
 
+  describe('log-group wrapping', () => {
+    afterEach(() => {
+      resetToolLoggerFactory();
+    });
+
+    it('9-1-AC1: wraps completed tool log in startGroup/endGroup', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      // Act
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'bash',
+            state: {
+              status: 'completed',
+              input: { command: 'ls' },
+              output: 'file.txt',
+              title: '',
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        },
+      });
+
+      await flushMicrotasks();
+
+      // Assert
+      expect(mockCore.startGroup).toHaveBeenCalledTimes(1);
+      expect(mockCore.startGroup).toHaveBeenCalledWith(
+        expect.stringMatching(/^\[\d{4}-\d{2}-\d{2}T[^\]]+Z\] \[OpenCode\] Tool: bash - completed/)
+      );
+      expect(mockCore.endGroup).toHaveBeenCalledTimes(1);
+      expect(mockCore.info).toHaveBeenCalledWith(
+        expect.stringContaining('[OpenCode] Tool: bash - completed')
+      );
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('9-1-AC1: wraps error tool log in startGroup/endGroup and keeps core.warning channel', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      // Act
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'read',
+            state: {
+              status: 'error',
+              input: { filePath: './missing.ts' },
+              error: 'File not found',
+              time: { start: 0, end: 1 },
+            },
+          },
+        },
+      });
+
+      await flushMicrotasks();
+
+      // Assert
+      expect(mockCore.startGroup).toHaveBeenCalledTimes(1);
+      expect(mockCore.endGroup).toHaveBeenCalledTimes(1);
+      expect(mockCore.warning).toHaveBeenCalledTimes(1);
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('9-1-AC2: pending tool part goes to core.debug with no startGroup/endGroup', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      // Act
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'bash',
+            state: {
+              status: 'pending',
+              input: { command: 'ls' },
+              raw: '',
+            },
+          },
+        },
+      });
+
+      await flushMicrotasks();
+
+      // Assert
+      expect(mockCore.startGroup).not.toHaveBeenCalled();
+      expect(mockCore.endGroup).not.toHaveBeenCalled();
+      expect(mockCore.debug).toHaveBeenCalledWith(
+        expect.stringContaining('[OpenCode] Tool: bash - pending')
+      );
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('9-1-AC3: text parts are not wrapped in a group', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      // Act
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'text',
+            text: 'Assistant response text',
+            messageID: 'msg-1',
+            sessionID: 'session-123',
+          },
+        },
+      });
+
+      await flushMicrotasks();
+
+      // Assert
+      expect(mockCore.startGroup).not.toHaveBeenCalled();
+      expect(mockCore.endGroup).not.toHaveBeenCalled();
+      expect(mockCore.info).toHaveBeenCalledWith(
+        expect.stringContaining('Assistant response text')
+      );
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('9-1-AC4: exactly one startGroup/endGroup per tool call — no nesting', async () => {
+      // Arrange
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      // Act: emit two completed tool events sequentially
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'bash',
+            state: {
+              status: 'completed',
+              input: { command: 'ls' },
+              output: 'file.txt',
+              title: '',
+              metadata: {},
+              time: { start: 0, end: 1 },
+            },
+          },
+        },
+      });
+
+      await flushMicrotasks();
+
+      eventControl.emit({
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            type: 'tool',
+            tool: 'read',
+            state: {
+              status: 'completed',
+              input: { filePath: './README.md' },
+              output: '# README',
+              title: '',
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
+          },
+        },
+      });
+
+      await flushMicrotasks();
+
+      // Assert: two balanced pairs, never nested
+      expect(mockCore.startGroup).toHaveBeenCalledTimes(2);
+      expect(mockCore.endGroup).toHaveBeenCalledTimes(2);
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+  });
+
   describe('debug log integration', () => {
     let mockDebugWriter: jest.Mocked<ReturnType<typeof getDebugLogWriter>>;
 
