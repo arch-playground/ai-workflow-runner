@@ -116,7 +116,7 @@ development_status:
   10-1-join-provider-auth-state-with-model-cost: 'done'
   10-2-provider-aware-free-predicate: 'done'
   10-3-disable-free-models-input: 'done'
-  10-4-enrich-list-models-output: 'backlog'
+  10-4-enrich-list-models-output: 'done'
   10-5-subscription-providers-override: 'backlog'
   10-6-tests: 'backlog'
 

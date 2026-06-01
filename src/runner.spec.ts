@@ -535,8 +535,8 @@ describe('runner', () => {
         expect(mockOpenCodeService.sendFollowUp).not.toHaveBeenCalled();
       });
 
-      it('7.4-UNIT-003: prints models in exact format with header, model lines, and footer', async () => {
-        // Arrange
+      it('7.4-UNIT-003: prints models in exact format with header, model lines, footer, and pricing tag', async () => {
+        // Arrange — no cost → [unknown] tag
         mockOpenCodeService.listModels.mockResolvedValue([
           {
             id: 'claude-3-opus',
@@ -555,23 +555,21 @@ describe('runner', () => {
         // Assert
         expect(core.info).toHaveBeenCalledWith('=== Available Models ===');
         expect(core.info).toHaveBeenCalledWith(
-          '  - anthropic/claude-3-opus: Claude 3 Opus (Anthropic)'
+          '  - anthropic/claude-3-opus: Claude 3 Opus (Anthropic) [unknown]'
         );
-        expect(core.info).toHaveBeenCalledWith('  - openai/gpt-4: GPT-4 (OpenAI)');
+        expect(core.info).toHaveBeenCalledWith('  - openai/gpt-4: GPT-4 (OpenAI) [unknown]');
         expect(core.info).toHaveBeenCalledWith('========================');
       });
 
-      it('7.4-UNIT-004: returns success with models JSON', async () => {
+      it('7.4-UNIT-004: returns success with models JSON including pricing field', async () => {
         // Arrange
-        const models = [
-          {
-            id: 'claude-3-opus',
-            name: 'Claude 3 Opus',
-            provider: 'Anthropic',
-            providerId: 'anthropic',
-          },
-        ];
-        mockOpenCodeService.listModels.mockResolvedValue(models);
+        const rawModel = {
+          id: 'claude-3-opus',
+          name: 'Claude 3 Opus',
+          provider: 'Anthropic',
+          providerId: 'anthropic',
+        };
+        mockOpenCodeService.listModels.mockResolvedValue([rawModel]);
 
         const inputs = createValidInputs({ listModels: true });
 
@@ -580,7 +578,8 @@ describe('runner', () => {
 
         // Assert
         expect(result.success).toBe(true);
-        expect(result.output).toBe(JSON.stringify({ models }));
+        const parsed = JSON.parse(result.output) as { models: Array<{ pricing: string }> };
+        expect(parsed.models[0]).toMatchObject({ ...rawModel, pricing: 'unknown' });
         expect(result.error).toBeUndefined();
       });
 
@@ -702,6 +701,131 @@ describe('runner', () => {
         expect(result.success).toBe(true);
         const parsed = JSON.parse(result.output) as { models: unknown[] };
         expect(parsed.models).toHaveLength(2);
+      });
+    });
+
+    describe('pricing tag output (AC1, AC2, AC3)', () => {
+      it('10-4-AC1: printed lines include pricing tag for each model', async () => {
+        // Arrange
+        mockOpenCodeService.listModels.mockResolvedValue([
+          {
+            id: 'zen-free',
+            name: 'Zen Free',
+            provider: 'OpenCode Zen',
+            providerId: 'opencode-zen',
+            cost: { input: 0, output: 0 },
+            enabledVia: undefined,
+          },
+          {
+            id: 'copilot-gpt4o',
+            name: 'GPT-4o',
+            provider: 'GitHub Copilot',
+            providerId: 'github-copilot',
+            cost: { input: 0, output: 0 },
+            enabledVia: 'account',
+          },
+          {
+            id: 'claude-3-opus',
+            name: 'Claude 3 Opus',
+            provider: 'Anthropic',
+            providerId: 'anthropic',
+            cost: { input: 15, output: 75 },
+            enabledVia: 'account',
+          },
+          {
+            id: 'local-llm',
+            name: 'Local LLM',
+            provider: 'Local',
+            providerId: 'local',
+          },
+        ]);
+        const inputs = createValidInputs({ listModels: true });
+
+        // Act
+        await runWorkflow(inputs);
+
+        // Assert
+        expect(core.info).toHaveBeenCalledWith(
+          '  - opencode-zen/zen-free: Zen Free (OpenCode Zen) [free]'
+        );
+        expect(core.info).toHaveBeenCalledWith(
+          '  - github-copilot/copilot-gpt4o: GPT-4o (GitHub Copilot) [subscription]'
+        );
+        expect(core.info).toHaveBeenCalledWith(
+          '  - anthropic/claude-3-opus: Claude 3 Opus (Anthropic) [paid]'
+        );
+        expect(core.info).toHaveBeenCalledWith('  - local/local-llm: Local LLM (Local) [unknown]');
+      });
+
+      it('10-4-AC2: returned JSON includes pricing field on each model', async () => {
+        // Arrange
+        mockOpenCodeService.listModels.mockResolvedValue([
+          {
+            id: 'zen-free',
+            name: 'Zen Free',
+            provider: 'OpenCode Zen',
+            providerId: 'opencode-zen',
+            cost: { input: 0, output: 0 },
+            enabledVia: undefined,
+          },
+          {
+            id: 'copilot-gpt4o',
+            name: 'GPT-4o',
+            provider: 'GitHub Copilot',
+            providerId: 'github-copilot',
+            cost: { input: 0, output: 0 },
+            enabledVia: 'account',
+          },
+        ]);
+        const inputs = createValidInputs({ listModels: true });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert
+        const parsed = JSON.parse(result.output) as {
+          models: Array<{ id: string; pricing: string }>;
+        };
+        expect(parsed.models).toHaveLength(2);
+        expect(parsed.models.find((m) => m.id === 'zen-free')?.pricing).toBe('free');
+        expect(parsed.models.find((m) => m.id === 'copilot-gpt4o')?.pricing).toBe('subscription');
+      });
+
+      it('10-4-AC3: free models omitted first, survivors tagged (compose with disable_free_models)', async () => {
+        // Arrange
+        mockOpenCodeService.listModels.mockResolvedValue([
+          {
+            id: 'zen-free',
+            name: 'Zen Free',
+            provider: 'OpenCode Zen',
+            providerId: 'opencode-zen',
+            cost: { input: 0, output: 0 },
+            enabledVia: undefined,
+          },
+          {
+            id: 'copilot-gpt4o',
+            name: 'GPT-4o',
+            provider: 'GitHub Copilot',
+            providerId: 'github-copilot',
+            cost: { input: 0, output: 0 },
+            enabledVia: 'account',
+          },
+        ]);
+        const inputs = createValidInputs({ listModels: true, disableFreeModels: true });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert — free model omitted, subscription model present with tag
+        const parsed = JSON.parse(result.output) as {
+          models: Array<{ id: string; pricing: string }>;
+        };
+        expect(parsed.models).toHaveLength(1);
+        expect(parsed.models[0]).toMatchObject({ id: 'copilot-gpt4o', pricing: 'subscription' });
+        expect(core.info).not.toHaveBeenCalledWith(expect.stringContaining('zen-free'));
+        expect(core.info).toHaveBeenCalledWith(
+          '  - github-copilot/copilot-gpt4o: GPT-4o (GitHub Copilot) [subscription]'
+        );
       });
     });
   });
