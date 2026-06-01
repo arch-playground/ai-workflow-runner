@@ -82,6 +82,7 @@ describe('runner', () => {
     maxValidationRetries: INPUT_LIMITS.DEFAULT_VALIDATION_RETRY,
     listModels: false,
     disableFreeModels: false,
+    subscriptionProviders: [],
     debugLog: false,
     debugLogPath: '',
     exportTranscript: false,
@@ -828,6 +829,85 @@ describe('runner', () => {
         );
       });
     });
+
+    describe('subscription_providers override threading (AC3, AC4, AC5)', () => {
+      it('10-5-AC3: override provider cost-0 model is NOT omitted and tagged [subscription]', async () => {
+        // Arrange — "enterprise-gw" has cost 0 and no account auth, but is in the override
+        mockOpenCodeService.listModels.mockResolvedValue([
+          {
+            id: 'gw-model',
+            name: 'Gateway Model',
+            provider: 'Enterprise GW',
+            providerId: 'enterprise-gw',
+            cost: { input: 0, output: 0 },
+            enabledVia: undefined,
+          },
+          {
+            id: 'zen-free',
+            name: 'Zen Free',
+            provider: 'OpenCode Zen',
+            providerId: 'opencode-zen',
+            cost: { input: 0, output: 0 },
+            enabledVia: undefined,
+          },
+        ]);
+        const inputs = createValidInputs({
+          listModels: true,
+          disableFreeModels: true,
+          subscriptionProviders: ['enterprise-gw'],
+        });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert — override provider kept + tagged subscription; free provider omitted
+        const parsed = JSON.parse(result.output) as {
+          models: Array<{ id: string; pricing: string }>;
+        };
+        expect(parsed.models).toHaveLength(1);
+        expect(parsed.models[0]).toMatchObject({ id: 'gw-model', pricing: 'subscription' });
+        expect(core.info).toHaveBeenCalledWith(
+          '  - enterprise-gw/gw-model: Gateway Model (Enterprise GW) [subscription]'
+        );
+      });
+
+      it('10-5-AC5: empty subscriptionProviders behaves identically to before (backward compat)', async () => {
+        // Arrange — same two cost-0 models; empty override
+        mockOpenCodeService.listModels.mockResolvedValue([
+          {
+            id: 'zen-free',
+            name: 'Zen Free',
+            provider: 'OpenCode Zen',
+            providerId: 'opencode-zen',
+            cost: { input: 0, output: 0 },
+            enabledVia: undefined,
+          },
+          {
+            id: 'copilot-gpt4o',
+            name: 'GPT-4o',
+            provider: 'GitHub Copilot',
+            providerId: 'github-copilot',
+            cost: { input: 0, output: 0 },
+            enabledVia: 'account',
+          },
+        ]);
+        const inputs = createValidInputs({
+          listModels: true,
+          disableFreeModels: true,
+          subscriptionProviders: [],
+        });
+
+        // Act
+        const result = await runWorkflow(inputs);
+
+        // Assert — free omitted, subscription kept; same as 10-3 behavior
+        const parsed = JSON.parse(result.output) as {
+          models: Array<{ id: string; pricing: string }>;
+        };
+        expect(parsed.models).toHaveLength(1);
+        expect(parsed.models[0]).toMatchObject({ id: 'copilot-gpt4o', pricing: 'subscription' });
+      });
+    });
   });
 
   describe('disable_free_models run guard (AC4, AC5, AC6)', () => {
@@ -965,6 +1045,34 @@ describe('runner', () => {
       expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
       // listModels should NOT have been called (guard not invoked)
       expect(mockOpenCodeService.listModels).not.toHaveBeenCalled();
+    });
+
+    it('10-5-AC3: override provider in subscriptionProviders — run guard does NOT block it', async () => {
+      // Arrange — cost 0, no account auth, but in override → not free → not blocked
+      const workflowFile = path.join(tempDir, 'test-workflow.md');
+      fs.writeFileSync(workflowFile, '# Test');
+      mockOpenCodeService.listModels.mockResolvedValue([
+        {
+          id: 'gw-model',
+          name: 'Gateway Model',
+          provider: 'Enterprise GW',
+          providerId: 'enterprise-gw',
+          cost: { input: 0, output: 0 },
+          enabledVia: undefined,
+        },
+      ]);
+      const inputs = createValidInputs({
+        model: 'gw-model',
+        disableFreeModels: true,
+        subscriptionProviders: ['enterprise-gw'],
+      });
+
+      // Act
+      const result = await runWorkflow(inputs);
+
+      // Assert
+      expect(result.success).toBe(true);
+      expect(mockOpenCodeService.runSession).toHaveBeenCalledTimes(1);
     });
   });
 

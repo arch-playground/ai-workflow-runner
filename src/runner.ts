@@ -197,7 +197,8 @@ async function checkFreeModelGuard(
     return null;
   }
 
-  if (isFilterableFree(resolvedModel)) {
+  const subs = new Set(inputs.subscriptionProviders);
+  if (isFilterableFree(resolvedModel, subs)) {
     return {
       success: false,
       output: '',
@@ -218,8 +219,9 @@ async function handleListModels(inputs: ActionInputs): Promise<RunnerResult> {
     });
 
     const allModels = await opencode.listModels();
+    const subs = new Set(inputs.subscriptionProviders);
     const models = inputs.disableFreeModels
-      ? allModels.filter((m) => !isFilterableFree(m))
+      ? allModels.filter((m) => !isFilterableFree(m, subs))
       : allModels;
 
     if (inputs.disableFreeModels) {
@@ -231,7 +233,7 @@ async function handleListModels(inputs: ActionInputs): Promise<RunnerResult> {
 
     core.info('=== Available Models ===');
     const taggedModels = models.map((model) => {
-      const pricing = classifyPricing(model);
+      const pricing = classifyPricing(model, subs);
       return { ...model, pricing };
     });
     for (const model of taggedModels) {
