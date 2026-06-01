@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { loadFallbackConfig } from './fallback-config.js';
+import { loadFallbackConfig, preflightFallbackChain } from './fallback-config.js';
+import type { FallbackChain } from './types.js';
 
 describe('loadFallbackConfig', () => {
   let tempDir: string;
@@ -236,5 +237,95 @@ describe('loadFallbackConfig', () => {
       // Act & Assert
       expect(() => loadFallbackConfig(filePath)).toThrow(/Invalid JSON in fallback config file/);
     });
+  });
+});
+
+describe('preflightFallbackChain', () => {
+  const chain: FallbackChain = {
+    chain: [
+      { provider: 'github-copilot', model: 'github-copilot/gpt-5' },
+      { provider: 'anthropic', model: 'claude-3-opus' },
+      { provider: 'openai', model: 'gpt-4o' },
+    ],
+  };
+
+  it('11-2-AC1: returns only authenticated entries (viable subset)', () => {
+    // Arrange
+    const authed = new Set(['github-copilot', 'anthropic']);
+
+    // Act
+    const result = preflightFallbackChain(chain, authed);
+
+    // Assert
+    expect(result.viable).toHaveLength(2);
+    expect(result.viable[0]).toEqual({ provider: 'github-copilot', model: 'github-copilot/gpt-5' });
+    expect(result.viable[1]).toEqual({ provider: 'anthropic', model: 'claude-3-opus' });
+    expect(result.lookupFailed).toBe(false);
+  });
+
+  it('11-2-AC2: unauthenticated entries appear in skipped list', () => {
+    // Arrange — only anthropic authed; copilot + openai skipped
+    const authed = new Set(['anthropic']);
+
+    // Act
+    const result = preflightFallbackChain(chain, authed);
+
+    // Assert
+    expect(result.viable).toHaveLength(1);
+    expect(result.viable[0]).toMatchObject({ provider: 'anthropic' });
+    expect(result.skipped).toHaveLength(2);
+    expect(result.skipped[0]).toMatchObject({ provider: 'github-copilot' });
+    expect(result.skipped[1]).toMatchObject({ provider: 'openai' });
+    expect(result.lookupFailed).toBe(false);
+  });
+
+  it('11-2-AC3: all entries unauthenticated → empty viable list', () => {
+    // Arrange — no providers authed
+    const authed = new Set<string>();
+
+    // Act
+    const result = preflightFallbackChain(chain, authed);
+
+    // Assert
+    expect(result.viable).toHaveLength(0);
+    expect(result.skipped).toHaveLength(3);
+    expect(result.lookupFailed).toBe(false);
+  });
+
+  it('11-2-AC4: lookup failed (null) → all entries treated viable', () => {
+    // Arrange — null signals v2 call failed; must not strand the run
+    const authedProviderIds = null;
+
+    // Act
+    const result = preflightFallbackChain(chain, authedProviderIds);
+
+    // Assert — all 3 entries viable; no skipped; lookupFailed flag set
+    expect(result.viable).toHaveLength(3);
+    expect(result.skipped).toHaveLength(0);
+    expect(result.lookupFailed).toBe(true);
+  });
+
+  it('11-2-AC1: all entries authenticated → all viable', () => {
+    // Arrange
+    const authed = new Set(['github-copilot', 'anthropic', 'openai']);
+
+    // Act
+    const result = preflightFallbackChain(chain, authed);
+
+    // Assert
+    expect(result.viable).toHaveLength(3);
+    expect(result.skipped).toHaveLength(0);
+    expect(result.lookupFailed).toBe(false);
+  });
+
+  it('11-2-AC1: preserves original chain order in viable list', () => {
+    // Arrange — all authed
+    const authed = new Set(['github-copilot', 'anthropic', 'openai', 'extra-provider']);
+
+    // Act
+    const result = preflightFallbackChain(chain, authed);
+
+    // Assert — order preserved: copilot, anthropic, openai
+    expect(result.viable.map((e) => e.provider)).toEqual(['github-copilot', 'anthropic', 'openai']);
   });
 });

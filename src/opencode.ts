@@ -236,14 +236,45 @@ export class OpenCodeService {
     return models;
   }
 
+  async getProviderAuthMap(): Promise<Map<string, 'env' | 'account' | 'custom'>> {
+    if (this.isDisposed) {
+      throw new Error('OpenCode service disposed - cannot get provider auth map');
+    }
+    if (!this.client) throw new Error('OpenCode client not initialized - call initialize() first');
+    return this.buildProviderAuthMap();
+  }
+
+  /**
+   * Returns the set of authenticated provider ids, or null if the v2 lookup fails.
+   * null signals graceful-degradation: callers should treat all providers as viable (AC4).
+   */
+  async getAuthenticatedProviderIds(): Promise<Set<string> | null> {
+    if (this.isDisposed) {
+      throw new Error('OpenCode service disposed - cannot get authenticated providers');
+    }
+    if (!this.client) throw new Error('OpenCode client not initialized - call initialize() first');
+    try {
+      const providers = await this.fetchV2Providers();
+      const ids = new Set<string>();
+      for (const prov of providers) {
+        if (prov.enabled !== false && prov.enabled !== null && prov.enabled !== undefined) {
+          ids.add(prov.id);
+        }
+      }
+      return ids;
+    } catch (err) {
+      core.debug(
+        `[OpenCode] v2.provider.list() failed during preflight — treating all providers as viable: ${String(err)}`
+      );
+      return null;
+    }
+  }
+
   private async buildProviderAuthMap(): Promise<Map<string, 'env' | 'account' | 'custom'>> {
     try {
-      const v2Response = await this.client!.v2.provider.list();
-      const rawData = (v2Response as { data?: unknown }).data;
-      const providers = Array.isArray(rawData) ? rawData : [];
+      const providers = await this.fetchV2Providers();
       const map = new Map<string, 'env' | 'account' | 'custom'>();
-      for (const p of providers) {
-        const prov = p as { id: string; enabled: unknown };
+      for (const prov of providers) {
         if (prov.enabled && typeof prov.enabled === 'object' && 'via' in prov.enabled) {
           const via = (prov.enabled as { via: string }).via;
           if (via === 'env' || via === 'account' || via === 'custom') {
@@ -258,6 +289,13 @@ export class OpenCodeService {
       );
       return new Map();
     }
+  }
+
+  private async fetchV2Providers(): Promise<Array<{ id: string; enabled: unknown }>> {
+    const v2Response = await this.client!.v2.provider.list();
+    const rawData = (v2Response as { data?: unknown }).data;
+    const providers = Array.isArray(rawData) ? rawData : [];
+    return providers as Array<{ id: string; enabled: unknown }>;
   }
 
   async exportTranscript(sessionId: string): Promise<unknown[]> {
