@@ -114,7 +114,7 @@ development_status:
   # Epic 10: Model Selection & Free-Model Filtering (Phase 2)
   epic-10: 'in-progress'
   10-1-join-provider-auth-state-with-model-cost: 'done'
-  10-2-provider-aware-free-predicate: 'backlog'
+  10-2-provider-aware-free-predicate: 'done'
   10-3-disable-free-models-input: 'backlog'
   10-4-enrich-list-models-output: 'backlog'
   10-5-subscription-providers-override: 'backlog'
