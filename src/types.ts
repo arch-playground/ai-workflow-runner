@@ -21,6 +21,18 @@ export interface FallbackChain {
   chain: FallbackChainEntry[];
 }
 
+export interface FallbackAttemptFailure {
+  provider: string;
+  model: string;
+  error: string;
+}
+
+export interface FallbackSelectionResult {
+  success: boolean;
+  session?: OpenCodeSession;
+  failures: FallbackAttemptFailure[];
+}
+
 export interface ActionInputs {
   workflowPath: string;
   prompt: string;

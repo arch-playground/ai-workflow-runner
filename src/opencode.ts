@@ -3,7 +3,13 @@ import type { ToolState } from '@opencode-ai/sdk/v2';
 import * as core from '@actions/core';
 import * as fs from 'fs';
 import * as path from 'path';
-import { OpenCodeSession, ModelListItem, INPUT_LIMITS } from './types.js';
+import {
+  OpenCodeSession,
+  ModelListItem,
+  FallbackChainEntry,
+  FallbackSelectionResult,
+  INPUT_LIMITS,
+} from './types.js';
 import { truncateString } from './security.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
 import { getDebugLogWriter } from './debug-log-writer.js';
@@ -88,6 +94,10 @@ export class OpenCodeService {
   private sessionCompletionCallbacks: Map<string, SessionCallbacks> = new Map();
   private sessionMessageState: Map<string, SessionMessageState> = new Map();
   private heartbeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private sessionStartWatchers: Map<
+    string,
+    { onCommit: () => void; onEarlyError: (reason: string) => void }
+  > = new Map();
 
   async initialize(options?: InitializeOptions): Promise<void> {
     if (this.initializationError) {
@@ -352,6 +362,157 @@ export class OpenCodeService {
     return { sessionId, lastMessage: this.getLastMessage(sessionId) };
   }
 
+  async runSessionWithFallback(
+    prompt: string,
+    viableChain: FallbackChainEntry[],
+    timeoutMs: number,
+    abortSignal?: AbortSignal
+  ): Promise<FallbackSelectionResult> {
+    if (this.isDisposed) {
+      throw new Error('OpenCode service disposed - cannot run session with fallback');
+    }
+    if (!this.client) throw new Error('OpenCode client not initialized - call initialize() first');
+
+    const failures: { provider: string; model: string; error: string }[] = [];
+
+    for (const entry of viableChain) {
+      if (abortSignal?.aborted) {
+        return { success: false, session: undefined, failures };
+      }
+
+      core.info(`[OpenCode] Trying fallback provider: ${entry.provider} / model: ${entry.model}`);
+
+      const sessionResponse = await this.client.session.create({ title: 'AI Workflow' });
+      if (!sessionResponse.data) throw new Error('Failed to create OpenCode session');
+      const sessionId = sessionResponse.data.id;
+
+      this.sessionMessageState.set(sessionId, {
+        currentMessageId: null,
+        messageBuffer: '',
+        lastCompleteMessage: '',
+      });
+
+      core.info(`[OpenCode] Session created: ${sessionId}`);
+      core.info(this.formatTimestampedLog('Session started'));
+      getDebugLogWriter().writeSessionEvent('Session started');
+
+      const committed = await this.watchForCommitOrEarlyError(
+        sessionId,
+        prompt,
+        entry,
+        timeoutMs,
+        abortSignal
+      );
+
+      if (committed.committed) {
+        const idleSession = await this.waitForSessionIdleAfterCommit(
+          sessionId,
+          timeoutMs,
+          abortSignal
+        );
+        return { success: true, session: idleSession, failures };
+      }
+
+      failures.push({
+        provider: entry.provider,
+        model: entry.model,
+        error: committed.errorReason,
+      });
+
+      this.sessionMessageState.delete(sessionId);
+      core.warning(
+        `[OpenCode] Provider ${entry.provider} failed at startup: ${committed.errorReason} — advancing to next entry`
+      );
+    }
+
+    return { success: false, session: undefined, failures };
+  }
+
+  private async watchForCommitOrEarlyError(
+    sessionId: string,
+    prompt: string,
+    entry: FallbackChainEntry,
+    timeoutMs: number,
+    abortSignal?: AbortSignal
+  ): Promise<{ committed: boolean; errorReason: string }> {
+    return new Promise((resolve) => {
+      let resolved = false;
+
+      const onCommit = (): void => {
+        if (resolved) return;
+        resolved = true;
+        this.sessionStartWatchers.delete(sessionId);
+        resolve({ committed: true, errorReason: '' });
+      };
+
+      const onEarlyError = (reason: string): void => {
+        if (resolved) return;
+        resolved = true;
+        this.sessionStartWatchers.delete(sessionId);
+        const callbacks = this.sessionCompletionCallbacks.get(sessionId);
+        if (callbacks?.abortCleanup) callbacks.abortCleanup();
+        this.sessionCompletionCallbacks.delete(sessionId);
+        resolve({ committed: false, errorReason: reason });
+      };
+
+      const timeoutId = setTimeout(() => {
+        onEarlyError(`timed out after ${timeoutMs}ms`);
+      }, timeoutMs);
+
+      const wrappedCommit = (): void => {
+        clearTimeout(timeoutId);
+        onCommit();
+      };
+
+      const wrappedError = (reason: string): void => {
+        clearTimeout(timeoutId);
+        onEarlyError(reason);
+      };
+
+      this.sessionStartWatchers.set(sessionId, {
+        onCommit: wrappedCommit,
+        onEarlyError: wrappedError,
+      });
+
+      const promptModel = { providerID: entry.provider, modelID: entry.model };
+
+      this.client!.session.promptAsync({
+        sessionID: sessionId,
+        parts: [{ type: 'text', text: prompt }],
+        model: promptModel,
+      })
+        .then((promptResponse) => {
+          if (promptResponse.error) {
+            wrappedError(`Prompt failed: ${JSON.stringify(promptResponse.error)}`);
+          }
+        })
+        .catch((err: unknown) => {
+          wrappedError(String(err));
+        });
+
+      if (abortSignal) {
+        abortSignal.addEventListener(
+          'abort',
+          () => {
+            wrappedError('Session aborted');
+          },
+          { once: true }
+        );
+      }
+    });
+  }
+
+  private async waitForSessionIdleAfterCommit(
+    sessionId: string,
+    timeoutMs: number,
+    abortSignal?: AbortSignal
+  ): Promise<OpenCodeSession> {
+    const idlePromise = this.waitForSessionIdle(sessionId, timeoutMs, abortSignal);
+    core.info(this.formatTimestampedLog('Provider committed — waiting for session to complete...'));
+    await idlePromise;
+    return { sessionId, lastMessage: this.getLastMessage(sessionId) };
+  }
+
   async sendFollowUp(
     sessionId: string,
     message: string,
@@ -599,6 +760,13 @@ export class OpenCodeService {
     core.error(this.formatTimestampedLog(`Session error for ${sessionID}: ${errorMessage}`), {
       title: 'Session error',
     });
+
+    const watcher = this.sessionStartWatchers.get(sessionID);
+    if (watcher) {
+      watcher.onEarlyError(errorMessage);
+      return;
+    }
+
     this.finalizeSession(sessionID, true, errorMessage);
   }
 
@@ -645,6 +813,7 @@ export class OpenCodeService {
 
     if (part?.type === 'text' && part.text && part.sessionID) {
       this.handleTextPart(part);
+      this.notifyCommitWatcher(part.sessionID);
     }
 
     if (part?.type === 'compaction' && part.sessionID) {
@@ -658,6 +827,10 @@ export class OpenCodeService {
       getDebugLogWriter().writeSessionEvent(
         `Context compaction triggered [${autoLabel}${overflowLabel}] for session ${part.sessionID}`
       );
+    }
+
+    if (part?.type === 'tool' && part.tool && part.state && part.sessionID) {
+      this.notifyCommitWatcher(part.sessionID);
     }
 
     if (part?.type === 'tool' && part.tool && part.state) {
@@ -678,6 +851,15 @@ export class OpenCodeService {
           getDebugLogWriter().writeToolEvent(debugLog);
         }
       }
+    }
+  }
+
+  private notifyCommitWatcher(sessionId: string): void {
+    const watcher = this.sessionStartWatchers.get(sessionId);
+    if (!watcher) return;
+    const state = this.sessionMessageState.get(sessionId);
+    if (state?.currentMessageId) {
+      watcher.onCommit();
     }
   }
 

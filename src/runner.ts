@@ -11,6 +11,7 @@ import {
 } from './security.js';
 import { getOpenCodeService, OpenCodeService } from './opencode.js';
 import { isFilterableFree, classifyPricing } from './model-filter.js';
+import { loadFallbackConfig, preflightFallbackChain } from './fallback-config.js';
 import { executeValidationScript } from './validation.js';
 import { initDebugLogWriter } from './debug-log-writer.js';
 import { writeTranscript } from './transcript-writer.js';
@@ -88,7 +89,45 @@ export async function runWorkflow(
       if (freeGuardResult) return freeGuardResult;
     }
 
-    session = await opencode.runSession(fullPrompt, timeoutMs, abortSignal);
+    if (inputs.fallbackConfig) {
+      const chain = loadFallbackConfig(inputs.fallbackConfig);
+      const authedIds = await opencode.getAuthenticatedProviderIds();
+      const preflight = preflightFallbackChain(chain, authedIds);
+      for (const skipped of preflight.skipped) {
+        core.warning(
+          `Fallback provider '${skipped.provider}' is not authenticated (no credentials in auth_config) — skipping`,
+          { title: 'Fallback provider skipped' }
+        );
+      }
+      const viableChain = preflight.viable;
+      if (viableChain.length === 0) {
+        return {
+          success: false,
+          output: '',
+          error:
+            'All fallback chain providers are unauthenticated. Check auth_config covers all chain entries.',
+        };
+      }
+      const fallbackResult = await opencode.runSessionWithFallback(
+        fullPrompt,
+        viableChain,
+        timeoutMs,
+        abortSignal
+      );
+      if (!fallbackResult.success || !fallbackResult.session) {
+        const reasons = fallbackResult.failures
+          .map((f) => `${f.provider}/${f.model}: ${f.error}`)
+          .join('; ');
+        return {
+          success: false,
+          output: '',
+          error: `All fallback providers failed at startup. Failures: ${reasons}`,
+        };
+      }
+      session = fallbackResult.session;
+    } else {
+      session = await opencode.runSession(fullPrompt, timeoutMs, abortSignal);
+    }
 
     if (inputs.validationScript) {
       session = await runValidationLoop(session, {
