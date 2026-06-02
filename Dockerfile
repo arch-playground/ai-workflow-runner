@@ -1,5 +1,6 @@
 # Stage 1: Bundle stage - install deps and build the application
-FROM node:20-bookworm-slim AS bundler
+# Pinned by digest for tamper-evident builds; tag: node:20-bookworm-slim. Dependabot (docker ecosystem) bumps this.
+FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS bundler
 
 WORKDIR /build
 
@@ -9,8 +10,8 @@ RUN npm ci
 COPY src/ src/
 RUN npm run bundle
 
-# Stage 2: System builder - install system packages and runtimes
-FROM debian:bookworm-slim AS builder
+# Stage 2: System builder - install system packages and runtimes; tag: debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -38,8 +39,8 @@ RUN apt-get update && \
 # Install OpenCode CLI globally (required for @opencode-ai/sdk)
 RUN npm install -g opencode-ai@1.15.13
 
-# Stage 3: Runtime stage - minimal image with only necessary files
-FROM debian:bookworm-slim AS runtime
+# Stage 3: Runtime stage - minimal image with only necessary files; tag: debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:0104b334637a5f19aa9c983a91b54c89887c0984081f2068983107a6f6c21eeb AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/arch-playground/ai-workflow-runner"
 LABEL org.opencontainers.image.description="AI Workflow Runner - Multi-runtime GitHub Action"
