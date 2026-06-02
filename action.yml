@@ -92,6 +92,10 @@ inputs:
     description: 'Comma-separated list of additional provider host globs permitted to receive credentials (e.g. "my-gateway.example.com,*.internal-ai.corp"). Extends the built-in allowlist. Default: empty (only built-in hosts allowed).'
     required: false
     default: ''
+  webfetch_allowed_domains:
+    description: 'Comma-separated list of domains the agent may webfetch (e.g. "github.com,docs.example.com"). Default: empty (webfetch fully denied). Security: each added domain widens the agent network surface; use the minimum necessary.'
+    required: false
+    default: ''
 
 outputs:
   status:

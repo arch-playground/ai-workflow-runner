@@ -49,6 +49,7 @@ describe('index', () => {
     writeJobSummary: false,
     bashAllowPatterns: '',
     allowedProviderHosts: [],
+    webfetchAllowedDomains: [],
   });
 
   const setupMocks = (): void => {

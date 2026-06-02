@@ -268,6 +268,60 @@ describe('OpenCodeService', () => {
         // Assert — LSP tool flag must reach the child
         expect(envAtSpawn['OPENCODE_EXPERIMENTAL_LSP_TOOL']).toBe('true');
       });
+
+      it('13-9-AC3: OPENCODE_PERMISSION is set on scoped env when webfetchAllowedDomains is non-empty', async () => {
+        // Arrange
+        let envAtSpawn: Record<string, string | undefined> = {};
+        mockCreateOpencodeServer.mockImplementation(async () => {
+          envAtSpawn = { ...process.env };
+          return mockServer;
+        });
+        const target = new OpenCodeService();
+
+        // Act
+        await target.initialize({ webfetchAllowedDomains: ['github.com', 'docs.example.com'] });
+
+        // Assert — OPENCODE_PERMISSION must be present and scoped to webfetch only
+        expect(envAtSpawn['OPENCODE_PERMISSION']).toBeDefined();
+        const parsed = JSON.parse(envAtSpawn['OPENCODE_PERMISSION']!) as Record<string, unknown>;
+        expect(Object.keys(parsed)).toEqual(['webfetch']);
+        const webfetch = parsed['webfetch'] as Record<string, string>;
+        expect(webfetch['https://github.com/*']).toBe('allow');
+        expect(webfetch['https://docs.example.com/*']).toBe('allow');
+        expect(webfetch['*']).toBe('deny');
+      });
+
+      it('13-9-AC3: OPENCODE_PERMISSION is NOT set when webfetchAllowedDomains is empty', async () => {
+        // Arrange
+        let envAtSpawn: Record<string, string | undefined> = {};
+        mockCreateOpencodeServer.mockImplementation(async () => {
+          envAtSpawn = { ...process.env };
+          return mockServer;
+        });
+        const target = new OpenCodeService();
+
+        // Act
+        await target.initialize({ webfetchAllowedDomains: [] });
+
+        // Assert — env var must not be set (webfetch stays denied via 13-2 baseline)
+        expect(envAtSpawn['OPENCODE_PERMISSION']).toBeUndefined();
+      });
+
+      it('13-9-AC3: OPENCODE_PERMISSION is NOT set when webfetchAllowedDomains is omitted', async () => {
+        // Arrange
+        let envAtSpawn: Record<string, string | undefined> = {};
+        mockCreateOpencodeServer.mockImplementation(async () => {
+          envAtSpawn = { ...process.env };
+          return mockServer;
+        });
+        const target = new OpenCodeService();
+
+        // Act — no webfetchAllowedDomains option passed
+        await target.initialize();
+
+        // Assert
+        expect(envAtSpawn['OPENCODE_PERMISSION']).toBeUndefined();
+      });
     });
   });
 

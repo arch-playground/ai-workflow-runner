@@ -22,7 +22,12 @@ import {
   isAllowedProviderHost,
   maskAuthValues,
 } from './security.js';
-import { buildAgentPermission, parseBashAllowPatterns, shouldAutoApprove } from './permissions.js';
+import {
+  buildAgentPermission,
+  buildWebfetchPermissionEnv,
+  parseBashAllowPatterns,
+  shouldAutoApprove,
+} from './permissions.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
 import { getDebugLogWriter } from './debug-log-writer.js';
 
@@ -34,6 +39,7 @@ export interface InitializeOptions {
   bashAllowPatterns?: string;
   agentWorkingDirectory?: string;
   allowedProviderHosts?: string[];
+  webfetchAllowedDomains?: string[];
 }
 
 // Fixed token for stop-commands bracketing. A constant is acceptable here because the
@@ -149,6 +155,17 @@ export class OpenCodeService {
     const scopedEnv = buildScopedEnv(options?.envVars ?? {});
     // LSP tool flag must reach the child process; set it explicitly in the scoped env.
     scopedEnv['OPENCODE_EXPERIMENTAL_LSP_TOOL'] = 'true';
+
+    // Webfetch per-domain allowlist: inject as OPENCODE_PERMISSION env var (object form).
+    // This env var is JSON.parse'd post-validation by opencode (config.ts:748) and never
+    // re-validated, so the object form survives where OPENCODE_CONFIG_CONTENT strict decode
+    // would crash.  Scoped to {"webfetch": ...} only — OPENCODE_PERMISSION mergeDeeps across
+    // all keys; including other keys here would clobber permissions set via opencode_config.
+    // Empty domains → undefined → env var not set → webfetch stays denied (13-2 baseline).
+    const webfetchEnv = buildWebfetchPermissionEnv(options?.webfetchAllowedDomains ?? []);
+    if (webfetchEnv !== undefined) {
+      scopedEnv['OPENCODE_PERMISSION'] = webfetchEnv;
+    }
 
     for (const key of Object.keys(process.env)) {
       if (!(key in scopedEnv)) {

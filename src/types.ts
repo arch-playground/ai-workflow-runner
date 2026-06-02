@@ -56,6 +56,7 @@ export interface ActionInputs {
   bashAllowPatterns: string;
   agentWorkingDirectory?: string;
   allowedProviderHosts: string[];
+  webfetchAllowedDomains: string[];
 }
 
 export interface OpenCodeSession {

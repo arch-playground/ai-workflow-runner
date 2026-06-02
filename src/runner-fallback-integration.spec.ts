@@ -102,6 +102,7 @@ describe('runWorkflow — Epic 11 fallback pipeline (integration)', () => {
       writeJobSummary: false,
       bashAllowPatterns: '',
       allowedProviderHosts: [],
+      webfetchAllowedDomains: [],
       ...overrides,
     };
   }

@@ -1,6 +1,10 @@
+---
+baseline_commit: 35294e9a58935ddb7a4f1522e367548cd6861210
+---
+
 # Story 13.9: Webfetch Per-Domain Allowlist (via OPENCODE_PERMISSION env)
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -90,3 +94,11 @@ _(developer)_
 ### File List
 
 _(developer)_
+
+## QA Results (leader code review + light funcval, 2026-06-02)
+
+**Code review: PASS.** `buildWebfetchPermissionEnv` (permissions.ts): filters empty, `https://<domain>/*:allow` per domain + `*:deny` LAST (findLast), scoped to `{webfetch:...}` only, returns undefined when empty. Injection (opencode.ts:doInitialize): set on scopedEnv next to the LSP flag, inside the env bracket (reaches opencode serve, restored after); only when non-empty. permissions.ts `webfetch:'deny'` baseline untouched. Comment accurately documents the type-hidden OPENCODE_PERMISSION mechanism + webfetch-only scoping.
+
+**Light funcval: PASS** — bundle builds; builder unit tests (empty→undefined, whitespace-filter, single/multi domain allow+deny-last, valid JSON) + OPENCODE_PERMISSION-on-env assertions present. 826/826 tests pass. The live real-container allow/deny webfetch smoke test (github allowed, off-list denied) is deferred to the 13-8 epic-end funcval per the story (needs a live agent + network) — it's the gating test for this type-hidden-behavior feature.
+
+**Note:** leader completed the wrap-up (status→done, this QA note) — dev left it at in-progress (channel lag) but the work is complete + green + reviewed.

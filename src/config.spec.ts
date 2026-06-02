@@ -702,6 +702,52 @@ describe('config', () => {
       });
     });
 
+    describe('webfetch_allowed_domains parsing', () => {
+      it('13-9-AC1: parses single domain', () => {
+        // Arrange
+        mockInputs({ webfetch_allowed_domains: 'github.com' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.webfetchAllowedDomains).toEqual(['github.com']);
+      });
+
+      it('13-9-AC1: parses comma-separated list', () => {
+        // Arrange
+        mockInputs({ webfetch_allowed_domains: 'github.com,docs.example.com' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.webfetchAllowedDomains).toEqual(['github.com', 'docs.example.com']);
+      });
+
+      it('13-9-AC1: trims whitespace around each entry', () => {
+        // Arrange
+        mockInputs({ webfetch_allowed_domains: ' github.com , docs.example.com ' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.webfetchAllowedDomains).toEqual(['github.com', 'docs.example.com']);
+      });
+
+      it('13-9-AC1: returns [] when input is empty (default — webfetch stays denied)', () => {
+        // Arrange
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.webfetchAllowedDomains).toEqual([]);
+      });
+    });
+
     describe('debug_log parsing', () => {
       let originalActionsStepDebug: string | undefined;
       let originalRunnerDebug: string | undefined;
@@ -1152,6 +1198,7 @@ describe('config', () => {
         writeJobSummary: false,
         bashAllowPatterns: '',
         allowedProviderHosts: [],
+        webfetchAllowedDomains: [],
       };
 
       // Act
@@ -1180,6 +1227,7 @@ describe('config', () => {
         writeJobSummary: false,
         bashAllowPatterns: '',
         allowedProviderHosts: [],
+        webfetchAllowedDomains: [],
       };
 
       // Act
@@ -1208,6 +1256,7 @@ describe('config', () => {
         writeJobSummary: false,
         bashAllowPatterns: '',
         allowedProviderHosts: [],
+        webfetchAllowedDomains: [],
       };
 
       // Act
@@ -1236,6 +1285,7 @@ describe('config', () => {
         writeJobSummary: false,
         bashAllowPatterns: '',
         allowedProviderHosts: [],
+        webfetchAllowedDomains: [],
       };
 
       // Act
@@ -1264,6 +1314,7 @@ describe('config', () => {
         writeJobSummary: false,
         bashAllowPatterns: '',
         allowedProviderHosts: [],
+        webfetchAllowedDomains: [],
       };
 
       // Act

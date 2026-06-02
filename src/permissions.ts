@@ -205,3 +205,49 @@ const AUTO_APPROVE_PERMISSIONS = new Set([
 export function shouldAutoApprove(permissionName: string): boolean {
   return AUTO_APPROVE_PERMISSIONS.has(permissionName);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Webfetch per-domain allowlist (via OPENCODE_PERMISSION env var)
+//
+// Background: the documented Config.permission.webfetch is typed as a tri-state
+// Action — an object form crashes strict schema decode (config.ts strict mode).
+// The OPENCODE_PERMISSION env var is JSON.parse'd AFTER schema validation and
+// never re-decoded, so the object form survives (config.ts:748).  The SDK
+// spreads process.env onto opencode serve, so setting this var on scopedEnv
+// before spawn is sufficient.
+//
+// IMPORTANT: scope the JSON to {"webfetch": ...} ONLY.  OPENCODE_PERMISSION
+// mergeDeeps across all permission keys — including bash/external_directory —
+// so any other key here would override what we set via opencode_config.
+//
+// Rule order: allow-globs first, "*":"deny" last (findLast precedence).
+//
+// Verified for opencode 1.15.13.  Re-verify on opencode upgrades (Epic 12
+// currency guard).  If this env-merge behavior breaks, fall back to a
+// tool.execute.before plugin that inspects output.args.url and throws for
+// off-allowlist hostnames (research Option B).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Builds the OPENCODE_PERMISSION env-var JSON string for a webfetch domain allowlist.
+ *
+ * @param domains - List of allowed host globs (e.g. ["github.com", "docs.example.com"]).
+ * @returns JSON string scoped to {"webfetch": {<allow rules>, "*":"deny"}} when domains
+ *   is non-empty, or undefined when empty (webfetch stays denied via the 13-2 baseline).
+ */
+export function buildWebfetchPermissionEnv(domains: string[]): string | undefined {
+  const nonEmpty = domains.filter((d) => d.trim().length > 0);
+  if (nonEmpty.length === 0) {
+    return undefined;
+  }
+
+  const webfetchRules: Record<string, string> = {};
+  for (const domain of nonEmpty) {
+    // Allow the domain root and all paths under it.
+    webfetchRules[`https://${domain}/*`] = 'allow';
+  }
+  // Catch-all deny LAST — findLast means this wins over unmatched URLs.
+  webfetchRules['*'] = 'deny';
+
+  return JSON.stringify({ webfetch: webfetchRules });
+}

@@ -249,6 +249,12 @@ export function getInputs(): ActionInputs {
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
+  const webfetchAllowedDomains = core
+    .getInput('webfetch_allowed_domains')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
   const agentWorkingDirectoryRaw = core.getInput('agent_working_directory') || '';
   let agentWorkingDirectory: string | undefined;
   if (agentWorkingDirectoryRaw) {
@@ -279,6 +285,7 @@ export function getInputs(): ActionInputs {
     bashAllowPatterns,
     agentWorkingDirectory,
     allowedProviderHosts,
+    webfetchAllowedDomains,
   };
 }
 
