@@ -387,9 +387,9 @@ _Note: Pure open-source community tool with no commercial objectives._
 ### Security Hardening (Phase 2 — Epic 13, red-team remediation)
 
 - **FR66:** System scopes the AI agent server's process environment to an allowlist (runtime vars + declared `env_vars`), so the agent cannot read ambient runner secrets it was not given (`GITHUB_TOKEN`, cloud creds)
-- **FR67:** System denies the agent's `bash`, `webfetch`, and `websearch` tools by default while keeping knowledge-extraction tools (read/glob/grep/LSP) enabled, and applies the Action's security permission rules so consumer config cannot weaken them (last-match-wins)
-- **FR68:** User can opt into the dangerous tools via `allow_bash` / `allow_webfetch` inputs (default off) for workflows that legitimately run commands
-- **FR69:** System runs the Action's Node process as a non-root user (privilege drop after entrypoint setup) with the agent's HOME/XDG located outside the workspace
+- **FR67:** System restricts the agent's `bash` tool to a curated allowlist of read-only commands (grep/ls/find/cat/head/tail/wc/tree/git log|show|diff|blame, …) and denies all others; allows `websearch`; default-denies `webfetch`; and confines the agent to the working directory (`external_directory: deny`) so it cannot read paths outside `GITHUB_WORKSPACE`. The Action's security permission rules are applied last (last-match-wins) so consumer config cannot weaken them.
+- **FR68:** User can extend the bash command allowlist via a `bash_allow_patterns` input and enable `webfetch` via an `allow_webfetch` input (default off). (Per-domain webfetch allowlisting is not natively supported by OpenCode config and is a documented follow-up.)
+- **FR69:** System runs the Action's Node process as a non-root user (privilege drop after entrypoint setup)
 - **FR70:** System validates consumer-supplied provider `baseURL`/`endpoint` against a host allowlist (https-only, private/metadata ranges blocked), extensible via `allowed_provider_hosts`, and refuses to attach credentials to a non-allowlisted endpoint
 - **FR71:** System enforces `timeout_minutes` as a hard wall-clock ceiling across the entire run including the validation-retry loop, reporting status `timeout` distinctly from `cancelled`
 - **FR72:** System renders untrusted agent output in the job summary as inert preformatted text (no markdown/link rendering)
