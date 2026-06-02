@@ -590,6 +590,95 @@ describe('index', () => {
     });
   });
 
+  describe('13-5: global wall-clock timeout', () => {
+    it('passes a combined AbortSignal (not raw shutdownController.signal) to runWorkflow', async () => {
+      // Arrange
+      let capturedSignal: AbortSignal | undefined;
+      mockRunWorkflow.mockImplementation(
+        (_inputs: ActionInputs, _timeout: number, signal?: AbortSignal) => {
+          capturedSignal = signal;
+          return Promise.resolve({ success: true, output: '{}' });
+        }
+      );
+
+      // Act
+      await loadAndFlush();
+
+      // Assert: signal is an AbortSignal (the combined one)
+      expect(capturedSignal).toBeDefined();
+      expect(capturedSignal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('sets status to timeout when deadline fires (TimeoutError reason)', async () => {
+      // Arrange — simulate runWorkflow throwing a TimeoutError (as AbortSignal.timeout does)
+      // AbortSignal.timeout() produces an Error with name === 'TimeoutError'
+      const timeoutError = Object.assign(new Error('signal timed out'), { name: 'TimeoutError' });
+      mockRunWorkflow.mockRejectedValue(timeoutError);
+
+      // Act
+      await loadAndFlush();
+
+      // Assert
+      expect(mockCore.setOutput).toHaveBeenCalledWith('status', 'timeout');
+    });
+
+    it('sets status to cancelled on SIGTERM (shutdownController aborted, not TimeoutError)', async () => {
+      // Arrange — runWorkflow resolves after signal fires
+      mockRunWorkflow.mockImplementation(
+        (_inputs: ActionInputs, _timeout: number, signal?: AbortSignal) =>
+          new Promise((resolve) => {
+            if (signal) {
+              signal.addEventListener('abort', () =>
+                resolve({ success: false, output: '', error: 'Aborted' })
+              );
+            }
+          })
+      );
+      await loadAndFlush();
+
+      // Act — SIGTERM triggers shutdown
+      sigTermHandler!();
+      await flushPromises();
+
+      // Assert
+      expect(mockCore.setOutput).toHaveBeenCalledWith('status', 'cancelled');
+    });
+
+    it('does not call setFailed when status is timeout', async () => {
+      // Arrange
+      const timeoutError = Object.assign(new Error('signal timed out'), { name: 'TimeoutError' });
+      mockRunWorkflow.mockRejectedValue(timeoutError);
+
+      // Act
+      await loadAndFlush();
+
+      // Assert — setFailed must NOT be called for timeout (it would end the step immediately)
+      expect(mockCore.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('does not call setFailed when status is cancelled', async () => {
+      // Arrange
+      mockRunWorkflow.mockImplementation(
+        (_inputs: ActionInputs, _timeout: number, signal?: AbortSignal) =>
+          new Promise((resolve) => {
+            if (signal) {
+              signal.addEventListener('abort', () =>
+                resolve({ success: false, output: '', error: 'Aborted' })
+              );
+            }
+          })
+      );
+      await loadAndFlush();
+
+      // Act
+      sigTermHandler!();
+      await flushPromises();
+
+      // Assert
+      expect(mockCore.setFailed).not.toHaveBeenCalled();
+    });
+  });
+
   describe('transcript_json_path output (9-6)', () => {
     beforeEach(() => {
       setupMocks();

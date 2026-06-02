@@ -519,6 +519,66 @@ describe('runner', () => {
       expect(core.warning).toHaveBeenCalledWith(expect.stringContaining('Error on attempt 1'));
     });
 
+    describe('13-5: runValidationLoop abort guard', () => {
+      beforeEach(() => {
+        const workflowFile = path.join(tempDir, 'test-workflow.md');
+        fs.writeFileSync(workflowFile, '# Test');
+      });
+
+      it('stops immediately when abortSignal is pre-aborted before first attempt', async () => {
+        // Arrange
+        const abortController = new AbortController();
+        abortController.abort();
+
+        const inputs = createValidInputs({ validationScript: 'check.py', maxValidationRetries: 3 });
+
+        // Act
+        const result = await runWorkflow(inputs, undefined, abortController.signal);
+
+        // Assert — loop never starts, executeValidationScript not called
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('cancelled');
+        expect(mockExecuteValidationScript).not.toHaveBeenCalled();
+      });
+
+      it('stops after first attempt when abortSignal fires mid-loop', async () => {
+        // Arrange
+        const abortController = new AbortController();
+        let callCount = 0;
+
+        mockExecuteValidationScript.mockImplementation(async () => {
+          callCount += 1;
+          // Abort after first validation run to simulate deadline firing between attempts
+          abortController.abort();
+          return { success: false, continueMessage: 'not done yet' };
+        });
+
+        const inputs = createValidInputs({ validationScript: 'check.py', maxValidationRetries: 5 });
+
+        // Act
+        const result = await runWorkflow(inputs, undefined, abortController.signal);
+
+        // Assert — only one attempt ran; loop guard stopped attempt 2
+        expect(result.success).toBe(false);
+        expect(callCount).toBe(1);
+      });
+
+      it('completes successfully when abortSignal is not aborted', async () => {
+        // Arrange
+        mockExecuteValidationScript.mockResolvedValue({ success: true, continueMessage: '' });
+
+        const abortController = new AbortController();
+        const inputs = createValidInputs({ validationScript: 'check.py', maxValidationRetries: 3 });
+
+        // Act
+        const result = await runWorkflow(inputs, undefined, abortController.signal);
+
+        // Assert — no interference from a live (non-aborted) signal
+        expect(result.success).toBe(true);
+        expect(mockExecuteValidationScript).toHaveBeenCalledTimes(1);
+      });
+    });
+
     describe('debug log wiring', () => {
       beforeEach(() => {
         const workflowFile = path.join(tempDir, 'test-workflow.md');

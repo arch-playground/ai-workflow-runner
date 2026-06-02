@@ -384,6 +384,10 @@ async function runValidationLoop(
   let currentSession = session;
 
   for (let attempt = 1; attempt <= inputs.maxValidationRetries; attempt++) {
+    if (abortSignal?.aborted) {
+      throw new Error('Workflow execution was cancelled');
+    }
+
     core.info(`[Validation] Attempt ${attempt}/${inputs.maxValidationRetries}`);
 
     try {

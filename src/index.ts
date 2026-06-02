@@ -61,10 +61,18 @@ async function run(): Promise<void> {
       throw new Error(`Input validation failed: ${validation.errors.join(', ')}`);
     }
 
-    const result = await runWorkflow(inputs, inputs.timeoutMs, shutdownController.signal);
+    const deadlineSignal = AbortSignal.timeout(inputs.timeoutMs);
+    const combined = AbortSignal.any([shutdownController.signal, deadlineSignal]);
 
-    if (shutdownController.signal.aborted) {
-      setCancelledOutput();
+    const result = await runWorkflow(inputs, inputs.timeoutMs, combined);
+
+    if (combined.aborted) {
+      if (deadlineSignal.aborted) {
+        core.setOutput('status', 'timeout');
+        core.setOutput('result', JSON.stringify({ timeout: true }));
+      } else {
+        setCancelledOutput();
+      }
       outputsSet = true;
       return;
     }
@@ -80,14 +88,24 @@ async function run(): Promise<void> {
     }
   } catch (error) {
     if (!outputsSet) {
-      status = shutdownController.signal.aborted ? 'cancelled' : 'failure';
+      const isTimeout = error instanceof Error && error.name === 'TimeoutError';
+      const isCancelled = shutdownController.signal.aborted;
+
+      if (isTimeout) {
+        status = 'timeout';
+      } else if (isCancelled) {
+        status = 'cancelled';
+      } else {
+        status = 'failure';
+      }
+
       const message =
         error instanceof Error ? sanitizeErrorMessage(error) : 'An unknown error occurred';
 
       core.setOutput('status', status);
       core.setOutput('result', JSON.stringify({ error: message }));
 
-      if (!shutdownController.signal.aborted) {
+      if (status === 'failure') {
         core.setFailed(message);
       }
     }
