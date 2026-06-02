@@ -48,6 +48,7 @@ describe('index', () => {
     transcriptPath: '',
     writeJobSummary: false,
     bashAllowPatterns: '',
+    allowedProviderHosts: [],
   });
 
   const setupMocks = (): void => {

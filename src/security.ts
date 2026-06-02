@@ -2,6 +2,126 @@ import * as core from '@actions/core';
 import * as path from 'path';
 import * as fs from 'fs';
 
+// Security-only host allowlist for credentialed provider endpoints.
+// This is NOT a provider-classification or pricing list — it is a security control
+// that prevents consumer opencode_config from redirecting auth to attacker hosts.
+// D7 constraint: do NOT reference this from model-filter.ts or free-model detection.
+// Extend at runtime via the `allowed_provider_hosts` action input.
+export const DEFAULT_PROVIDER_HOSTS: readonly string[] = [
+  'api.openai.com',
+  'api.anthropic.com',
+  'api.githubcopilot.com', // Copilot-never-blocked invariant — funcval model
+  'generativelanguage.googleapis.com',
+  'openrouter.ai',
+  '*.cognitiveservices.azure.com',
+  '*.openai.azure.com',
+  'bedrock-runtime.*.amazonaws.com',
+  'bedrock.*.amazonaws.com',
+  'opencode.ai',
+  'api.opencode.ai',
+];
+
+function isPrivateIpv4(host: string): boolean {
+  if (host.startsWith('10.')) return true;
+  if (host.startsWith('127.')) return true;
+  if (host.startsWith('169.254.')) return true;
+  if (host.startsWith('192.168.')) return true;
+  if (host.startsWith('172.')) {
+    const second = parseInt(host.split('.')[1] ?? '', 10);
+    return !isNaN(second) && second >= 16 && second <= 31;
+  }
+  return false;
+}
+
+function isPrivateHost(hostname: string): boolean {
+  // IPv6 loopback
+  if (hostname === '::1' || hostname === '[::1]') return true;
+  // Strip brackets from IPv6
+  const bare = hostname.startsWith('[') ? hostname.slice(1, -1) : hostname;
+  if (isPrivateIpv4(bare)) return true;
+  // Bare single-label hostnames (no dot) — treat as internal
+  if (!bare.includes('.')) return true;
+  // Internal/local TLDs
+  if (bare.endsWith('.internal') || bare.endsWith('.local')) return true;
+  return false;
+}
+
+function globMatch(pattern: string, value: string): boolean {
+  // Escape regex special chars except '*', then replace '*' with '.*'
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(`^${escaped}$`, 'i').test(value);
+}
+
+/**
+ * Returns true if the host matches the allowlist (default ∪ caller-supplied extras).
+ */
+export function isAllowedProviderHost(host: string, extraHosts: readonly string[]): boolean {
+  const allPatterns = [...DEFAULT_PROVIDER_HOSTS, ...extraHosts];
+  return allPatterns.some((pattern) => globMatch(pattern, host));
+}
+
+/**
+ * Validates a provider baseURL for credentialed use.
+ * Throws a clear, sanitized error on any violation (fail-closed).
+ * - Requires https scheme
+ * - Rejects private/loopback/link-local/metadata hosts
+ * - Requires host to match the allowlist (default ∪ extraHosts)
+ */
+export function validateProviderBaseUrl(rawUrl: string, extraHosts: readonly string[]): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error(`Invalid provider baseURL: not a valid URL`);
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error(`Invalid provider baseURL: only https is allowed for credentialed providers`);
+  }
+
+  const hostname = parsed.hostname;
+
+  if (isPrivateHost(hostname)) {
+    throw new Error(
+      `Invalid provider baseURL: host resolves to a private/metadata range and cannot receive credentials`
+    );
+  }
+
+  if (!isAllowedProviderHost(hostname, extraHosts)) {
+    throw new Error(
+      `Invalid provider baseURL: ${hostname} is not an allowed provider host (set allowed_provider_hosts to permit it)`
+    );
+  }
+}
+
+/**
+ * Extracts all baseURL/endpoint values from the provider section of a loaded opencode config.
+ * Only inspects consumer-supplied values; providers with no custom URL are not returned.
+ */
+export function extractProviderBaseUrls(
+  config: Record<string, unknown>
+): Array<{ providerId: string; url: string }> {
+  const results: Array<{ providerId: string; url: string }> = [];
+  const providers = config['provider'];
+  if (!providers || typeof providers !== 'object' || Array.isArray(providers)) return results;
+
+  for (const [providerId, providerConfig] of Object.entries(providers as Record<string, unknown>)) {
+    if (!providerConfig || typeof providerConfig !== 'object' || Array.isArray(providerConfig))
+      continue;
+    const opts = (providerConfig as Record<string, unknown>)['options'];
+    if (!opts || typeof opts !== 'object' || Array.isArray(opts)) continue;
+    const optsObj = opts as Record<string, unknown>;
+
+    for (const field of ['baseURL', 'endpoint', 'enterpriseUrl']) {
+      const val = optsObj[field];
+      if (typeof val === 'string' && val.length > 0) {
+        results.push({ providerId, url: val });
+      }
+    }
+  }
+  return results;
+}
+
 /**
  * Validates that a path is within the workspace and doesn't escape via traversal.
  * Returns the resolved absolute path if valid, throws if invalid.

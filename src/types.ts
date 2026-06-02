@@ -55,6 +55,7 @@ export interface ActionInputs {
   writeJobSummary: boolean;
   bashAllowPatterns: string;
   agentWorkingDirectory?: string;
+  allowedProviderHosts: string[];
 }
 
 export interface OpenCodeSession {
