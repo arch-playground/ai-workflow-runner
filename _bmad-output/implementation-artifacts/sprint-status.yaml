@@ -147,5 +147,6 @@ development_status:
   13-6-inert-summary-and-ambient-secret-masking: 'backlog'
   13-7-threat-model-docs-and-digest-pin: 'backlog'
   13-9-webfetch-per-domain-allowlist: 'backlog'
+  13-10-deny-file-write-by-default-and-writable-paths: 'backlog'
   13-8-tests-and-epic-end-security-revalidation: 'backlog'
   epic-13-retrospective: 'optional'
