@@ -131,6 +131,47 @@ export function scrubSecrets(content: string, secrets: string[]): string {
   return result;
 }
 
+// Keys the opencode server child process needs at spawn time.
+// PATH/HOME are needed by every CLI process.
+// LANG/TERM prevent locale/terminal errors in child processes.
+// JAVA_HOME, GOPATH, GOROOT: opencode autoinstalls Java/Go LSPs at runtime;
+//   the Dockerfile sets these paths and stripping them breaks language server startup.
+// XDG_*: opencode and some LSPs use XDG dirs for config/cache discovery.
+// RUNNER_TEMP: some opencode operations write ephemeral files here.
+const SCOPED_ENV_PASSTHROUGH = ['JAVA_HOME', 'GOPATH', 'GOROOT', 'RUNNER_TEMP'] as const;
+
+/**
+ * Builds a scoped environment for child processes.
+ * Includes only essential vars, declared runtime vars, and user-supplied envVars.
+ * Undeclared ambient secrets (GITHUB_TOKEN, cloud creds, etc.) are excluded.
+ */
+export function buildScopedEnv(envVars: Record<string, string>): Record<string, string> {
+  const scoped: Record<string, string> = {
+    PATH: process.env['PATH'] || '',
+    HOME: process.env['HOME'] || '',
+    LANG: process.env['LANG'] || 'en_US.UTF-8',
+    TERM: process.env['TERM'] || 'xterm',
+  };
+
+  for (const key of SCOPED_ENV_PASSTHROUGH) {
+    const value = process.env[key];
+    if (value !== undefined) {
+      scoped[key] = value;
+    }
+  }
+
+  for (const key of Object.keys(process.env)) {
+    if (key.startsWith('XDG_')) {
+      const value = process.env[key];
+      if (value !== undefined) {
+        scoped[key] = value;
+      }
+    }
+  }
+
+  return { ...scoped, ...envVars };
+}
+
 const TRUNCATION_MARKER = '...[truncated]';
 
 /**

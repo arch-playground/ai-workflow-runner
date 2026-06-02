@@ -110,6 +110,101 @@ describe('OpenCodeService', () => {
       );
       expect(mockCore.info).not.toHaveBeenCalledWith(expect.stringContaining('12345'));
     });
+
+    describe('env scoping around createOpencode', () => {
+      let envSnapshot: Record<string, string | undefined>;
+
+      beforeEach(() => {
+        envSnapshot = { ...process.env };
+        process.env['GITHUB_TOKEN'] = 'ghs_supersecrettoken';
+        process.env['AWS_SECRET_ACCESS_KEY'] = 'wJalrXUtnFEMI/K7MDENG';
+      });
+
+      afterEach(() => {
+        // Restore any leaked env mutations
+        for (const key of Object.keys(process.env)) {
+          if (!(key in envSnapshot)) {
+            delete process.env[key];
+          }
+        }
+        Object.assign(process.env, envSnapshot);
+      });
+
+      it('13-1-AC3: scoped env at createOpencode call excludes undeclared ambient secrets', async () => {
+        // Arrange
+        let envAtSpawn: Record<string, string | undefined> = {};
+        mockCreateOpencode.mockImplementation(async () => {
+          envAtSpawn = { ...process.env };
+          return { client: mockClient as unknown as OpencodeClient, server: mockServer };
+        });
+        const target = new OpenCodeService();
+
+        // Act
+        await target.initialize({ envVars: { MY_TOKEN: 'tok-123' } });
+
+        // Assert — undeclared ambient secrets must not reach the spawn
+        expect(envAtSpawn['GITHUB_TOKEN']).toBeUndefined();
+        expect(envAtSpawn['AWS_SECRET_ACCESS_KEY']).toBeUndefined();
+        // Declared envVars must be present
+        expect(envAtSpawn['MY_TOKEN']).toBe('tok-123');
+      });
+
+      it('13-1-AC5: declared envVars reach the spawned process', async () => {
+        // Arrange
+        let envAtSpawn: Record<string, string | undefined> = {};
+        mockCreateOpencode.mockImplementation(async () => {
+          envAtSpawn = { ...process.env };
+          return { client: mockClient as unknown as OpencodeClient, server: mockServer };
+        });
+        const target = new OpenCodeService();
+
+        // Act
+        await target.initialize({ envVars: { AWS_ACCESS_KEY_ID: 'AKIAIOSFODNN7EXAMPLE' } });
+
+        // Assert — declared key must survive into scoped env
+        expect(envAtSpawn['AWS_ACCESS_KEY_ID']).toBe('AKIAIOSFODNN7EXAMPLE');
+      });
+
+      it('13-1-AC3: restores GITHUB_TOKEN to process.env after initialize (snapshot/restore)', async () => {
+        // Arrange
+        const target = new OpenCodeService();
+
+        // Act
+        await target.initialize({ envVars: {} });
+
+        // Assert — ambient secret is back after init
+        expect(process.env['GITHUB_TOKEN']).toBe('ghs_supersecrettoken');
+        expect(process.env['AWS_SECRET_ACCESS_KEY']).toBe('wJalrXUtnFEMI/K7MDENG');
+      });
+
+      it('13-1-AC6: restores process.env even when createOpencode throws', async () => {
+        // Arrange
+        mockCreateOpencode.mockRejectedValueOnce(new Error('spawn failed'));
+        const target = new OpenCodeService();
+
+        // Act
+        await expect(target.initialize()).rejects.toThrow('spawn failed');
+
+        // Assert — env is restored despite the throw
+        expect(process.env['GITHUB_TOKEN']).toBe('ghs_supersecrettoken');
+      });
+
+      it('13-1-AC3: OPENCODE_EXPERIMENTAL_LSP_TOOL=true is set in the scoped env', async () => {
+        // Arrange
+        let envAtSpawn: Record<string, string | undefined> = {};
+        mockCreateOpencode.mockImplementation(async () => {
+          envAtSpawn = { ...process.env };
+          return { client: mockClient as unknown as OpencodeClient, server: mockServer };
+        });
+        const target = new OpenCodeService();
+
+        // Act
+        await target.initialize();
+
+        // Assert — LSP tool flag must reach the child
+        expect(envAtSpawn['OPENCODE_EXPERIMENTAL_LSP_TOOL']).toBe('true');
+      });
+    });
   });
 
   describe('dispose()', () => {

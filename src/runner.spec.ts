@@ -151,6 +151,7 @@ describe('runner', () => {
           opencodeConfig: '/workspace/config.json',
           authConfig: '/workspace/auth.json',
           model: 'claude-sonnet-4-5-20250929',
+          envVars: { TEST_KEY: 'test_value' },
         });
       });
 
@@ -166,6 +167,7 @@ describe('runner', () => {
           opencodeConfig: undefined,
           authConfig: undefined,
           model: undefined,
+          envVars: { TEST_KEY: 'test_value' },
         });
       });
 
@@ -660,6 +662,7 @@ describe('runner', () => {
           opencodeConfig: '/workspace/config.json',
           authConfig: '/workspace/auth.json',
           model: 'claude-sonnet-4-5-20250929',
+          envVars: { TEST_KEY: 'test_value' },
         });
       });
     });

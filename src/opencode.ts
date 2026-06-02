@@ -10,7 +10,7 @@ import {
   FallbackSelectionResult,
   INPUT_LIMITS,
 } from './types.js';
-import { truncateString } from './security.js';
+import { truncateString, buildScopedEnv } from './security.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
 import { getDebugLogWriter } from './debug-log-writer.js';
 
@@ -18,6 +18,7 @@ export interface InitializeOptions {
   opencodeConfig?: string;
   authConfig?: string;
   model?: string;
+  envVars?: Record<string, string>;
 }
 
 // Fixed token for stop-commands bracketing. A constant is acceptable here because the
@@ -126,11 +127,35 @@ export class OpenCodeService {
 
     serverOptions.config = await this.buildSdkConfig(options);
 
-    process.env.OPENCODE_EXPERIMENTAL_LSP_TOOL = 'true';
+    // Snapshot → scope → spawn → restore: the SDK spreads process.env at cross-spawn
+    // time inside createOpencode, so the scoped window only needs to bracket that call.
+    // Restoring in finally ensures ambient secrets return even if createOpencode throws.
+    const originalEnv = { ...process.env };
+    const scopedEnv = buildScopedEnv(options?.envVars ?? {});
+    // LSP tool flag must reach the child process; set it explicitly in the scoped env.
+    scopedEnv['OPENCODE_EXPERIMENTAL_LSP_TOOL'] = 'true';
 
-    const opencode = await createOpencode(serverOptions);
-    this.client = opencode.client;
-    this.server = opencode.server;
+    for (const key of Object.keys(process.env)) {
+      if (!(key in scopedEnv)) {
+        delete process.env[key];
+      }
+    }
+    Object.assign(process.env, scopedEnv);
+
+    // opencodeResult is always assigned before use: if createOpencode throws the finally
+    // restores env and the exception propagates, so code after the block is unreachable.
+    let opencodeResult!: Awaited<ReturnType<typeof createOpencode>>;
+    try {
+      opencodeResult = await createOpencode(serverOptions);
+    } finally {
+      for (const key of Object.keys(process.env)) {
+        delete process.env[key];
+      }
+      Object.assign(process.env, originalEnv);
+    }
+
+    this.client = opencodeResult.client;
+    this.server = opencodeResult.server;
     this.isInitialized = true;
     core.info('[OpenCode] Server started on localhost');
     core.debug(`[OpenCode] Server URL: ${this.server?.url ?? 'unknown'}`);
