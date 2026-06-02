@@ -83,24 +83,27 @@ jobs:
 
 ## Inputs
 
-| Input                    | Description                                                                                                                                    | Required | Default   |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------- |
-| `workflow_path`          | Path to the workflow.md file (relative to workspace root). Required unless `list_models` is `'true'`.                                          | No       | `''`      |
-| `prompt`                 | Input prompt to pass to the workflow (max 100KB)                                                                                               | No       | `''`      |
-| `env_vars`               | JSON object of environment variables (max 64KB, 100 entries)                                                                                   | No       | `'{}'`    |
-| `timeout_minutes`        | Maximum execution time in minutes                                                                                                              | No       | `30`      |
-| `validation_script`      | Validation script path or inline code (see below)                                                                                              | No       | `''`      |
-| `validation_script_type` | Script type: `python` or `javascript` (auto-detected)                                                                                          | No       | `''`      |
-| `validation_max_retry`   | Maximum validation retry attempts (1-20)                                                                                                       | No       | `5`       |
-| `opencode_config`        | Path to OpenCode config.json file (relative to workspace). Contains provider and model settings.                                               | No       | `''`      |
-| `auth_config`            | Path to OpenCode auth.json file (relative to workspace). Contains API keys and authentication. Store in GitHub Secrets, not Variables.         | No       | `''`      |
-| `model`                  | Model to use for AI execution (e.g., "anthropic/claude-3-opus"). Overrides config file default.                                                | No       | `''`      |
-| `list_models`            | If "true", print available models and exit without running workflow                                                                            | No       | `'false'` |
-| `debug_log`              | Enable verbose debug logging to file. Also activated by `ACTIONS_STEP_DEBUG=true` or `RUNNER_DEBUG=1`.                                         | No       | `'false'` |
-| `debug_log_path`         | Path for debug log file. Defaults to `$RUNNER_TEMP/opencode-debug.log`. Accepts workspace-relative or absolute paths under RUNNER_TEMP/tmp.    | No       | `''`      |
-| `export_transcript`      | If "true", export the full AI conversation to a JSON file. Use `transcript_json_path` output to upload it as a workflow artifact.              | No       | `'false'` |
-| `write_job_summary`      | If "true", write a GitHub job summary with run status, token/cost totals, tool activity, and the final assistant message.                      | No       | `'false'` |
-| `transcript_path`        | Path for the transcript JSON file. Defaults to `$RUNNER_TEMP/conversation.json`. Accepts workspace-relative or absolute under RUNNER_TEMP/tmp. | No       | `''`      |
+| Input                     | Description                                                                                                                                                                                                              | Required | Default                        |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------------------------------ |
+| `workflow_path`           | Path to the workflow.md file (relative to workspace root). Required unless `list_models` is `'true'`.                                                                                                                    | No       | `''`                           |
+| `prompt`                  | Input prompt to pass to the workflow (max 100KB)                                                                                                                                                                         | No       | `''`                           |
+| `env_vars`                | JSON object of environment variables (max 64KB, 100 entries)                                                                                                                                                             | No       | `'{}'`                         |
+| `timeout_minutes`         | Maximum execution time in minutes                                                                                                                                                                                        | No       | `30`                           |
+| `validation_script`       | Validation script path or inline code (see below)                                                                                                                                                                        | No       | `''`                           |
+| `validation_script_type`  | Script type: `python` or `javascript` (auto-detected)                                                                                                                                                                    | No       | `''`                           |
+| `validation_max_retry`    | Maximum validation retry attempts (1-20)                                                                                                                                                                                 | No       | `5`                            |
+| `opencode_config`         | Path to OpenCode config.json file (relative to workspace). Contains provider and model settings.                                                                                                                         | No       | `''`                           |
+| `auth_config`             | Path to OpenCode auth.json file (relative to workspace). Contains API keys and authentication. Store in GitHub Secrets, not Variables.                                                                                   | No       | `''`                           |
+| `model`                   | Model to use for AI execution (e.g., "anthropic/claude-3-opus"). Overrides config file default.                                                                                                                          | No       | `''`                           |
+| `list_models`             | If "true", print available models and exit without running workflow                                                                                                                                                      | No       | `'false'`                      |
+| `debug_log`               | Enable verbose debug logging to file. Also activated by `ACTIONS_STEP_DEBUG=true` or `RUNNER_DEBUG=1`.                                                                                                                   | No       | `'false'`                      |
+| `debug_log_path`          | Path for debug log file. Defaults to `$RUNNER_TEMP/opencode-debug.log`. Accepts workspace-relative or absolute paths under RUNNER_TEMP/tmp.                                                                              | No       | `''`                           |
+| `export_transcript`       | If "true", export the full AI conversation to a JSON file. Use `transcript_json_path` output to upload it as a workflow artifact.                                                                                        | No       | `'false'`                      |
+| `write_job_summary`       | If "true", write a GitHub job summary with run status, token/cost totals, tool activity, and the final assistant message.                                                                                                | No       | `'false'`                      |
+| `transcript_path`         | Path for the transcript JSON file. Defaults to `$RUNNER_TEMP/conversation.json`. Accepts workspace-relative or absolute under RUNNER_TEMP/tmp.                                                                           | No       | `''`                           |
+| `bash_allow_patterns`     | Additional bash command patterns to allow beyond the read-only default set (comma or newline-separated, e.g. `npm test*,npx*`). **Security:** each pattern widens the agent's shell access; use the minimum necessary.   | No       | `''`                           |
+| `agent_working_directory` | Working directory for the agent (workspace-relative path). Confines agent filesystem access to this subtree. Narrower than the workspace root = tighter confinement.                                                     | No       | `''` (workspace root)          |
+| `allowed_provider_hosts`  | Additional provider host globs permitted to receive credentials (comma-separated, e.g. `my-gateway.example.com`). Extends the built-in allowlist. **Security:** only add hosts you control and trust with your API keys. | No       | `''` (built-in allowlist only) |
 
 ## Outputs
 
@@ -247,6 +250,60 @@ Set `list_models: 'true'` to print available models and exit without running a w
 | [`custom-model/`](examples/custom-model/)       | Custom model selection and listing available models |
 
 ## Security
+
+### Threat Model & Safe Adoption
+
+This section describes the security model and the risks you own as an adopter. The Action implements defense-in-depth controls (env scoping, read-only bash allowlist, filesystem confinement, non-root container, provider URL allowlist, global timeout, inert job summary) but it is **not** a sandbox. The threat model is: layered controls + your GitHub configuration.
+
+#### Minimal `permissions:`
+
+Set the least-privilege `GITHUB_TOKEN` permissions in your calling workflow. The Action does not require write permissions by default:
+
+```yaml
+jobs:
+  ai-workflow:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # minimum; add others only if your workflow/validation needs them
+```
+
+Never grant `write` or `admin` permissions unless your workflow explicitly requires them.
+
+#### Never `pull_request_target` + untrusted PR + secrets
+
+Do **not** run this Action in a `pull_request_target` workflow that checks out the PR head while secrets are in scope. `pull_request_target` runs with write permissions and repository secrets — a malicious PR can influence the `workflow_path`, `prompt`, or any file the agent reads. Use `pull_request` (no secrets) or gate carefully with explicit conditions if you must process PRs.
+
+#### Treat these inputs as trusted (code/credential-adjacent)
+
+The following inputs execute code or direct where credentials are sent. **Never source them from untrusted input** (PR titles, issue bodies, user-supplied data):
+
+| Input               | Why it is trusted                                                                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workflow_path`     | The agent reads and follows this file as instructions                                                                                                                 |
+| `prompt`            | Directly influences what the agent does                                                                                                                               |
+| `opencode_config`   | Controls provider endpoints — a redirected `baseURL` directs where your API key is sent (validated against a built-in allowlist since 13-4, but the principle stands) |
+| `validation_script` | Executes arbitrary Python or JavaScript on the runner                                                                                                                 |
+| `auth_config`       | Contains provider API keys                                                                                                                                            |
+
+#### The agent runs code — understand the opt-in surface
+
+By default the agent operates with read-only shell commands (grep, find, cat, ls, etc.), read-only git history, and filesystem access confined to the workspace as a non-root user. Several inputs widen that surface — use them deliberately:
+
+| Input                     | Default posture                              | What it enables                                                                                      |
+| ------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `bash_allow_patterns`     | Read-only commands only; all others denied   | Extend the bash allowlist (e.g. `npm test*`) — each pattern you add is a capability the agent gains  |
+| `agent_working_directory` | Workspace root (`$GITHUB_WORKSPACE`)         | Narrow confinement to a subdirectory; do not set this to a path outside the workspace                |
+| `allowed_provider_hosts`  | Built-in allowlist only (major AI providers) | Permit additional provider host globs to receive credentials — verify each added host is trustworthy |
+
+#### Egress filtering
+
+The Action does not restrict network egress. Validation scripts and the agent can reach the internet. For workflows where network egress must be controlled, use [`step-security/harden-runner`](https://github.com/step-security/harden-runner) or configure runner-level network policy. This is defense-in-depth, not a substitute for the controls above.
+
+#### Store auth in GitHub Secrets, not Variables
+
+`auth_config` (and any file containing API keys) must be written from GitHub **Secrets** (`${{ secrets.* }}`), not GitHub **Variables** (`${{ vars.* }}`). Variables are not encrypted and visible to all workflow runs.
+
+---
 
 ### Secret Handling
 
