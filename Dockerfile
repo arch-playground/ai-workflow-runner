@@ -46,7 +46,13 @@ LABEL org.opencontainers.image.description="AI Workflow Runner - Multi-runtime G
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install runtime dependencies only (no build tools like curl, gnupg)
+# Configurable runner user identity (default matches GitHub-hosted runner UID).
+# Override at build time for self-hosted runners with a different UID/GID.
+ARG RUNNER_UID=1001
+ARG RUNNER_GID=1001
+
+# Install runtime dependencies only (no build tools like curl, gnupg).
+# gosu enables the root→non-root privilege drop in entrypoint.sh.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -54,9 +60,16 @@ RUN apt-get update && \
         python3.11-venv \
         python3-pip \
         git \
+        gosu \
     && rm -f /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Create a dedicated non-root runner user.
+# The entrypoint starts as root to chown mounted volumes, then drops to this user.
+# We do NOT add a USER instruction so the entrypoint can perform the chown first.
+RUN groupadd -g "${RUNNER_GID}" runner \
+    && useradd -m -u "${RUNNER_UID}" -g "${RUNNER_GID}" -d /home/runner runner
 
 # Copy Node.js from builder stage
 COPY --from=builder /usr/bin/node /usr/bin/node
@@ -73,10 +86,19 @@ RUN ln -s /usr/lib/node_modules/opencode-ai/bin/opencode.exe /usr/local/bin/open
 COPY --from=builder /usr/lib/jvm/temurin-21-jre-* /usr/lib/jvm/temurin-21-jre/
 ENV JAVA_HOME=/usr/lib/jvm/temurin-21-jre
 
-# Copy Go from builder stage (for gopls LSP server auto-install)
+# Copy Go from builder stage (for gopls LSP server auto-install).
+# GOPATH moved from /root/go to /home/runner/go so gopls install works after the privilege drop.
 COPY --from=builder /usr/lib/go /usr/lib/go
-ENV GOPATH=/root/go
+ENV GOPATH=/home/runner/go
 ENV PATH="${JAVA_HOME}/bin:/usr/lib/go/bin:${GOPATH}/bin:${PATH}"
+
+# Pre-create writable dirs owned by the runner user so LSP autoinstall and opencode
+# XDG cache/data writes succeed after the privilege drop in entrypoint.sh.
+RUN mkdir -p \
+        "${GOPATH}" \
+        /home/runner/.local/share/opencode \
+        /home/runner/.cache \
+    && chown -R runner:runner /home/runner /app 2>/dev/null || true
 
 # Verify installations
 RUN node --version && \
@@ -88,10 +110,12 @@ RUN node --version && \
 # Copy bundled application from bundler stage
 COPY --from=bundler /build/dist/ /app/dist/
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh \
+    && chown -R runner:runner /app
 
 # Set working directory to where workspace will be mounted
 WORKDIR /github/workspace
 
-# Use entrypoint with signal handling
+# Use entrypoint with signal handling.
+# No USER instruction — entrypoint starts as root to chown mounted volumes, then drops via gosu.
 ENTRYPOINT ["/entrypoint.sh"]
