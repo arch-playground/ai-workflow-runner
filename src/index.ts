@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 import { getInputs, validateInputs } from './config.js';
 import { runWorkflow } from './runner.js';
-import { sanitizeErrorMessage } from './security.js';
+import { sanitizeErrorMessage, maskAmbientSecrets } from './security.js';
 import { ActionStatus, ShutdownSignal, INPUT_LIMITS } from './types.js';
 import { getOpenCodeService, hasOpenCodeServiceInstance } from './opencode.js';
 
@@ -50,6 +50,8 @@ async function run(): Promise<void> {
       outputsSet = true;
       return;
     }
+
+    maskAmbientSecrets();
 
     const inputs = getInputs();
     const validation = validateInputs(inputs);

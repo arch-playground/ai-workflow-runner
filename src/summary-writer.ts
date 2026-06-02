@@ -125,8 +125,7 @@ export async function writeJobSummary(messages: unknown[], meta: JobSummaryMeta)
       .addDetails('Tool activity', toolSummaryText)
       .addEOL()
       .addHeading('Final assistant message', 3)
-      .addRaw(scrubbed)
-      .addEOL()
+      .addCodeBlock(scrubbed)
       .write();
   } catch (error) {
     core.warning(`[OpenCode] Job summary write failed: ${String(error)}`, {

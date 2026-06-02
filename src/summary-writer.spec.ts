@@ -20,6 +20,7 @@ describe('writeJobSummary', () => {
     s.addHeading.mockReturnValue(s);
     s.addTable.mockReturnValue(s);
     s.addRaw.mockReturnValue(s);
+    s.addCodeBlock.mockReturnValue(s);
     s.addDetails.mockReturnValue(s);
     s.addEOL.mockReturnValue(s);
     s.addBreak.mockReturnValue(s);
@@ -154,8 +155,8 @@ describe('writeJobSummary', () => {
     await writeJobSummary(messages, meta);
 
     // Assert
-    expect(mockCore.summary.addRaw).toHaveBeenCalledWith(expect.stringContaining('***'));
-    expect(mockCore.summary.addRaw).not.toHaveBeenCalledWith(
+    expect(mockCore.summary.addCodeBlock).toHaveBeenCalledWith(expect.stringContaining('***'));
+    expect(mockCore.summary.addCodeBlock).not.toHaveBeenCalledWith(
       expect.stringContaining('my_secret_token')
     );
   });
@@ -169,9 +170,9 @@ describe('writeJobSummary', () => {
     // Act
     await writeJobSummary(messages, meta);
 
-    // Assert: addRaw receives a truncated string
-    const rawCall = (mockCore.summary.addRaw as jest.Mock).mock.calls[0] as string[];
-    const writtenText = rawCall[0] ?? '';
+    // Assert: addCodeBlock receives a truncated string
+    const codeBlockCall = (mockCore.summary.addCodeBlock as jest.Mock).mock.calls[0] as string[];
+    const writtenText = codeBlockCall[0] ?? '';
     expect(writtenText.length).toBeLessThan(hugeMessage.length);
     expect(writtenText).toContain('...[truncated]');
   });
@@ -430,5 +431,48 @@ describe('writeJobSummary', () => {
     const rows = tableCall[0] as Array<Array<{ data: string }>>;
     const durationRow = rows.find((r) => r[0]?.data === 'Duration');
     expect(durationRow?.[1]?.data).toBe('12.5s');
+  });
+
+  describe('13-6: inert summary rendering', () => {
+    it('renders final message via addCodeBlock, not addRaw', async () => {
+      // Arrange
+      const meta = { ...baseMeta, finalMessage: 'Task done.' };
+
+      // Act
+      await writeJobSummary([], meta);
+
+      // Assert
+      expect(mockCore.summary.addCodeBlock).toHaveBeenCalledWith('Task done.');
+      expect(mockCore.summary.addRaw).not.toHaveBeenCalledWith('Task done.');
+    });
+
+    it('renders markdown-link message as inert code block (not clickable)', async () => {
+      // Arrange
+      const meta = { ...baseMeta, finalMessage: '[Click](https://evil.example)' };
+
+      // Act
+      await writeJobSummary([], meta);
+
+      // Assert — addCodeBlock called with the raw markdown text (not rendered as a link)
+      expect(mockCore.summary.addCodeBlock).toHaveBeenCalledWith('[Click](https://evil.example)');
+    });
+
+    it('still scrubs secrets before code-blocking', async () => {
+      // Arrange
+      const meta = {
+        ...baseMeta,
+        finalMessage: 'token is s3cr3t here',
+        secrets: ['s3cr3t'],
+      };
+
+      // Act
+      await writeJobSummary([], meta);
+
+      // Assert — secret replaced, then code-blocked
+      expect(mockCore.summary.addCodeBlock).toHaveBeenCalledWith(expect.stringContaining('***'));
+      expect(mockCore.summary.addCodeBlock).not.toHaveBeenCalledWith(
+        expect.stringContaining('s3cr3t')
+      );
+    });
   });
 });

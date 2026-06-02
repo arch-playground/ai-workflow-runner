@@ -7,6 +7,8 @@ import {
   validateConfigPath,
   validateRealPath,
   maskSecrets,
+  maskAmbientSecrets,
+  maskAuthValues,
   sanitizeErrorMessage,
   validateUtf8,
   scrubSecrets,
@@ -761,6 +763,114 @@ describe('security', () => {
 
       // Assert
       expect(result).toBe('value=super***');
+    });
+  });
+
+  describe('13-6: maskAmbientSecrets', () => {
+    const originalEnv = process.env;
+
+    afterEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    it('masks GITHUB_TOKEN when present and long enough', () => {
+      // Arrange
+      process.env['GITHUB_TOKEN'] = 'ghs_supersecrettoken';
+
+      // Act
+      maskAmbientSecrets();
+
+      // Assert
+      expect(mockCore.setSecret).toHaveBeenCalledWith('ghs_supersecrettoken');
+    });
+
+    it('masks INPUT_GITHUB_TOKEN when present', () => {
+      // Arrange
+      delete process.env['GITHUB_TOKEN'];
+      process.env['INPUT_GITHUB_TOKEN'] = 'ghs_inputtoken12345';
+
+      // Act
+      maskAmbientSecrets();
+
+      // Assert
+      expect(mockCore.setSecret).toHaveBeenCalledWith('ghs_inputtoken12345');
+    });
+
+    it('skips masking when GITHUB_TOKEN is absent', () => {
+      // Arrange
+      delete process.env['GITHUB_TOKEN'];
+      delete process.env['INPUT_GITHUB_TOKEN'];
+
+      // Act
+      maskAmbientSecrets();
+
+      // Assert
+      expect(mockCore.setSecret).not.toHaveBeenCalled();
+    });
+
+    it('skips masking short values to avoid over-masking', () => {
+      // Arrange — value shorter than MIN_SECRET_LENGTH (4)
+      process.env['GITHUB_TOKEN'] = 'ab';
+
+      // Act
+      maskAmbientSecrets();
+
+      // Assert
+      expect(mockCore.setSecret).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when env vars are absent', () => {
+      // Arrange
+      delete process.env['GITHUB_TOKEN'];
+      delete process.env['INPUT_GITHUB_TOKEN'];
+
+      // Act & Assert
+      expect(() => maskAmbientSecrets()).not.toThrow();
+    });
+  });
+
+  describe('13-6: maskAuthValues', () => {
+    it('masks string credential values in auth data', () => {
+      // Arrange
+      const authData = {
+        anthropic: { key: 'sk-ant-supersecretkey1234' },
+        openai: { key: 'sk-openai-secretkey5678' },
+      };
+
+      // Act
+      maskAuthValues(authData);
+
+      // Assert
+      expect(mockCore.setSecret).toHaveBeenCalledWith('sk-ant-supersecretkey1234');
+      expect(mockCore.setSecret).toHaveBeenCalledWith('sk-openai-secretkey5678');
+    });
+
+    it('skips short credential values', () => {
+      // Arrange
+      const authData = {
+        provider: { key: 'ab' },
+      };
+
+      // Act
+      maskAuthValues(authData);
+
+      // Assert
+      expect(mockCore.setSecret).not.toHaveBeenCalled();
+    });
+
+    it('does not throw on empty auth data', () => {
+      // Act & Assert
+      expect(() => maskAuthValues({})).not.toThrow();
+    });
+
+    it('does not throw when credential is not an object', () => {
+      // Arrange — non-object credential value (defensive guard)
+      const authData: Record<string, unknown> = {
+        provider: 'not-an-object',
+      };
+
+      // Act & Assert
+      expect(() => maskAuthValues(authData)).not.toThrow();
     });
   });
 });

@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
+import * as security from './security';
 import {
   createOpencode,
   createOpencodeServer,
@@ -454,6 +455,67 @@ describe('OpenCodeService', () => {
       ).rejects.toThrow('attacker.evil.com');
 
       expect(mockClient.auth.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('13-6: applyAuth calls maskAuthValues to mask credential values', () => {
+    it('calls maskAuthValues with parsed auth data before auth.set', async () => {
+      // Arrange — reset readFile spy to clear any leftover once-values from prior tests
+      const maskAuthValuesSpy = jest.spyOn(security, 'maskAuthValues');
+
+      jest
+        .spyOn(fs.promises, 'readFile')
+        .mockReset()
+        .mockResolvedValueOnce(JSON.stringify({ model: 'anthropic/claude-3-5-sonnet' }))
+        .mockResolvedValueOnce(JSON.stringify({ anthropic: { key: 'sk-ant-supersecretkey1234' } }));
+
+      const target = new OpenCodeService();
+
+      // Act
+      await target.initialize({
+        opencodeConfig: '/tmp/config.json',
+        authConfig: '/tmp/auth.json',
+      });
+
+      // Assert — maskAuthValues called with the parsed auth object
+      expect(maskAuthValuesSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          anthropic: expect.objectContaining({ key: 'sk-ant-supersecretkey1234' }),
+        })
+      );
+    });
+
+    it('calls maskAuthValues before auth.set for multiple providers', async () => {
+      // Arrange — reset readFile spy to clear any leftover once-values from prior tests
+      const maskAuthValuesSpy = jest.spyOn(security, 'maskAuthValues');
+
+      jest
+        .spyOn(fs.promises, 'readFile')
+        .mockReset()
+        .mockResolvedValueOnce(JSON.stringify({ model: 'anthropic/claude-3-5-sonnet' }))
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            anthropic: { key: 'sk-ant-key1234567890' },
+            openai: { key: 'sk-openai-key987654' },
+          })
+        );
+
+      const target = new OpenCodeService();
+
+      // Act
+      await target.initialize({
+        opencodeConfig: '/tmp/config.json',
+        authConfig: '/tmp/auth.json',
+      });
+
+      // Assert — maskAuthValues called once with the full auth object (both providers)
+      expect(maskAuthValuesSpy).toHaveBeenCalledTimes(1);
+      expect(maskAuthValuesSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          anthropic: expect.objectContaining({ key: 'sk-ant-key1234567890' }),
+          openai: expect.objectContaining({ key: 'sk-openai-key987654' }),
+        })
+      );
     });
   });
 

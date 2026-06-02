@@ -1,6 +1,10 @@
 # Story 13.6: Inert Summary Rendering + Ambient-Secret Masking Backstop
 
-Status: ready-for-dev
+---
+
+## baseline_commit: 2a93483d55a779492d3d1a2a42f9b9ebd0fcb6d3
+
+Status: review
 
 ## Story
 
@@ -35,24 +39,31 @@ So that **a phishing link in agent output doesn't render as clickable (closes AG
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Read Required Standards (MANDATORY)** (AC: All)
-  - [ ] coding-style, commenting, logging, security, unit-testing standards. Load `typescript-clean-code`, `typescript-unit-testing`.
-  - [ ] Read design `security-hardening-design-2026-06-02.md` → MEDIUM-2 (S1) + Cross-cutting (C2).
+- [x] **Task 1: Read Required Standards (MANDATORY)** (AC: All)
+  - [x] coding-style, commenting, logging, security, unit-testing standards. Load `typescript-clean-code`, `typescript-unit-testing`.
+  - [x] Read design `security-hardening-design-2026-06-02.md` → MEDIUM-2 (S1) + Cross-cutting (C2).
 
-- [ ] **Task 2: Inert summary rendering** (AC: 1, 2)
-  - [ ] `summary-writer.ts`: replace `.addRaw(scrubbed)` (l.128) with `.addCodeBlock(scrubbed)`. Confirm `core.summary.addCodeBlock` exists in the installed `@actions/core` (it does — check signature; it may take a language arg). Keep the `scrubSecrets`+`truncateString` of `finalMessage` (l.115-116).
-  - [ ] If a heading/label precedes the message ("Final message:"), keep it; only the message body becomes the code block.
+- [x] **Task 2: Inert summary rendering** (AC: 1, 2)
+  - [x] `summary-writer.ts`: replaced `.addRaw(scrubbed).addEOL()` with `.addCodeBlock(scrubbed)`. `addCodeBlock` already calls `addEOL()` internally so `.addEOL()` removed. Confirmed `core.summary.addCodeBlock(code, lang?)` exists in installed @actions/core.
+  - [x] Heading "Final assistant message" retained; only the message body is code-blocked.
 
-- [ ] **Task 3: Ambient-secret masking backstop** (AC: 3, 4, 5)
-  - [ ] Add a helper (in `security.ts`, near `maskSecrets`) e.g. `maskAmbientSecrets()` that, if `process.env.GITHUB_TOKEN`/`INPUT_GITHUB_TOKEN` is set and non-trivial, `core.setSecret`s it. Call it early (e.g. in index.ts startup or config parse, before the agent runs).
-  - [ ] In `applyAuth` (opencode.ts): after `loadJsonFile`, walk the parsed auth object and `core.setSecret` each string leaf value (the credential values) before `client.auth.set`. Guard against empty/short. (Reuse a shared mask helper if clean.)
+- [x] **Task 3: Ambient-secret masking backstop** (AC: 3, 4, 5)
+  - [x] Added `maskAmbientSecrets()` to `security.ts` (near `maskSecrets`): checks `GITHUB_TOKEN` and `INPUT_GITHUB_TOKEN`, calls `core.setSecret` if value length >= MIN_SECRET_LENGTH (4). Called in `index.ts` `run()` early, after shutdown check, before workflow execution.
+  - [x] Added `maskAuthValues(authData)` to `security.ts`: walks `authData` entries (by providerId), iterates string leaf values in each credential object, calls `core.setSecret` for values >= MIN_SECRET_LENGTH. Called in `opencode.ts` `applyAuth()` immediately after `loadJsonFile`.
+  - [x] `MIN_SECRET_LENGTH = 4` guards against masking trivial values.
 
-- [ ] **Task 4: Unit tests** (AC: 1–6)
-  - [ ] summary-writer.spec.ts: asserts `addCodeBlock` is called with the scrubbed message (not `addRaw`); a markdown-link message ends up code-blocked; scrubbing still applied.
-  - [ ] security.spec.ts: `maskAmbientSecrets` calls `setSecret` for a present GITHUB_TOKEN; skips empty/short; doesn't throw when absent.
-  - [ ] opencode.spec.ts: `applyAuth` registers each parsed auth value via `setSecret` (mock core.setSecret, assert called with the credential values).
+- [x] **Task 4: Unit tests** (AC: 1–6)
+  - [x] `summary-writer.spec.ts`: Added `addCodeBlock` mock in `beforeEach`; updated 2 existing tests that asserted `addRaw` for message body to use `addCodeBlock`; added 3 new 13-6 tests — `addCodeBlock` called not `addRaw`; markdown link rendered as inert code block; scrubbing still applied before code-blocking.
+  - [x] `security.spec.ts`: Exported `maskAmbientSecrets` and `maskAuthValues` from imports; 5 tests for `maskAmbientSecrets` (GITHUB_TOKEN masked; INPUT_GITHUB_TOKEN masked; absent → no-op; short value skipped; no throw when absent); 4 tests for `maskAuthValues` (string values masked; short values skipped; empty data no-op; non-object credential no throw).
+  - [x] `opencode.spec.ts`: 2 new 13-6 tests — spies on `security.maskAuthValues`; verifies it's called with parsed auth data (used `mockReset()` on readFile spy to clear leftover queued values from prior 13-4 tests).
+  - [x] `test/mocks/@actions/core.ts`: Added `addCodeBlock: jest.fn().mockReturnThis()` to summary mock.
+  - [x] `index.spec.ts`: Added `maskAmbientSecrets: jest.fn()` to `./security` mock.
 
-- [ ] **Final Task: Quality Checks** — `npm run lint` · `npm run format` · `npm run typecheck` · `npm run test:unit`
+- [x] **Final Task: Quality Checks** — `npm run lint` · `npm run format` · `npm run typecheck` · `npm run test:unit`
+  - [x] `npm run lint` — clean (0 errors, 0 warnings)
+  - [x] `npm run format` — clean (no changes)
+  - [x] `npm run typecheck` — clean (0 type errors)
+  - [x] `npm run test:unit` — 813/813 passing, 27 suites
 
 ## Dev Notes
 
@@ -62,6 +73,7 @@ So that **a phishing link in agent output doesn't render as clickable (closes AG
 - **Avoid masking short/benign values** — masking a 2-char value would redact it everywhere in output. Mirror `maskSecrets`' `value.length > 0` guard, and consider a small min length for the ambient set.
 - ai-memory `comment-hygiene`: minimal comments.
 - Conventions: named exports, `.js` imports; coverage ≥80%/75%. Backward compatible.
+- **Test gotcha:** `opencode.spec.ts` 13-4 test at line 425 leaves an unconsumed `readFile` `once` value (because `buildSdkConfig` throws before auth is read). The 13-6 tests use `jest.spyOn(...).mockReset()` to clear the queue before adding their own values.
 
 ### References
 
@@ -74,12 +86,37 @@ So that **a phishing link in agent output doesn't render as clickable (closes AG
 
 ### Agent Model Used
 
-_(developer)_
+claude-sonnet-4-5 (bmad-auto sub-agent)
 
 ### Completion Notes List
 
-_(developer)_
+- AC1 ✅: `summary-writer.ts` uses `.addCodeBlock(scrubbed)` instead of `.addRaw(scrubbed).addEOL()`. Markdown links/images in agent output no longer render as clickable.
+- AC2 ✅: Only the final-message body is code-blocked; status/table/tool-activity sections unchanged.
+- AC3 ✅: `maskAmbientSecrets()` in `security.ts` masks GITHUB_TOKEN/INPUT_GITHUB_TOKEN (>= 4 chars). Called in `index.ts` run() early.
+- AC4 ✅: `maskAuthValues(authData)` in `security.ts` masks string leaf credential values from each provider's auth object (>= 4 chars). Called in `opencode.ts` `applyAuth()` immediately after loading the auth file.
+- AC5 ✅: `MIN_SECRET_LENGTH = 4` prevents over-masking trivial values.
+- AC6 ✅: Summary, transcript, and declared `env_vars` masking unchanged.
 
 ### File List
 
-_(developer)_
+- `src/summary-writer.ts` — `.addRaw(scrubbed).addEOL()` → `.addCodeBlock(scrubbed)`
+- `src/security.ts` — added `maskAmbientSecrets()`, `maskAuthValues()`, `MIN_SECRET_LENGTH`
+- `src/opencode.ts` — imported `maskAuthValues`; called in `applyAuth()` after loading auth file
+- `src/index.ts` — imported `maskAmbientSecrets`; called early in `run()` before workflow execution
+- `src/summary-writer.spec.ts` — added `addCodeBlock` mock; updated 2 tests; 3 new 13-6 tests
+- `src/security.spec.ts` — imported `maskAmbientSecrets`, `maskAuthValues`; 9 new 13-6 tests
+- `src/opencode.spec.ts` — imported `* as security`; 2 new 13-6 tests with mockReset fix
+- `src/index.spec.ts` — added `maskAmbientSecrets: jest.fn()` to security mock
+- `test/mocks/@actions/core.ts` — added `addCodeBlock: jest.fn().mockReturnThis()` to summary mock
+
+### Change Log
+
+- 2026-06-02: Implemented Story 13-6 — `addCodeBlock` replaces `addRaw` for final message (AC1/2); `maskAmbientSecrets` + `maskAuthValues` added to security.ts (AC3/4/5); 14 new unit tests; 813/813 passing total.
+
+## QA Results (leader code review + light funcval, 2026-06-02)
+
+**Code review: PASS.** summary-writer.ts `.addRaw`→`.addCodeBlock` (scrub preserved). security.ts `maskAmbientSecrets` (GITHUB_TOKEN/INPUT_GITHUB_TOKEN, MIN_SECRET_LENGTH=4 guard) + `maskAuthValues` (walks auth object, masks string leaves, length-guarded, defensive against non-object). Wired: maskAmbientSecrets at index.ts:54 (early), maskAuthValues at opencode.ts:203 (after loadJsonFile, before auth.set loop). Clean.
+
+**Light funcval (live container awr:13-6):** agent emitted `[CLICK-TO-VERIFY](https://evil.example/phish)` → summary rendered it as `<pre><code>[CLICK-TO-VERIFY](https://evil.example/phish)</code></pre>` — **inert, not a clickable link** (AGENT-08 closed). status=success (no regression). 813/813 tests.
+
+**AGENT-08 (MEDIUM-2) closed; C2 ambient-secret masking backstop in place.**

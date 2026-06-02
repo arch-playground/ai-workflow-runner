@@ -20,6 +20,7 @@ import {
   validateProviderBaseUrl,
   extractProviderBaseUrls,
   isAllowedProviderHost,
+  maskAuthValues,
 } from './security.js';
 import { buildAgentPermission, parseBashAllowPatterns, shouldAutoApprove } from './permissions.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
@@ -199,6 +200,7 @@ export class OpenCodeService {
   ): Promise<void> {
     const authData = await this.loadJsonFile(authConfigPath, 'auth');
     if (!this.client) throw new Error('OpenCode client not initialized');
+    maskAuthValues(authData);
 
     // Build a map of provider id → configured baseURL for the belt-and-suspenders check.
     // Even if buildSdkConfig already validated, guard here in case of future bypass paths.

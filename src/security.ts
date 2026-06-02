@@ -202,13 +202,33 @@ export function validateRealPath(workspacePath: string, filePath: string): strin
   return realFilePath;
 }
 
-/**
- * Masks all values in envVars as secrets to prevent log exposure.
- */
 export function maskSecrets(envVars: Record<string, string>): void {
   for (const value of Object.values(envVars)) {
     if (value && value.length > 0) {
       core.setSecret(value);
+    }
+  }
+}
+
+const MIN_SECRET_LENGTH = 4;
+
+export function maskAmbientSecrets(): void {
+  for (const key of ['GITHUB_TOKEN', 'INPUT_GITHUB_TOKEN'] as const) {
+    const value = process.env[key];
+    if (value && value.length >= MIN_SECRET_LENGTH) {
+      core.setSecret(value);
+    }
+  }
+}
+
+export function maskAuthValues(authData: Record<string, unknown>): void {
+  for (const credentials of Object.values(authData)) {
+    if (credentials && typeof credentials === 'object' && !Array.isArray(credentials)) {
+      for (const value of Object.values(credentials as Record<string, unknown>)) {
+        if (typeof value === 'string' && value.length >= MIN_SECRET_LENGTH) {
+          core.setSecret(value);
+        }
+      }
     }
   }
 }

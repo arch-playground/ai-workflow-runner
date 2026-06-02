@@ -83,6 +83,7 @@ describe('index', () => {
     }));
     jest.doMock('./security', () => ({
       sanitizeErrorMessage: mockSanitizeErrorMessage,
+      maskAmbientSecrets: jest.fn(),
     }));
     jest.doMock('./opencode', () => ({
       getOpenCodeService: mockGetOpenCodeService,
