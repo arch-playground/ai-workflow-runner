@@ -114,6 +114,7 @@ describe('runner', () => {
     transcriptPath: '',
     writeJobSummary: false,
     bashAllowPatterns: '',
+    allowedProviderHosts: [],
     ...overrides,
   });
 
@@ -154,6 +155,7 @@ describe('runner', () => {
           model: 'claude-sonnet-4-5-20250929',
           envVars: { TEST_KEY: 'test_value' },
           bashAllowPatterns: '',
+          allowedProviderHosts: [],
           agentWorkingDirectory: undefined,
         });
       });
@@ -172,6 +174,7 @@ describe('runner', () => {
           model: undefined,
           envVars: { TEST_KEY: 'test_value' },
           bashAllowPatterns: '',
+          allowedProviderHosts: [],
           agentWorkingDirectory: undefined,
         });
       });
@@ -669,6 +672,7 @@ describe('runner', () => {
           model: 'claude-sonnet-4-5-20250929',
           envVars: { TEST_KEY: 'test_value' },
           bashAllowPatterns: '',
+          allowedProviderHosts: [],
           agentWorkingDirectory: undefined,
         });
       });

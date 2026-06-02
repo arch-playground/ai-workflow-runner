@@ -14,7 +14,13 @@ import {
   FallbackSelectionResult,
   INPUT_LIMITS,
 } from './types.js';
-import { truncateString, buildScopedEnv } from './security.js';
+import {
+  truncateString,
+  buildScopedEnv,
+  validateProviderBaseUrl,
+  extractProviderBaseUrls,
+  isAllowedProviderHost,
+} from './security.js';
 import { buildAgentPermission, parseBashAllowPatterns, shouldAutoApprove } from './permissions.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
 import { getDebugLogWriter } from './debug-log-writer.js';
@@ -26,6 +32,7 @@ export interface InitializeOptions {
   envVars?: Record<string, string>;
   bashAllowPatterns?: string;
   agentWorkingDirectory?: string;
+  allowedProviderHosts?: string[];
 }
 
 // Fixed token for stop-commands bracketing. A constant is acceptable here because the
@@ -174,18 +181,42 @@ export class OpenCodeService {
     core.debug(`[OpenCode] Server URL: ${this.server?.url ?? 'unknown'}`);
 
     if (options?.authConfig) {
-      await this.applyAuth(options.authConfig);
+      await this.applyAuth(
+        options.authConfig,
+        serverOptions.config ?? {},
+        options.allowedProviderHosts ?? []
+      );
     }
 
     this.eventLoopAbortController = new AbortController();
     this.startEventLoop();
   }
 
-  private async applyAuth(authConfigPath: string): Promise<void> {
+  private async applyAuth(
+    authConfigPath: string,
+    loadedConfig: Record<string, unknown>,
+    allowedProviderHosts: string[]
+  ): Promise<void> {
     const authData = await this.loadJsonFile(authConfigPath, 'auth');
     if (!this.client) throw new Error('OpenCode client not initialized');
 
+    // Build a map of provider id → configured baseURL for the belt-and-suspenders check.
+    // Even if buildSdkConfig already validated, guard here in case of future bypass paths.
+    const providerUrls = extractProviderBaseUrls(loadedConfig);
+    const baseUrlByProvider = new Map(providerUrls.map(({ providerId, url }) => [providerId, url]));
+
     for (const [providerId, credentials] of Object.entries(authData)) {
+      const customBaseUrl = baseUrlByProvider.get(providerId);
+      if (customBaseUrl !== undefined) {
+        // Provider has a custom baseURL — verify it is allowlisted before attaching credentials.
+        if (!isAllowedProviderHost(new URL(customBaseUrl).hostname, allowedProviderHosts)) {
+          core.warning(
+            `[OpenCode] Skipping auth for provider "${providerId}": custom baseURL host is not allowlisted (belt-and-suspenders guard)`
+          );
+          continue;
+        }
+      }
+
       core.info(`[OpenCode] Setting auth for provider: ${providerId}`);
       const response = await this.client.auth.set({
         providerID: providerId,
@@ -206,6 +237,9 @@ export class OpenCodeService {
       const loaded = await this.loadJsonFile(options.opencodeConfig, 'config');
       if (loaded && typeof loaded === 'object' && !Array.isArray(loaded)) {
         sdkConfig = loaded;
+        // Validate all consumer-supplied provider baseURLs before proceeding.
+        // Fail-closed: any invalid/non-allowlisted URL throws and aborts initialization.
+        this.validateProviderUrls(sdkConfig, options.allowedProviderHosts ?? []);
       }
     }
     if (options?.model) {
@@ -219,6 +253,21 @@ export class OpenCodeService {
     );
 
     return sdkConfig;
+  }
+
+  private validateProviderUrls(
+    config: Record<string, unknown>,
+    allowedProviderHosts: string[]
+  ): void {
+    const urls = extractProviderBaseUrls(config);
+    for (const { providerId, url } of urls) {
+      try {
+        validateProviderBaseUrl(url, allowedProviderHosts);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Provider "${providerId}": ${msg}`);
+      }
+    }
   }
 
   private async loadJsonFile(filePath: string, label: string): Promise<Record<string, unknown>> {

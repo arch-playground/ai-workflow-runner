@@ -656,6 +656,52 @@ describe('config', () => {
       });
     });
 
+    describe('allowed_provider_hosts parsing', () => {
+      it('13-4-AC2: parses single host glob', () => {
+        // Arrange
+        mockInputs({ allowed_provider_hosts: 'my-gateway.corp.com' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.allowedProviderHosts).toEqual(['my-gateway.corp.com']);
+      });
+
+      it('13-4-AC2: parses comma-separated list', () => {
+        // Arrange
+        mockInputs({ allowed_provider_hosts: 'my-gateway.corp.com,*.internal-ai.corp' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.allowedProviderHosts).toEqual(['my-gateway.corp.com', '*.internal-ai.corp']);
+      });
+
+      it('13-4-AC2: trims whitespace around each entry', () => {
+        // Arrange
+        mockInputs({ allowed_provider_hosts: ' my-gateway.corp.com , *.internal.corp ' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.allowedProviderHosts).toEqual(['my-gateway.corp.com', '*.internal.corp']);
+      });
+
+      it('13-4-AC2: returns [] when input is empty (default)', () => {
+        // Arrange
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.allowedProviderHosts).toEqual([]);
+      });
+    });
+
     describe('debug_log parsing', () => {
       let originalActionsStepDebug: string | undefined;
       let originalRunnerDebug: string | undefined;
@@ -1105,6 +1151,7 @@ describe('config', () => {
         transcriptPath: '',
         writeJobSummary: false,
         bashAllowPatterns: '',
+        allowedProviderHosts: [],
       };
 
       // Act
@@ -1132,6 +1179,7 @@ describe('config', () => {
         transcriptPath: '',
         writeJobSummary: false,
         bashAllowPatterns: '',
+        allowedProviderHosts: [],
       };
 
       // Act
@@ -1159,6 +1207,7 @@ describe('config', () => {
         transcriptPath: '',
         writeJobSummary: false,
         bashAllowPatterns: '',
+        allowedProviderHosts: [],
       };
 
       // Act
@@ -1186,6 +1235,7 @@ describe('config', () => {
         transcriptPath: '',
         writeJobSummary: false,
         bashAllowPatterns: '',
+        allowedProviderHosts: [],
       };
 
       // Act
@@ -1213,6 +1263,7 @@ describe('config', () => {
         transcriptPath: '',
         writeJobSummary: false,
         bashAllowPatterns: '',
+        allowedProviderHosts: [],
       };
 
       // Act

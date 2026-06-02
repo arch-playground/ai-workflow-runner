@@ -1,6 +1,10 @@
+---
+baseline_commit: 7ccd78cd9126af0ab84b585bdb7cf4800efffd34
+---
+
 # Story 13.4: Provider baseURL Allowlist + Refuse-Auth
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -38,28 +42,28 @@ So that **a consumer-supplied `opencode_config` that redirects a provider `baseU
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Read Required Standards (MANDATORY)** (AC: All)
-  - [ ] coding-style, error-handling (errors bubble; throw + sanitize), commenting, validation, security, unit-testing standards.
-  - [ ] Load skills: `typescript-clean-code`, `typescript-unit-testing`. Read design `security-hardening-design-2026-06-02.md` → RC-B; research `security-hardening-research-2026-06-01.md` → RC-B (B1/B2, private-range list).
+- [x] **Task 1: Read Required Standards (MANDATORY)** (AC: All)
+  - [x] coding-style, error-handling (errors bubble; throw + sanitize), commenting, validation, security, unit-testing standards.
+  - [x] Load skills: `typescript-clean-code`, `typescript-unit-testing`. Read design `security-hardening-design-2026-06-02.md` → RC-B; research `security-hardening-research-2026-06-01.md` → RC-B (B1/B2, private-range list).
 
-- [ ] **Task 2: Host allowlist + validator in `security.ts`** (AC: 1, 3, 6)
-  - [ ] `DEFAULT_PROVIDER_HOSTS` constant (curated, documented as security-not-pricing). Export `validateProviderBaseUrl(url: string, allowedHosts: string[]): void` (throws on invalid) and `isAllowedProviderHost(host, allowedHosts): boolean`. Implement: parse URL, require https, reject private/metadata ranges (literal IP checks + hostname heuristics), glob-match host against default ∪ allowed.
-  - [ ] A helper to extract all `provider.*.options.{baseURL,endpoint}` from a loaded config object (defensive against nesting/missing).
+- [x] **Task 2: Host allowlist + validator in `security.ts`** (AC: 1, 3, 6)
+  - [x] `DEFAULT_PROVIDER_HOSTS` constant (curated, documented as security-not-pricing). Export `validateProviderBaseUrl(url: string, allowedHosts: string[]): void` (throws on invalid) and `isAllowedProviderHost(host, allowedHosts): boolean`. Implement: parse URL, require https, reject private/metadata ranges (literal IP checks + hostname heuristics), glob-match host against default ∪ allowed.
+  - [x] A helper to extract all `provider.*.options.{baseURL,endpoint}` from a loaded config object (defensive against nesting/missing).
 
-- [ ] **Task 3: `allowed_provider_hosts` input** (AC: 2)
-  - [ ] action.yml input + config.ts parse → `allowedProviderHosts: string[]` on ActionInputs (mirror subscription_providers). Thread to `InitializeOptions`.
+- [x] **Task 3: `allowed_provider_hosts` input** (AC: 2)
+  - [x] action.yml input + config.ts parse → `allowedProviderHosts: string[]` on ActionInputs (mirror subscription_providers). Thread to `InitializeOptions`.
 
-- [ ] **Task 4: Wire validation into `buildSdkConfig` + refuse-auth in `applyAuth`** (AC: 3, 4, 5)
-  - [ ] `buildSdkConfig`: after loading consumer config, iterate provider baseURLs and `validateProviderBaseUrl` each (throw on invalid). Only validate CONSUMER-supplied baseURLs (a default-host provider has none).
-  - [ ] `applyAuth`: skip `client.auth.set` for a provider whose configured baseURL isn't allowlisted; `core.warning`. (Thread the loaded config / allowed hosts to applyAuth.)
+- [x] **Task 4: Wire validation into `buildSdkConfig` + refuse-auth in `applyAuth`** (AC: 3, 4, 5)
+  - [x] `buildSdkConfig`: after loading consumer config, iterate provider baseURLs and `validateProviderBaseUrl` each (throw on invalid). Only validate CONSUMER-supplied baseURLs (a default-host provider has none).
+  - [x] `applyAuth`: skip `client.auth.set` for a provider whose configured baseURL isn't allowlisted; `core.warning`. (Thread the loaded config / allowed hosts to applyAuth.)
 
-- [ ] **Task 5: Unit tests** (AC: 1–6)
-  - [ ] validator: https required (http rejected); private/loopback/link-local/metadata (incl 169.254.169.254) rejected; bare hostname rejected; allowed default host passes; `allowed_provider_hosts` extends; Azure/Bedrock globs match; `api.githubcopilot.com` passes (Copilot).
-  - [ ] buildSdkConfig: consumer baseURL to attacker host → throws; default-host config → no throw; nested/missing options handled.
-  - [ ] applyAuth: non-allowlisted baseURL → auth.set NOT called for that provider (mock); allowlisted/default → called.
-  - [ ] config.ts: allowed_provider_hosts parsed.
+- [x] **Task 5: Unit tests** (AC: 1–6)
+  - [x] validator: https required (http rejected); private/loopback/link-local/metadata (incl 169.254.169.254) rejected; bare hostname rejected; allowed default host passes; `allowed_provider_hosts` extends; Azure/Bedrock globs match; `api.githubcopilot.com` passes (Copilot).
+  - [x] buildSdkConfig: consumer baseURL to attacker host → throws; default-host config → no throw; nested/missing options handled.
+  - [x] applyAuth: non-allowlisted baseURL → auth.set NOT called for that provider (mock); allowlisted/default → called.
+  - [x] config.ts: allowed_provider_hosts parsed.
 
-- [ ] **Final Task: Quality Checks** — `npm run lint` · `npm run format` · `npm run typecheck` · `npm run test:unit`
+- [x] **Final Task: Quality Checks** — `npm run lint` · `npm run format` · `npm run typecheck` · `npm run test:unit`
 
 ## Dev Notes
 
@@ -82,12 +86,65 @@ So that **a consumer-supplied `opencode_config` that redirects a provider `baseU
 
 ### Agent Model Used
 
-_(developer)_
+claude-sonnet-4-5 (bmad-auto sub-agent, Story 13-4)
 
 ### Completion Notes List
 
-_(developer)_
+**Task 2 (security.ts — allowlist + validator):**
+
+- `DEFAULT_PROVIDER_HOSTS` — 11-entry curated constant. Comment explicitly states: security control, NOT pricing/subscription (D7 constraint). `api.githubcopilot.com` present (Copilot-never-blocked invariant).
+- `isAllowedProviderHost(host, extraHosts)` — glob-matches host against default ∪ extra. Regex escapes all special chars then substitutes `*`→`.*`, case-insensitive. Azure/Bedrock wildcard patterns verified.
+- `validateProviderBaseUrl(rawUrl, extraHosts)` — throws on: non-URL, non-https, private/metadata host (RFC1918, loopback, link-local, .internal/.local, single-label), non-allowlisted. Clear error messages; hostname included for allowlist failures.
+- `extractProviderBaseUrls(config)` — traverses `config.provider.<id>.options.{baseURL,endpoint,enterpriseUrl}` defensively; skips missing/empty/non-object nodes; returns all non-empty string URLs with their provider id.
+
+**Task 3 (config.ts / types.ts / action.yml):**
+
+- `ActionInputs.allowedProviderHosts: string[]` added. Parsed identically to `subscriptionProviders` (split on comma, trim, filter empty).
+- `action.yml`: `allowed_provider_hosts` input documented as "comma-separated host globs, extends built-in allowlist".
+- `InitializeOptions.allowedProviderHosts?: string[]` added. Threaded through both `initialize()` call sites in `runner.ts`.
+
+**Task 4 (opencode.ts — B1 + B2):**
+
+- **B1** (`buildSdkConfig`): after loading consumer config, calls private `validateProviderUrls(sdkConfig, allowedProviderHosts)` which iterates `extractProviderBaseUrls` and calls `validateProviderBaseUrl` per URL. Throws with `Provider "<id>": <reason>`. Only fires when consumer supplies a custom baseURL — default-host providers (no options.baseURL) are untouched.
+- **B2** (`applyAuth`): receives loaded config + allowedProviderHosts. Builds `baseUrlByProvider` map from `extractProviderBaseUrls`. For providers with a custom baseURL, checks `isAllowedProviderHost` — if not allowlisted, emits `core.warning` and skips `client.auth.set`. Providers with no custom URL are unaffected.
+
+**Task 5 (tests):**
+
+- `security.spec.ts`: 35 new tests covering `DEFAULT_PROVIDER_HOSTS`, `isAllowedProviderHost`, `validateProviderBaseUrl`, `extractProviderBaseUrls`. All private-range cases covered (10/8, 172.16-31/12, 192.168/16, 127/8, 169.254/16, ::1, .internal, .local, single-label). Copilot invariant test explicit.
+- `opencode.spec.ts`: 9 new tests for B1 (buildSdkConfig blocks attacker/http/private URLs, passes allowlisted + extraHosts, passes default-host) and B2 (applyAuth calls auth.set for allowlisted custom URL; calls auth.set for default-host; doesn't call auth.set when B1 throws first).
+- `config.spec.ts`: 4 tests for `allowed_provider_hosts` parsing (single, comma-list, trimming, default empty).
+- All existing spec files updated with `allowedProviderHosts: []` on `ActionInputs` construction sites.
+
+**Quality gates:** lint ✅ · format ✅ · typecheck ✅ · test:unit 791/791 ✅ (49 new tests, 0 regressions)
 
 ### File List
 
-_(developer)_
+- `src/security.ts` — `DEFAULT_PROVIDER_HOSTS`, `isAllowedProviderHost`, `validateProviderBaseUrl`, `extractProviderBaseUrls`, `isPrivateIpv4`, `isPrivateHost`, `globMatch`
+- `src/types.ts` — `ActionInputs.allowedProviderHosts: string[]`
+- `src/config.ts` — parse `allowed_provider_hosts` input → `allowedProviderHosts`
+- `src/opencode.ts` — `InitializeOptions.allowedProviderHosts?`; `validateProviderUrls` private method; B1 wired in `buildSdkConfig`; B2 wired in `applyAuth`; import additions
+- `src/runner.ts` — `allowedProviderHosts` threaded into both `initialize()` calls
+- `action.yml` — `allowed_provider_hosts` input added
+- `src/security.spec.ts` — 35 new tests for provider URL validation
+- `src/opencode.spec.ts` — 9 new tests for B1/B2; `import * as fs from 'fs'` added
+- `src/config.spec.ts` — 4 new tests for `allowed_provider_hosts` parsing; `allowedProviderHosts: []` added to all ActionInputs construction sites
+- `src/runner.spec.ts` — `allowedProviderHosts: []` added to `createValidInputs` and inline objects
+- `src/index.spec.ts` — `allowedProviderHosts: []` added
+- `src/runner-fallback-integration.spec.ts` — `allowedProviderHosts: []` added
+
+### Change Log
+
+- 2026-06-02: Implemented Story 13-4 (provider baseURL allowlist + refuse-auth). Closes AGENT-04/FINDING-1 (CRITICAL baseURL credential exfil). B1: buildSdkConfig validates all consumer provider URLs fail-closed. B2: applyAuth belt-and-suspenders skips auth.set for non-allowlisted hosts. `allowed_provider_hosts` action input for enterprise gateways. 791 unit tests pass.
+
+## QA Results (leader code review + live funcval, 2026-06-02)
+
+**Code review: PASS.** `validateProviderBaseUrl` (https-only, private/metadata reject, glob allowlist, fail-closed throw), `extractProviderBaseUrls` (defensive nested traversal), B1 in `buildSdkConfig` (throws before server spawn), B2 in `applyAuth` (skips auth.set for non-allowlisted custom baseURL). D7 comment present. Clean.
+
+**Live funcval (real container awr:13-4, sandboxed listener):**
+
+- Part A — attacker baseURL `https://attacker.evil.example/v1` → **rejected fail-closed** (`not an allowed provider host`); **0 sessions, server never started**, status=failure. Key cannot egress. ✅
+- Part B — default-host Copilot (gpt-5-mini) → status=success, pong. **No regression** (Copilot invariant). ✅
+- Part C — baseURL redirected to a live sibling-container capture listener → listener captured **nothing** (no request, no auth header). Org key did not reach the non-allowlisted host. ✅
+- 791/791 unit tests pass.
+
+**AGENT-04 / FINDING-1 (CRITICAL) closed.** This was the last of the verified CRITICALs (with 13-1/13-2/13-3 closing AGENT-01/02/03/05/09).

@@ -11,6 +11,10 @@ import {
   validateUtf8,
   scrubSecrets,
   buildScopedEnv,
+  validateProviderBaseUrl,
+  isAllowedProviderHost,
+  extractProviderBaseUrls,
+  DEFAULT_PROVIDER_HOSTS,
 } from './security';
 
 jest.mock('@actions/core');
@@ -417,6 +421,278 @@ describe('security', () => {
 
       // Assert
       expect(process.env).toEqual(before);
+    });
+  });
+
+  describe('DEFAULT_PROVIDER_HOSTS', () => {
+    it('includes api.githubcopilot.com (Copilot-never-blocked invariant)', () => {
+      expect(DEFAULT_PROVIDER_HOSTS).toContain('api.githubcopilot.com');
+    });
+
+    it('includes major provider hosts', () => {
+      expect(DEFAULT_PROVIDER_HOSTS).toContain('api.openai.com');
+      expect(DEFAULT_PROVIDER_HOSTS).toContain('api.anthropic.com');
+      expect(DEFAULT_PROVIDER_HOSTS).toContain('generativelanguage.googleapis.com');
+      expect(DEFAULT_PROVIDER_HOSTS).toContain('openrouter.ai');
+    });
+  });
+
+  describe('isAllowedProviderHost', () => {
+    it('allows hosts matching the default list exactly', () => {
+      expect(isAllowedProviderHost('api.openai.com', [])).toBe(true);
+      expect(isAllowedProviderHost('api.anthropic.com', [])).toBe(true);
+      expect(isAllowedProviderHost('api.githubcopilot.com', [])).toBe(true);
+    });
+
+    it('allows Azure hosts via wildcard glob', () => {
+      expect(isAllowedProviderHost('myresource.cognitiveservices.azure.com', [])).toBe(true);
+      expect(isAllowedProviderHost('myresource.openai.azure.com', [])).toBe(true);
+    });
+
+    it('allows Bedrock hosts via wildcard glob', () => {
+      expect(isAllowedProviderHost('bedrock-runtime.us-east-1.amazonaws.com', [])).toBe(true);
+      expect(isAllowedProviderHost('bedrock.us-west-2.amazonaws.com', [])).toBe(true);
+    });
+
+    it('rejects unknown hosts not in default list', () => {
+      expect(isAllowedProviderHost('attacker.evil.com', [])).toBe(false);
+      expect(isAllowedProviderHost('totally-legit-openai.com', [])).toBe(false);
+    });
+
+    it('allows hosts added via extraHosts', () => {
+      expect(isAllowedProviderHost('my-gateway.corp.com', ['my-gateway.corp.com'])).toBe(true);
+    });
+
+    it('allows wildcard patterns in extraHosts', () => {
+      expect(isAllowedProviderHost('gateway.internal.corp', ['*.internal.corp'])).toBe(true);
+    });
+
+    it('is case-insensitive', () => {
+      expect(isAllowedProviderHost('API.OPENAI.COM', [])).toBe(true);
+    });
+  });
+
+  describe('validateProviderBaseUrl', () => {
+    it('accepts a valid allowlisted https URL', () => {
+      expect(() => validateProviderBaseUrl('https://api.openai.com/v1', [])).not.toThrow();
+    });
+
+    it('accepts api.githubcopilot.com (Copilot invariant)', () => {
+      expect(() => validateProviderBaseUrl('https://api.githubcopilot.com/v1', [])).not.toThrow();
+    });
+
+    it('accepts Azure wildcard host', () => {
+      expect(() =>
+        validateProviderBaseUrl('https://myres.cognitiveservices.azure.com/', [])
+      ).not.toThrow();
+    });
+
+    it('accepts Bedrock wildcard host', () => {
+      expect(() =>
+        validateProviderBaseUrl('https://bedrock-runtime.us-east-1.amazonaws.com/', [])
+      ).not.toThrow();
+    });
+
+    it('accepts host added via extraHosts', () => {
+      expect(() =>
+        validateProviderBaseUrl('https://my-gateway.corp.com/v1', ['my-gateway.corp.com'])
+      ).not.toThrow();
+    });
+
+    it('rejects http (non-https) scheme', () => {
+      expect(() => validateProviderBaseUrl('http://api.openai.com/v1', [])).toThrow(
+        'only https is allowed'
+      );
+    });
+
+    it('rejects non-URL strings', () => {
+      expect(() => validateProviderBaseUrl('not-a-url', [])).toThrow('not a valid URL');
+    });
+
+    it('rejects loopback IP (127.x.x.x)', () => {
+      expect(() => validateProviderBaseUrl('https://127.0.0.1/v1', [])).toThrow(
+        'private/metadata range'
+      );
+    });
+
+    it('rejects RFC1918 10.x.x.x range', () => {
+      expect(() => validateProviderBaseUrl('https://10.0.0.1/api', [])).toThrow(
+        'private/metadata range'
+      );
+    });
+
+    it('rejects RFC1918 172.16-31.x.x range', () => {
+      expect(() => validateProviderBaseUrl('https://172.16.0.1/api', [])).toThrow(
+        'private/metadata range'
+      );
+      expect(() => validateProviderBaseUrl('https://172.31.255.255/api', [])).toThrow(
+        'private/metadata range'
+      );
+    });
+
+    it('does NOT reject 172.15.x.x (outside RFC1918 range)', () => {
+      // 172.15 is not in RFC1918, so it's unknown — it won't be in allowlist, so fails allowlist check
+      expect(() => validateProviderBaseUrl('https://172.15.0.1/api', [])).toThrow(
+        'not an allowed provider host'
+      );
+    });
+
+    it('rejects RFC1918 192.168.x.x range', () => {
+      expect(() => validateProviderBaseUrl('https://192.168.1.1/api', [])).toThrow(
+        'private/metadata range'
+      );
+    });
+
+    it('rejects AWS metadata IP 169.254.169.254', () => {
+      expect(() => validateProviderBaseUrl('https://169.254.169.254/latest', [])).toThrow(
+        'private/metadata range'
+      );
+    });
+
+    it('rejects IPv6 loopback ::1', () => {
+      expect(() => validateProviderBaseUrl('https://[::1]/api', [])).toThrow(
+        'private/metadata range'
+      );
+    });
+
+    it('rejects bare hostnames without dots (single-label)', () => {
+      expect(() => validateProviderBaseUrl('https://localhost/api', [])).toThrow(
+        'private/metadata range'
+      );
+    });
+
+    it('rejects .internal TLD hostnames', () => {
+      expect(() => validateProviderBaseUrl('https://myservice.internal/api', [])).toThrow(
+        'private/metadata range'
+      );
+    });
+
+    it('rejects .local TLD hostnames', () => {
+      expect(() => validateProviderBaseUrl('https://myservice.local/api', [])).toThrow(
+        'private/metadata range'
+      );
+    });
+
+    it('rejects unknown external host not in allowlist', () => {
+      expect(() => validateProviderBaseUrl('https://attacker.evil.com/api', [])).toThrow(
+        'not an allowed provider host'
+      );
+    });
+
+    it('includes hostname in error for allowlist failures', () => {
+      expect(() => validateProviderBaseUrl('https://unknown.example.com/api', [])).toThrow(
+        'unknown.example.com'
+      );
+    });
+  });
+
+  describe('extractProviderBaseUrls', () => {
+    it('returns empty array when no provider section', () => {
+      expect(extractProviderBaseUrls({})).toEqual([]);
+    });
+
+    it('returns empty array when provider section is not an object', () => {
+      expect(extractProviderBaseUrls({ provider: 'string' })).toEqual([]);
+      expect(extractProviderBaseUrls({ provider: null })).toEqual([]);
+    });
+
+    it('extracts baseURL from provider options', () => {
+      // Arrange
+      const config = {
+        provider: {
+          openai: {
+            options: { baseURL: 'https://attacker.evil.com' },
+          },
+        },
+      };
+
+      // Act
+      const result = extractProviderBaseUrls(config);
+
+      // Assert
+      expect(result).toEqual([{ providerId: 'openai', url: 'https://attacker.evil.com' }]);
+    });
+
+    it('extracts endpoint field from provider options', () => {
+      // Arrange
+      const config = {
+        provider: {
+          custom: {
+            options: { endpoint: 'https://my-gateway.example.com/v1' },
+          },
+        },
+      };
+
+      // Act
+      const result = extractProviderBaseUrls(config);
+
+      // Assert
+      expect(result).toEqual([{ providerId: 'custom', url: 'https://my-gateway.example.com/v1' }]);
+    });
+
+    it('extracts enterpriseUrl field from provider options', () => {
+      // Arrange
+      const config = {
+        provider: {
+          github: {
+            options: { enterpriseUrl: 'https://github.example.corp' },
+          },
+        },
+      };
+
+      // Act
+      const result = extractProviderBaseUrls(config);
+
+      // Assert
+      expect(result).toEqual([{ providerId: 'github', url: 'https://github.example.corp' }]);
+    });
+
+    it('skips providers without options', () => {
+      // Arrange
+      const config = {
+        provider: {
+          openai: { model: 'gpt-4' }, // no options key
+          anthropic: { options: { baseURL: 'https://api.anthropic.com' } },
+        },
+      };
+
+      // Act
+      const result = extractProviderBaseUrls(config);
+
+      // Assert
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({ providerId: 'anthropic', url: 'https://api.anthropic.com' });
+    });
+
+    it('skips empty string baseURLs', () => {
+      // Arrange
+      const config = {
+        provider: {
+          openai: { options: { baseURL: '' } },
+        },
+      };
+
+      // Act
+      const result = extractProviderBaseUrls(config);
+
+      // Assert
+      expect(result).toEqual([]);
+    });
+
+    it('handles multiple providers with multiple URL fields', () => {
+      // Arrange
+      const config = {
+        provider: {
+          openai: { options: { baseURL: 'https://api.openai.com' } },
+          azure: { options: { endpoint: 'https://res.openai.azure.com' } },
+        },
+      };
+
+      // Act
+      const result = extractProviderBaseUrls(config);
+
+      // Assert
+      expect(result).toHaveLength(2);
     });
   });
 

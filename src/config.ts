@@ -243,6 +243,12 @@ export function getInputs(): ActionInputs {
 
   const bashAllowPatterns = core.getInput('bash_allow_patterns') || '';
 
+  const allowedProviderHosts = core
+    .getInput('allowed_provider_hosts')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
   const agentWorkingDirectoryRaw = core.getInput('agent_working_directory') || '';
   let agentWorkingDirectory: string | undefined;
   if (agentWorkingDirectoryRaw) {
@@ -272,6 +278,7 @@ export function getInputs(): ActionInputs {
     writeJobSummary,
     bashAllowPatterns,
     agentWorkingDirectory,
+    allowedProviderHosts,
   };
 }
 

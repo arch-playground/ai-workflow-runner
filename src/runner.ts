@@ -85,6 +85,7 @@ export async function runWorkflow(
       envVars: inputs.envVars,
       bashAllowPatterns: inputs.bashAllowPatterns,
       agentWorkingDirectory: inputs.agentWorkingDirectory,
+      allowedProviderHosts: inputs.allowedProviderHosts,
     });
 
     if (inputs.disableFreeModels) {
@@ -268,6 +269,7 @@ async function handleListModels(inputs: ActionInputs): Promise<RunnerResult> {
       envVars: inputs.envVars,
       bashAllowPatterns: inputs.bashAllowPatterns,
       agentWorkingDirectory: inputs.agentWorkingDirectory,
+      allowedProviderHosts: inputs.allowedProviderHosts,
     });
 
     const allModels = await opencode.listModels();
