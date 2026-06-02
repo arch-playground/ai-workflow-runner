@@ -748,6 +748,63 @@ describe('config', () => {
       });
     });
 
+    describe('13-10: writable_paths parsing', () => {
+      it('13-10-AC2: parses single workspace-relative glob', () => {
+        // Arrange
+        mockInputs({ writable_paths: 'docs/**' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.writablePaths).toEqual(['docs/**']);
+      });
+
+      it('13-10-AC2: parses comma-separated globs', () => {
+        // Arrange
+        mockInputs({ writable_paths: 'docs/**,output/*.json' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.writablePaths).toEqual(['docs/**', 'output/*.json']);
+      });
+
+      it('13-10-AC2: parses newline-separated globs', () => {
+        // Arrange
+        mockInputs({ writable_paths: 'docs/**\noutput/*.json' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.writablePaths).toEqual(['docs/**', 'output/*.json']);
+      });
+
+      it('13-10-AC2: trims whitespace around each glob', () => {
+        // Arrange
+        mockInputs({ writable_paths: ' docs/** , output/*.json ' });
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.writablePaths).toEqual(['docs/**', 'output/*.json']);
+      });
+
+      it('13-10-AC2: returns [] when input is empty (default — writes fully denied)', () => {
+        // Arrange
+        mockInputs();
+
+        // Act
+        const inputs = getInputs();
+
+        // Assert
+        expect(inputs.writablePaths).toEqual([]);
+      });
+    });
+
     describe('debug_log parsing', () => {
       let originalActionsStepDebug: string | undefined;
       let originalRunnerDebug: string | undefined;
@@ -1199,6 +1256,7 @@ describe('config', () => {
         bashAllowPatterns: '',
         allowedProviderHosts: [],
         webfetchAllowedDomains: [],
+        writablePaths: [],
       };
 
       // Act
@@ -1228,6 +1286,7 @@ describe('config', () => {
         bashAllowPatterns: '',
         allowedProviderHosts: [],
         webfetchAllowedDomains: [],
+        writablePaths: [],
       };
 
       // Act
@@ -1257,6 +1316,7 @@ describe('config', () => {
         bashAllowPatterns: '',
         allowedProviderHosts: [],
         webfetchAllowedDomains: [],
+        writablePaths: [],
       };
 
       // Act
@@ -1286,6 +1346,7 @@ describe('config', () => {
         bashAllowPatterns: '',
         allowedProviderHosts: [],
         webfetchAllowedDomains: [],
+        writablePaths: [],
       };
 
       // Act
@@ -1315,6 +1376,7 @@ describe('config', () => {
         bashAllowPatterns: '',
         allowedProviderHosts: [],
         webfetchAllowedDomains: [],
+        writablePaths: [],
       };
 
       // Act

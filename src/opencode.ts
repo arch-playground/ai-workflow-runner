@@ -26,6 +26,7 @@ import {
   buildAgentPermission,
   buildWebfetchPermissionEnv,
   parseBashAllowPatterns,
+  parseWritablePaths,
   shouldAutoApprove,
 } from './permissions.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
@@ -37,6 +38,7 @@ export interface InitializeOptions {
   model?: string;
   envVars?: Record<string, string>;
   bashAllowPatterns?: string;
+  writablePaths?: string[];
   agentWorkingDirectory?: string;
   allowedProviderHosts?: string[];
   webfetchAllowedDomains?: string[];
@@ -266,9 +268,11 @@ export class OpenCodeService {
     }
 
     const bashAllowPatterns = parseBashAllowPatterns(options?.bashAllowPatterns ?? '');
+    const writablePaths = parseWritablePaths((options?.writablePaths ?? []).join(','));
     sdkConfig.permission = buildAgentPermission(
       sdkConfig.permission as Partial<PermissionConfig> | undefined,
-      bashAllowPatterns
+      bashAllowPatterns,
+      writablePaths
     );
 
     return sdkConfig;

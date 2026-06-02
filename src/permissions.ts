@@ -98,7 +98,10 @@ export const CREDENTIAL_READ_DENY_PATTERNS = [
 // which is fully compatible at the SDK boundary (it accepts Record<string, ...>).
 type AgentPermissionMap = Record<string, unknown>;
 
-function buildActionSecurityRules(bashAllowPatterns: PermissionObjectConfig): AgentPermissionMap {
+function buildActionSecurityRules(
+  bashAllowPatterns: PermissionObjectConfig,
+  writablePaths: PermissionObjectConfig
+): AgentPermissionMap {
   return {
     bash: {
       ...BASH_READ_ONLY_ALLOW,
@@ -116,6 +119,12 @@ function buildActionSecurityRules(bashAllowPatterns: PermissionObjectConfig): Ag
       '*.git/credentials*': 'deny',
       '*.git-credentials*': 'deny',
     },
+    // Deny file writes by default; writable_paths allow-globs come first so the
+    // catch-all deny wins only for unmatched paths (findLast precedence).
+    edit: {
+      ...writablePaths,
+      '*': 'deny',
+    },
     // Confine reads and bash path-args to the working directory.
     external_directory: 'deny',
     // Knowledge extraction needs search results; arbitrary fetch is denied.
@@ -126,9 +135,10 @@ function buildActionSecurityRules(bashAllowPatterns: PermissionObjectConfig): Ag
 
 // Baseline read-family allow for knowledge extraction.  Applied first so consumer
 // config can narrow (but not widen, since Action security rules come last).
+// Note: `edit` is intentionally absent — ACTION_SECURITY_RULES sets it to deny-by-default
+// with an optional writable_paths allowlist (Story 13-10).
 const READ_FAMILY_DEFAULTS: AgentPermissionMap = {
   read: 'allow',
-  edit: 'allow',
   glob: 'allow',
   grep: 'allow',
   list: 'allow',
@@ -156,19 +166,42 @@ export function parseBashAllowPatterns(raw: string): PermissionObjectConfig {
 }
 
 /**
+ * Parses a comma/newline-separated list of workspace-relative glob patterns into an
+ * allow map for the `edit` permission.
+ *
+ * OpenCode matches the `edit` permission against the path.relative(worktree, filepath)
+ * of the file being written (write.ts:56 / edit.ts:100), so globs are workspace-relative.
+ * Called by config.ts with the raw `writable_paths` input value.
+ */
+export function parseWritablePaths(raw: string): PermissionObjectConfig {
+  if (!raw.trim()) return {};
+  const patterns = raw
+    .split(/[,\n]/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  const result: PermissionObjectConfig = {};
+  for (const p of patterns) {
+    result[p] = 'allow';
+  }
+  return result;
+}
+
+/**
  * Builds the final PermissionConfig for the SDK.
  *
  * Merge order (last-match-wins under findLast):
  *   READ_FAMILY_DEFAULTS → consumerPermission → ACTION_SECURITY_RULES
  *
  * Action security rules are applied last so consumer opencode_config cannot
- * weaken them (e.g. setting bash:"allow" or external_directory:"allow").
+ * weaken them (e.g. setting bash:"allow" or external_directory:"allow",
+ * or edit:"allow" to bypass the write-confinement added in Story 13-10).
  */
 export function buildAgentPermission(
   consumerPermission: Partial<PermissionConfig> | undefined,
-  bashAllowPatterns: PermissionObjectConfig
+  bashAllowPatterns: PermissionObjectConfig,
+  writablePaths: PermissionObjectConfig = {}
 ): AgentPermissionMap {
-  const actionRules = buildActionSecurityRules(bashAllowPatterns);
+  const actionRules = buildActionSecurityRules(bashAllowPatterns, writablePaths);
   return {
     ...READ_FAMILY_DEFAULTS,
     ...(consumerPermission as AgentPermissionMap | undefined),
@@ -190,9 +223,10 @@ export function buildAgentPermission(
  * would approve it.  We therefore restrict auto-approval to the known safe
  * read-family tools; everything else is rejected.
  */
+// `edit` is intentionally absent — file-write is denied by default (13-10); the handler
+// must not rubber-stamp an edit "ask" from consumer config that sets edit:"ask".
 const AUTO_APPROVE_PERMISSIONS = new Set([
   'read',
-  'edit',
   'glob',
   'grep',
   'list',
