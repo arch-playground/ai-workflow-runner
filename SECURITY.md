@@ -74,11 +74,12 @@ These inputs execute code or control where credentials are sent. **Never source 
 
 By default the agent has: read-only shell, read-only git history, workspace-confined filesystem, non-root user. These inputs widen that surface:
 
-| Input                     | What it enables                                                                                           |
-| ------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `bash_allow_patterns`     | Extend the bash command allowlist beyond read-only defaults — each pattern is a new capability            |
-| `agent_working_directory` | Scope to a workspace subdirectory (narrowing, not widening — but misconfiguration can remove the benefit) |
-| `allowed_provider_hosts`  | Permit additional provider hosts to receive credentials — only add hosts you control                      |
+| Input                      | What it enables                                                                                           |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `bash_allow_patterns`      | Extend the bash command allowlist beyond read-only defaults — each pattern is a new capability            |
+| `agent_working_directory`  | Scope to a workspace subdirectory (narrowing, not widening — but misconfiguration can remove the benefit) |
+| `allowed_provider_hosts`   | Permit additional provider hosts to receive credentials — only add hosts you control                      |
+| `webfetch_allowed_domains` | Allow agent to fetch specific domains (denied by default) — each domain widens network surface            |
 
 ### Egress filtering
 
