@@ -137,11 +137,11 @@ development_status:
   12-2-bump-sdk-and-align-cli-binary: 'done'
   epic-12-retrospective: 'done'
 
-  # Epic 13: Security Hardening (Red-Team Remediation) — added 2026-06-02
-  epic-13: 'backlog'
-  13-1-scope-agent-server-environment: 'backlog'
-  13-2-default-deny-tools-and-fix-permission-merge: 'backlog'
-  13-3-non-root-container-and-home-relocation: 'backlog'
+  # Epic 13: Security Hardening (Red-Team Remediation) — added 2026-06-02, activated (in-progress) 2026-06-02
+  epic-13: 'in-progress'
+  13-1-scope-agent-server-environment: 'ready-for-dev'
+  13-2-fine-grained-tool-allowlist-and-fs-confinement: 'backlog'
+  13-3-non-root-container: 'backlog'
   13-4-provider-baseurl-allowlist-and-refuse-auth: 'backlog'
   13-5-global-wall-clock-timeout: 'backlog'
   13-6-inert-summary-and-ambient-secret-masking: 'backlog'
