@@ -4,7 +4,7 @@ baseline_commit: 35294e9a58935ddb7a4f1522e367548cd6861210
 
 # Story 13.9: Webfetch Per-Domain Allowlist (via OPENCODE_PERMISSION env)
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -44,26 +44,26 @@ So that **knowledge-extraction workflows can fetch from vetted sources while att
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Read Required Standards (MANDATORY)** (AC: All)
-  - [ ] coding-style, commenting, validation, security, unit-testing. Load `typescript-clean-code`, `typescript-unit-testing`.
-  - [ ] Read `research/webfetch-domain-allowlist-research-2026-06-02.md` IN FULL (the mechanism + evidence + the plugin fallback) and design doc → webfetch bullet.
+- [x] **Task 1: Read Required Standards (MANDATORY)** (AC: All)
+  - [x] coding-style, commenting, validation, security, unit-testing. Load `typescript-clean-code`, `typescript-unit-testing`.
+  - [x] Read `research/webfetch-domain-allowlist-research-2026-06-02.md` IN FULL (the mechanism + evidence + the plugin fallback) and design doc → webfetch bullet.
 
-- [ ] **Task 2: Input + rule compiler** (AC: 1, 2, 6)
-  - [ ] action.yml `webfetch_allowed_domains` input; config.ts parse → `webfetchAllowedDomains: string[]` on ActionInputs; thread to InitializeOptions.
-  - [ ] A builder (in `permissions.ts`, near the existing policy) e.g. `buildWebfetchPermissionEnv(domains: string[]): string | undefined` → returns the JSON string `{"webfetch": { "https://<d>/*":"allow", …, "*":"deny" }}` (scoped to webfetch only), or `undefined` when domains is empty.
+- [x] **Task 2: Input + rule compiler** (AC: 1, 2, 6)
+  - [x] action.yml `webfetch_allowed_domains` input; config.ts parse → `webfetchAllowedDomains: string[]` on ActionInputs; thread to InitializeOptions.
+  - [x] A builder (in `permissions.ts`, near the existing policy) e.g. `buildWebfetchPermissionEnv(domains: string[]): string | undefined` → returns the JSON string `{"webfetch": { "https://<d>/*":"allow", …, "*":"deny" }}` (scoped to webfetch only), or `undefined` when domains is empty.
 
-- [ ] **Task 3: Inject OPENCODE_PERMISSION** (AC: 3, 4)
-  - [ ] In `opencode.ts:doInitialize`, after building `scopedEnv` (l.149) and near the LSP flag (l.151): `const webfetchEnv = buildWebfetchPermissionEnv(options?.webfetchAllowedDomains ?? []); if (webfetchEnv) scopedEnv['OPENCODE_PERMISSION'] = webfetchEnv;`. Confirm it survives the scopedEnv/restore bracket (it's set ON scopedEnv, so yes). Keep permissions.ts webfetch:'deny' untouched.
+- [x] **Task 3: Inject OPENCODE_PERMISSION** (AC: 3, 4)
+  - [x] In `opencode.ts:doInitialize`, after building `scopedEnv` (l.149) and near the LSP flag (l.151): `const webfetchEnv = buildWebfetchPermissionEnv(options?.webfetchAllowedDomains ?? []); if (webfetchEnv) scopedEnv['OPENCODE_PERMISSION'] = webfetchEnv;`. Confirm it survives the scopedEnv/restore bracket (it's set ON scopedEnv, so yes). Keep permissions.ts webfetch:'deny' untouched.
 
-- [ ] **Task 4: Gating smoke test + builder tests** (AC: 5, 6)
-  - [ ] permissions.spec.ts: builder — empty → undefined; single/multi domain → correct allow-first/deny-last JSON scoped to webfetch; valid JSON.
-  - [ ] opencode.spec.ts: when webfetchAllowedDomains set, `OPENCODE_PERMISSION` is present on the env at server spawn (assert via the createOpencodeServer mock capturing process.env); when empty, NOT set.
-  - [ ] The real-container allow/deny smoke test (off-list → denied, on-list → allowed) is documented for the epic-end funcval (13-8) since it needs a live agent + network; note it here.
+- [x] **Task 4: Gating smoke test + builder tests** (AC: 5, 6)
+  - [x] permissions.spec.ts: builder — empty → undefined; single/multi domain → correct allow-first/deny-last JSON scoped to webfetch; valid JSON.
+  - [x] opencode.spec.ts: when webfetchAllowedDomains set, `OPENCODE_PERMISSION` is present on the env at server spawn (assert via the createOpencodeServer mock capturing process.env); when empty, NOT set.
+  - [x] The real-container allow/deny smoke test (off-list → denied, on-list → allowed) is documented for the epic-end funcval (13-8) since it needs a live agent + network; note it here.
 
-- [ ] **Task 5: Docs + currency note** (AC: 7)
-  - [ ] Brief comment in the builder + a note in the threat-model docs (or here) that this rides `OPENCODE_PERMISSION` post-validation merge (config.ts:748), re-verify on opencode bumps (Epic 12 guard), plugin fallback documented.
+- [x] **Task 5: Docs + currency note** (AC: 7)
+  - [x] Brief comment in the builder + a note in the threat-model docs (or here) that this rides `OPENCODE_PERMISSION` post-validation merge (config.ts:748), re-verify on opencode bumps (Epic 12 guard), plugin fallback documented.
 
-- [ ] **Final Task: Quality Checks** — `npm run lint` · `npm run format` · `npm run typecheck` · `npm run test:unit`
+- [x] **Final Task: Quality Checks** — `npm run lint` · `npm run format` · `npm run typecheck` · `npm run test:unit`
 
 ## Dev Notes
 
@@ -85,15 +85,35 @@ So that **knowledge-extraction workflows can fetch from vetted sources while att
 
 ### Agent Model Used
 
-_(developer)_
+claude-sonnet-4-5 (bmad-auto sub-agent)
 
 ### Completion Notes List
 
-_(developer)_
+- **Task 1:** Read webfetch research doc (full), security hardening design (webfetch bullet), unit-testing skill loaded.
+- **Task 2:** Added `webfetch_allowed_domains` input to `action.yml`. Added `webfetchAllowedDomains: string[]` to `ActionInputs` in `types.ts`. Parsed in `config.ts` (comma-split/trim/filter pattern, identical to `allowedProviderHosts`). Added `buildWebfetchPermissionEnv(domains: string[]): string | undefined` to `permissions.ts` — produces `{"webfetch": {"https://<d>/*":"allow", ..., "*":"deny"}}` scoped to webfetch only; returns `undefined` for empty input. Added SDK-currency note + plugin-fallback reference in builder JSDoc comment.
+- **Task 3:** Added `webfetchAllowedDomains?: string[]` to `InitializeOptions` in `opencode.ts`. Injected `OPENCODE_PERMISSION` on `scopedEnv` right after `OPENCODE_EXPERIMENTAL_LSP_TOOL` injection (l.151): `const webfetchEnv = buildWebfetchPermissionEnv(...); if (webfetchEnv) scopedEnv['OPENCODE_PERMISSION'] = webfetchEnv`. Threaded through both `initialize()` call sites in `runner.ts`. Kept `permissions.ts webfetch: 'deny'` untouched (13-2 baseline unchanged).
+- **Task 4:** `permissions.spec.ts`: 6 new `buildWebfetchPermissionEnv` tests (empty/whitespace→undefined, single domain allow-first/deny-last, multi-domain, JSON scoped to webfetch only, whitespace filtering). `opencode.spec.ts`: 3 new `13-9-AC3` tests asserting OPENCODE_PERMISSION present/absent on env-at-spawn. `config.spec.ts`: 4 new `13-9-AC1` tests for domain parsing. Updated `webfetchAllowedDomains: []` in all ActionInputs fixtures in runner.spec.ts, index.spec.ts, runner-fallback-integration.spec.ts, config.spec.ts. Real-container allow/deny test documented for 13-8 epic-end funcval.
+- **Task 5:** SDK-currency note + plugin-fallback (Option B) documented in builder comment. README inputs table updated with `webfetch_allowed_domains`. README + SECURITY.md opt-in surface tables updated.
+- **Final Task:** lint clean, format unchanged, typecheck clean, 826 unit tests pass (up from 813).
+- **AC4 note (webfetch in opencode_config crashes):** `permissions.ts webfetch:'deny'` remains a string (not object) — the env var injection is additive, not a replacement. No opencode_config change.
+- **Real-container smoke test note (AC5):** The live allow/deny test (github.com URL → allowed, evil.example → DeniedError) requires a live opencode agent + network; documented for 13-8 epic-end funcval. The unit test (OPENCODE_PERMISSION present/absent on spawn env) is the unit-level gate.
 
 ### File List
 
-_(developer)_
+- `action.yml` — added `webfetch_allowed_domains` input
+- `src/types.ts` — added `webfetchAllowedDomains: string[]` to `ActionInputs`
+- `src/config.ts` — parse `webfetch_allowed_domains` → `webfetchAllowedDomains`
+- `src/permissions.ts` — added `buildWebfetchPermissionEnv()` builder + currency/fallback notes
+- `src/opencode.ts` — added `webfetchAllowedDomains?` to `InitializeOptions`; OPENCODE_PERMISSION injection in `doInitialize`
+- `src/runner.ts` — threaded `webfetchAllowedDomains` into both `initialize()` call sites
+- `src/permissions.spec.ts` — 6 new `buildWebfetchPermissionEnv` tests
+- `src/opencode.spec.ts` — 3 new `13-9-AC3` OPENCODE_PERMISSION env tests
+- `src/config.spec.ts` — 4 new `13-9-AC1` domain-parse tests + `webfetchAllowedDomains: []` in fixtures
+- `src/runner.spec.ts` — `webfetchAllowedDomains: []` in all ActionInputs fixtures
+- `src/index.spec.ts` — `webfetchAllowedDomains: []` in ActionInputs fixture
+- `src/runner-fallback-integration.spec.ts` — `webfetchAllowedDomains: []` in fixture
+- `README.md` — added `webfetch_allowed_domains` to inputs table + opt-in surface table
+- `SECURITY.md` — added `webfetch_allowed_domains` to opt-in surface table
 
 ## QA Results (leader code review + light funcval, 2026-06-02)
 
