@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
-import { createOpencode } from '@opencode-ai/sdk/v2';
+import { createOpencodeServer } from '@opencode-ai/sdk/v2';
 import { OpenCodeService, resetOpenCodeService } from './opencode';
 import { INPUT_LIMITS } from './types';
 import {
@@ -26,7 +26,9 @@ jest.mock('fs', () => {
   };
 });
 
-const mockCreateOpencode = createOpencode as jest.MockedFunction<typeof createOpencode>;
+const mockCreateOpencodeServer = createOpencodeServer as jest.MockedFunction<
+  typeof createOpencodeServer
+>;
 const mockCore = core as jest.Mocked<typeof core>;
 const mockReadFile = fs.promises.readFile as jest.MockedFunction<typeof fs.promises.readFile>;
 
@@ -266,17 +268,21 @@ describe('OpenCodeService - config & reconnection', () => {
 
   describe('config loading', () => {
     const DEFAULT_SERVER_OPTIONS = { hostname: '127.0.0.1', port: 0 };
-    const DEFAULT_PERMISSION = {
-      '*': 'allow',
-      lsp: 'allow',
-      question: 'deny',
-      plan_enter: 'deny',
-      plan_exit: 'deny',
-    };
-    const serverOptionsWithPermission = (config?: Record<string, unknown>) => ({
-      ...DEFAULT_SERVER_OPTIONS,
-      config: { ...config, permission: DEFAULT_PERMISSION },
-    });
+    // Permission config now contains bash allowlist, external_directory:deny, etc.
+    // Use objectContaining so tests don't need to enumerate the full structure.
+    const serverOptionsWithPermission = (config?: Record<string, unknown>) =>
+      expect.objectContaining({
+        ...DEFAULT_SERVER_OPTIONS,
+        config: expect.objectContaining({
+          ...config,
+          permission: expect.objectContaining({
+            external_directory: 'deny',
+            webfetch: 'deny',
+            websearch: 'allow',
+            question: 'deny',
+          }),
+        }),
+      });
 
     beforeEach(() => {
       mockReadFile.mockResolvedValue('{}');
@@ -305,7 +311,7 @@ describe('OpenCodeService - config & reconnection', () => {
       await target.initialize({ opencodeConfig: '/workspace/config.json' });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith(
+      expect(mockCreateOpencodeServer).toHaveBeenCalledWith(
         serverOptionsWithPermission({ provider: { anthropic: { options: { apiKey: 'test' } } } })
       );
     });
@@ -337,7 +343,7 @@ describe('OpenCodeService - config & reconnection', () => {
       await target.initialize({ authConfig: '/workspace/auth.json' });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith(serverOptionsWithPermission());
+      expect(mockCreateOpencodeServer).toHaveBeenCalledWith(serverOptionsWithPermission());
       expect(mockClient.auth.set).toHaveBeenCalledWith({
         providerID: 'github-copilot',
         auth: authData['github-copilot'],
@@ -350,7 +356,7 @@ describe('OpenCodeService - config & reconnection', () => {
       await target.initialize({ model: 'claude-sonnet-4-5-20250929' });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith(
+      expect(mockCreateOpencodeServer).toHaveBeenCalledWith(
         serverOptionsWithPermission({ model: 'claude-sonnet-4-5-20250929' })
       );
     });
@@ -425,7 +431,7 @@ describe('OpenCodeService - config & reconnection', () => {
       await target.initialize();
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith(serverOptionsWithPermission());
+      expect(mockCreateOpencodeServer).toHaveBeenCalledWith(serverOptionsWithPermission());
     });
 
     it('7.3-UNIT-012: with model only sets config.model without loading files', async () => {
@@ -435,7 +441,7 @@ describe('OpenCodeService - config & reconnection', () => {
 
       // Assert
       expect(mockReadFile).not.toHaveBeenCalled();
-      expect(mockCreateOpencode).toHaveBeenCalledWith(
+      expect(mockCreateOpencodeServer).toHaveBeenCalledWith(
         serverOptionsWithPermission({ model: 'gpt-4' })
       );
     });
@@ -458,7 +464,7 @@ describe('OpenCodeService - config & reconnection', () => {
       });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith(
+      expect(mockCreateOpencodeServer).toHaveBeenCalledWith(
         serverOptionsWithPermission({ setting1: 'value1', model: 'claude-opus-4-6' })
       );
       expect(mockClient.auth.set).toHaveBeenCalledWith({
@@ -483,7 +489,7 @@ describe('OpenCodeService - config & reconnection', () => {
       });
 
       // Assert
-      expect(mockCreateOpencode).toHaveBeenCalledWith(serverOptionsWithPermission());
+      expect(mockCreateOpencodeServer).toHaveBeenCalledWith(serverOptionsWithPermission());
       expect(mockClient.auth.set).toHaveBeenCalledTimes(2);
       expect(mockClient.auth.set).toHaveBeenCalledWith({
         providerID: 'anthropic',
@@ -531,7 +537,7 @@ describe('OpenCodeService - config & reconnection', () => {
       await target.initialize({ opencodeConfig: '/workspace/config.json' });
 
       // Assert - non-object JSON is discarded, only permission config remains
-      expect(mockCreateOpencode).toHaveBeenCalledWith(serverOptionsWithPermission());
+      expect(mockCreateOpencodeServer).toHaveBeenCalledWith(serverOptionsWithPermission());
     });
 
     it('7.3-UNIT-018: auth.set() error throws with provider name', async () => {

@@ -47,6 +47,7 @@ describe('index', () => {
     exportTranscript: false,
     transcriptPath: '',
     writeJobSummary: false,
+    bashAllowPatterns: '',
   });
 
   const setupMocks = (): void => {

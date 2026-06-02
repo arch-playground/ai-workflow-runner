@@ -217,16 +217,17 @@ describe('OpenCodeService - session & messages', () => {
   });
 
   describe('event handling', () => {
-    it('handles permission.asked events by auto-approving', async () => {
+    it('handles permission.asked for read-family tools by auto-approving', async () => {
       const target = new OpenCodeService();
       await target.initialize();
 
       const sessionPromise = target.runSession('test', 5000);
       await flushMicrotasks();
 
+      // 'read' is in the safe auto-approve set — should get 'always'
       eventControl.emit({
         type: 'permission.asked',
-        properties: { sessionID: 'session-123', id: 'perm-1' },
+        properties: { sessionID: 'session-123', id: 'perm-1', permission: 'read' },
       });
 
       await flushMicrotasks();
@@ -240,7 +241,31 @@ describe('OpenCodeService - session & messages', () => {
       await sessionPromise;
     });
 
-    it('logs permission approval failures', async () => {
+    it('handles permission.asked for unsafe tools by rejecting', async () => {
+      const target = new OpenCodeService();
+      await target.initialize();
+
+      const sessionPromise = target.runSession('test', 5000);
+      await flushMicrotasks();
+
+      // 'bash' is not in AUTO_APPROVE_PERMISSIONS — should get 'reject'
+      eventControl.emit({
+        type: 'permission.asked',
+        properties: { sessionID: 'session-123', id: 'perm-2', permission: 'bash' },
+      });
+
+      await flushMicrotasks();
+
+      expect(mockClient.permission.reply).toHaveBeenCalledWith({
+        requestID: 'perm-2',
+        reply: 'reject',
+      });
+
+      eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });
+      await sessionPromise;
+    });
+
+    it('logs permission reply failures', async () => {
       mockClient.permission.reply.mockRejectedValueOnce(new Error('Permission denied'));
 
       const target = new OpenCodeService();
@@ -251,13 +276,13 @@ describe('OpenCodeService - session & messages', () => {
 
       eventControl.emit({
         type: 'permission.asked',
-        properties: { sessionID: 'session-123', id: 'perm-1' },
+        properties: { sessionID: 'session-123', id: 'perm-1', permission: 'read' },
       });
 
       await flushMicrotasks();
 
       expect(mockCore.warning).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to auto-approve permission')
+        expect.stringContaining('Failed to reply to permission')
       );
 
       eventControl.emit({ type: 'session.idle', properties: { sessionID: 'session-123' } });

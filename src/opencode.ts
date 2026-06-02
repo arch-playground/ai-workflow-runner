@@ -1,5 +1,9 @@
-import { createOpencode, type OpencodeClient } from '@opencode-ai/sdk/v2';
-import type { ToolState } from '@opencode-ai/sdk/v2';
+import {
+  createOpencodeServer,
+  createOpencodeClient,
+  type OpencodeClient,
+} from '@opencode-ai/sdk/v2';
+import type { ToolState, PermissionConfig } from '@opencode-ai/sdk/v2';
 import * as core from '@actions/core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -11,6 +15,7 @@ import {
   INPUT_LIMITS,
 } from './types.js';
 import { truncateString, buildScopedEnv } from './security.js';
+import { buildAgentPermission, parseBashAllowPatterns, shouldAutoApprove } from './permissions.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
 import { getDebugLogWriter } from './debug-log-writer.js';
 
@@ -19,6 +24,8 @@ export interface InitializeOptions {
   authConfig?: string;
   model?: string;
   envVars?: Record<string, string>;
+  bashAllowPatterns?: string;
+  agentWorkingDirectory?: string;
 }
 
 // Fixed token for stop-commands bracketing. A constant is acceptable here because the
@@ -128,8 +135,8 @@ export class OpenCodeService {
     serverOptions.config = await this.buildSdkConfig(options);
 
     // Snapshot → scope → spawn → restore: the SDK spreads process.env at cross-spawn
-    // time inside createOpencode, so the scoped window only needs to bracket that call.
-    // Restoring in finally ensures ambient secrets return even if createOpencode throws.
+    // time inside createOpencodeServer, so the scoped window only needs to bracket
+    // that call.  Restoring in finally ensures ambient secrets return even on throw.
     const originalEnv = { ...process.env };
     const scopedEnv = buildScopedEnv(options?.envVars ?? {});
     // LSP tool flag must reach the child process; set it explicitly in the scoped env.
@@ -142,11 +149,11 @@ export class OpenCodeService {
     }
     Object.assign(process.env, scopedEnv);
 
-    // opencodeResult is always assigned before use: if createOpencode throws the finally
+    // server is always assigned before use: if createOpencodeServer throws the finally
     // restores env and the exception propagates, so code after the block is unreachable.
-    let opencodeResult!: Awaited<ReturnType<typeof createOpencode>>;
+    let server!: { url: string; close(): void };
     try {
-      opencodeResult = await createOpencode(serverOptions);
+      server = await createOpencodeServer(serverOptions);
     } finally {
       for (const key of Object.keys(process.env)) {
         delete process.env[key];
@@ -154,8 +161,14 @@ export class OpenCodeService {
       Object.assign(process.env, originalEnv);
     }
 
-    this.client = opencodeResult.client;
-    this.server = opencodeResult.server;
+    // Build the client separately so we can forward `directory` for FS confinement.
+    // createOpencode() only passes { baseUrl } — we need to add directory explicitly.
+    const directory =
+      options?.agentWorkingDirectory ?? process.env['GITHUB_WORKSPACE'] ?? process.cwd();
+    const client = createOpencodeClient({ baseUrl: server.url, directory });
+
+    this.client = client;
+    this.server = server;
     this.isInitialized = true;
     core.info('[OpenCode] Server started on localhost');
     core.debug(`[OpenCode] Server URL: ${this.server?.url ?? 'unknown'}`);
@@ -199,27 +212,13 @@ export class OpenCodeService {
       sdkConfig.model = options.model;
     }
 
-    sdkConfig.permission = this.buildPermissionConfig(
-      sdkConfig.permission as Record<string, unknown> | undefined
+    const bashAllowPatterns = parseBashAllowPatterns(options?.bashAllowPatterns ?? '');
+    sdkConfig.permission = buildAgentPermission(
+      sdkConfig.permission as Partial<PermissionConfig> | undefined,
+      bashAllowPatterns
     );
 
     return sdkConfig;
-  }
-
-  private buildPermissionConfig(existing?: Record<string, unknown>): Record<string, string> {
-    const defaults: Record<string, string> = {
-      '*': 'allow',
-      lsp: 'allow',
-      question: 'deny',
-      plan_enter: 'deny',
-      plan_exit: 'deny',
-    };
-
-    if (!existing || Object.keys(existing).length === 0) {
-      return defaults;
-    }
-
-    return { ...defaults, ...(existing as Record<string, string>) };
   }
 
   private async loadJsonFile(filePath: string, label: string): Promise<Record<string, unknown>> {
@@ -758,22 +757,32 @@ export class OpenCodeService {
       permission?: string;
       description?: string;
     };
-    if (permission.sessionID && permission.id) {
-      const permissionLabel = permission.permission || permission.id;
-      core.info(
-        this.formatTimestampedLog(
-          `Permission requested: ${permissionLabel}${permission.description ? ` - ${permission.description}` : ''}`
-        )
-      );
-      void client.permission
-        .reply({ requestID: permission.id, reply: 'always' })
-        .then(() => {
+    if (!permission.sessionID || !permission.id) return;
+
+    const permissionLabel = permission.permission || permission.id;
+    // Config-level deny rules short-circuit to DeniedError inside opencode and do
+    // NOT emit permission.asked — the handler only receives "ask"-classified requests.
+    // We still guard here: only auto-approve known safe read-family tools so that
+    // a future "ask" rule on a dangerous tool is not silently granted.
+    const reply = shouldAutoApprove(permission.permission ?? '') ? 'always' : 'reject';
+
+    core.info(
+      this.formatTimestampedLog(
+        `Permission requested: ${permissionLabel}${permission.description ? ` - ${permission.description}` : ''} → ${reply}`
+      )
+    );
+    void client.permission
+      .reply({ requestID: permission.id, reply })
+      .then(() => {
+        if (reply === 'always') {
           core.info(this.formatTimestampedLog(`Permission auto-approved: ${permissionLabel}`));
-        })
-        .catch((err: Error) => {
-          core.warning(`[OpenCode] Failed to auto-approve permission ${permission.id}: ${err}`);
-        });
-    }
+        } else {
+          core.info(this.formatTimestampedLog(`Permission rejected: ${permissionLabel}`));
+        }
+      })
+      .catch((err: Error) => {
+        core.warning(`[OpenCode] Failed to reply to permission ${permission.id}: ${err}`);
+      });
   }
 
   private handleSessionError(event: ParsedEvent): void {

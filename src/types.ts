@@ -53,6 +53,8 @@ export interface ActionInputs {
   exportTranscript: boolean;
   transcriptPath: string;
   writeJobSummary: boolean;
+  bashAllowPatterns: string;
+  agentWorkingDirectory?: string;
 }
 
 export interface OpenCodeSession {
