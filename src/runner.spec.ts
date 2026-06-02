@@ -115,6 +115,7 @@ describe('runner', () => {
     writeJobSummary: false,
     bashAllowPatterns: '',
     allowedProviderHosts: [],
+    webfetchAllowedDomains: [],
     ...overrides,
   });
 
@@ -156,6 +157,7 @@ describe('runner', () => {
           envVars: { TEST_KEY: 'test_value' },
           bashAllowPatterns: '',
           allowedProviderHosts: [],
+          webfetchAllowedDomains: [],
           agentWorkingDirectory: undefined,
         });
       });
@@ -175,6 +177,7 @@ describe('runner', () => {
           envVars: { TEST_KEY: 'test_value' },
           bashAllowPatterns: '',
           allowedProviderHosts: [],
+          webfetchAllowedDomains: [],
           agentWorkingDirectory: undefined,
         });
       });
@@ -733,6 +736,7 @@ describe('runner', () => {
           envVars: { TEST_KEY: 'test_value' },
           bashAllowPatterns: '',
           allowedProviderHosts: [],
+          webfetchAllowedDomains: [],
           agentWorkingDirectory: undefined,
         });
       });

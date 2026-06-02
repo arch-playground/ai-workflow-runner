@@ -1,5 +1,6 @@
 import {
   buildAgentPermission,
+  buildWebfetchPermissionEnv,
   parseBashAllowPatterns,
   shouldAutoApprove,
   CREDENTIAL_READ_DENY_PATTERNS,
@@ -331,6 +332,79 @@ describe('permissions', () => {
       // Assert
       expect(shouldAutoApprove('')).toBe(false);
       expect(shouldAutoApprove('unknown_tool')).toBe(false);
+    });
+  });
+
+  describe('buildWebfetchPermissionEnv()', () => {
+    it('returns undefined for empty domains array', () => {
+      // Arrange / Act
+      const result = buildWebfetchPermissionEnv([]);
+
+      // Assert
+      expect(result).toBeUndefined();
+    });
+
+    it('returns undefined when all domains are whitespace-only', () => {
+      // Act
+      const result = buildWebfetchPermissionEnv(['  ', '']);
+
+      // Assert
+      expect(result).toBeUndefined();
+    });
+
+    it('single domain: produces allow glob + catch-all deny in correct order', () => {
+      // Act
+      const result = buildWebfetchPermissionEnv(['github.com']);
+
+      // Assert
+      expect(result).toBeDefined();
+      const parsed = JSON.parse(result!) as Record<string, Record<string, string>>;
+      expect(parsed).toHaveProperty('webfetch');
+      const rules = parsed['webfetch']!;
+      const keys = Object.keys(rules);
+      // Allow glob must appear before the catch-all deny (findLast precedence)
+      expect(keys.indexOf('https://github.com/*')).toBeLessThan(keys.indexOf('*'));
+      expect(rules['https://github.com/*']).toBe('allow');
+      expect(rules['*']).toBe('deny');
+    });
+
+    it('multiple domains: each gets an allow glob, catch-all deny is last', () => {
+      // Act
+      const result = buildWebfetchPermissionEnv(['github.com', 'docs.example.com']);
+
+      // Assert
+      const parsed = JSON.parse(result!) as Record<string, Record<string, string>>;
+      const rules = parsed['webfetch']!;
+      const keys = Object.keys(rules);
+      expect(rules['https://github.com/*']).toBe('allow');
+      expect(rules['https://docs.example.com/*']).toBe('allow');
+      // Catch-all deny must be the last key
+      expect(keys[keys.length - 1]).toBe('*');
+      expect(rules['*']).toBe('deny');
+    });
+
+    it('JSON is valid and scoped to webfetch only (no bash/external_directory keys)', () => {
+      // Act
+      const result = buildWebfetchPermissionEnv(['github.com']);
+
+      // Assert
+      const parsed = JSON.parse(result!) as Record<string, unknown>;
+      // Must only contain the webfetch key — no other permission keys
+      expect(Object.keys(parsed)).toEqual(['webfetch']);
+    });
+
+    it('filters out empty/whitespace domain entries', () => {
+      // Act
+      const result = buildWebfetchPermissionEnv(['', 'github.com', '  ']);
+
+      // Assert
+      const parsed = JSON.parse(result!) as Record<string, Record<string, string>>;
+      const rules = parsed['webfetch']!;
+      expect(rules['https://github.com/*']).toBe('allow');
+      // Whitespace entries must not produce rules
+      expect(
+        Object.keys(rules).filter((k) => k !== 'https://github.com/*' && k !== '*')
+      ).toHaveLength(0);
     });
   });
 });
