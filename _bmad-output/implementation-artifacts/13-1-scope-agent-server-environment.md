@@ -1,6 +1,10 @@
 # Story 13.1: Scope the Agent Server Environment
 
-Status: ready-for-dev
+---
+
+## baseline_commit: e95c02bbb1baaa82dc2f9fc145c84a0f2d8ae39b
+
+Status: review
 
 ## Story
 
@@ -34,33 +38,33 @@ So that **a malicious or injected prompt cannot make the agent dump ambient runn
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Read Required Standards (MANDATORY)** (AC: All)
-  - [ ] `.knowledge-base/technical/standards/backend/coding-style.md` — naming, SOLID, TypeScript
-  - [ ] `.knowledge-base/technical/standards/backend/error-handling.md` — errors bubble; no try-catch in use-case logic (here the try/finally is for env restore, which is legitimate resource cleanup — mirror the existing finally patterns)
-  - [ ] `.knowledge-base/technical/standards/global/commenting.md` — zero obvious comments (reinforced by ai-memory `comment-hygiene`)
-  - [ ] `.knowledge-base/technical/standards/backend/logging.md` — minimal logging
-  - [ ] `.knowledge-base/technical/standards/testing/unit-testing.md` — AAA, @golevelup/ts-jest patterns
-  - [ ] Load skills: `typescript-clean-code`, `typescript-unit-testing`
+- [x] **Task 1: Read Required Standards (MANDATORY)** (AC: All)
+  - [x] `.knowledge-base/technical/standards/backend/coding-style.md` — naming, SOLID, TypeScript
+  - [x] `.knowledge-base/technical/standards/backend/error-handling.md` — errors bubble; no try-catch in use-case logic (here the try/finally is for env restore, which is legitimate resource cleanup — mirror the existing finally patterns)
+  - [x] `.knowledge-base/technical/standards/global/commenting.md` — zero obvious comments (reinforced by ai-memory `comment-hygiene`)
+  - [x] `.knowledge-base/technical/standards/backend/logging.md` — minimal logging
+  - [x] `.knowledge-base/technical/standards/testing/unit-testing.md` — AAA, @golevelup/ts-jest patterns
+  - [x] Load skills: `typescript-clean-code`, `typescript-unit-testing`
 
-- [ ] **Task 2: Shared allowlist helper in `security.ts`** (AC: 1)
-  - [ ] Add exported `buildScopedEnv(envVars: Record<string, string>): Record<string, string>`. Allowlist keys: `PATH`, `HOME`, `LANG`, `TERM` (with the same defaults `buildChildEnv` uses), plus pass-through-if-set: `JAVA_HOME`, `GOPATH`, `GOROOT`, `RUNNER_TEMP`, and any `XDG_*` present in `process.env`. Then spread `...envVars`. Document WHY each runtime var is kept (opencode/LSP autoinstall needs them) — non-obvious, so a brief comment is warranted.
-  - [ ] Keep it a pure function (reads `process.env`, returns a new object; does not mutate).
+- [x] **Task 2: Shared allowlist helper in `security.ts`** (AC: 1)
+  - [x] Add exported `buildScopedEnv(envVars: Record<string, string>): Record<string, string>`. Allowlist keys: `PATH`, `HOME`, `LANG`, `TERM` (with the same defaults `buildChildEnv` uses), plus pass-through-if-set: `JAVA_HOME`, `GOPATH`, `GOROOT`, `RUNNER_TEMP`, and any `XDG_*` present in `process.env`. Then spread `...envVars`. Document WHY each runtime var is kept (opencode/LSP autoinstall needs them) — non-obvious, so a brief comment is warranted.
+  - [x] Keep it a pure function (reads `process.env`, returns a new object; does not mutate).
 
-- [ ] **Task 3: Refactor `buildChildEnv` to use the shared helper** (AC: 2)
-  - [ ] `validation.ts:buildChildEnv` becomes `{ ...buildScopedEnv(envVars), AI_LAST_MESSAGE: sanitizedLastMessage }` (or equivalent) — one allowlist source of truth. Confirm the existing validation tests still pass unchanged.
+- [x] **Task 3: Refactor `buildChildEnv` to use the shared helper** (AC: 2)
+  - [x] `validation.ts:buildChildEnv` becomes `{ ...buildScopedEnv(envVars), AI_LAST_MESSAGE: sanitizedLastMessage }` (or equivalent) — one allowlist source of truth. Confirm the existing validation tests still pass unchanged.
 
-- [ ] **Task 4: Apply scoping around `createOpencode` in `opencode.ts`** (AC: 3, 5, 6)
-  - [ ] Thread the declared `env_vars` to `doInitialize` (via `InitializeOptions` or the existing options path — check how inputs flow into the service).
-  - [ ] Snapshot `const originalEnv = { ...process.env }`. Set `process.env` to `buildScopedEnv(envVars)` (preserving `OPENCODE_EXPERIMENTAL_LSP_TOOL='true'` into the scoped set). `await createOpencode(serverOptions)`. In `finally`, restore: clear added keys and reassign `originalEnv` (mutate `process.env` back — do not reassign the binding, Node disallows replacing the object; delete-then-Object.assign).
-  - [ ] Verify the restore is correct: after init, `process.env.GITHUB_TOKEN` etc. are present again for the Action's own code.
+- [x] **Task 4: Apply scoping around `createOpencode` in `opencode.ts`** (AC: 3, 5, 6)
+  - [x] Thread the declared `env_vars` to `doInitialize` (via `InitializeOptions` or the existing options path — check how inputs flow into the service).
+  - [x] Snapshot `const originalEnv = { ...process.env }`. Set `process.env` to `buildScopedEnv(envVars)` (preserving `OPENCODE_EXPERIMENTAL_LSP_TOOL='true'` into the scoped set). `await createOpencode(serverOptions)`. In `finally`, restore: clear added keys and reassign `originalEnv` (mutate `process.env` back — do not reassign the binding, Node disallows replacing the object; delete-then-Object.assign).
+  - [x] Verify the restore is correct: after init, `process.env.GITHUB_TOKEN` etc. are present again for the Action's own code.
 
-- [ ] **Task 5: Unit tests** (AC: 1–6)
-  - [ ] `security.spec.ts`: `buildScopedEnv` returns only allowlisted keys + declared envVars; undeclared ambient vars (GITHUB_TOKEN, AWS_SECRET_ACCESS_KEY) absent; runtime vars passed through when set, omitted when not; declared envVars win/are included.
-  - [ ] `validation.spec.ts`: existing `buildChildEnv` behavior unchanged (regression).
-  - [ ] `opencode.spec.ts`: around `createOpencode`, `process.env` is scoped (assert the env the SDK/spawn sees excludes undeclared secrets) and **restored** after init (snapshot/restore correctness — GITHUB_TOKEN present again post-init). Mock `createOpencode` to capture the `process.env` state at call time.
+- [x] **Task 5: Unit tests** (AC: 1–6)
+  - [x] `security.spec.ts`: `buildScopedEnv` returns only allowlisted keys + declared envVars; undeclared ambient vars (GITHUB_TOKEN, AWS_SECRET_ACCESS_KEY) absent; runtime vars passed through when set, omitted when not; declared envVars win/are included.
+  - [x] `validation.spec.ts`: existing `buildChildEnv` behavior unchanged (regression).
+  - [x] `opencode.spec.ts`: around `createOpencode`, `process.env` is scoped (assert the env the SDK/spawn sees excludes undeclared secrets) and **restored** after init (snapshot/restore correctness — GITHUB_TOKEN present again post-init). Mock `createOpencode` to capture the `process.env` state at call time.
 
-- [ ] **Final Task: Quality Checks**
-  - [ ] `npm run lint` · `npm run format` · `npm run typecheck` · `npm run test:unit`
+- [x] **Final Task: Quality Checks**
+  - [x] `npm run lint` · `npm run format` · `npm run typecheck` · `npm run test:unit`
 
 ## Dev Notes
 
@@ -84,12 +88,26 @@ So that **a malicious or injected prompt cannot make the agent dump ambient runn
 
 ### Agent Model Used
 
-_(to be filled by developer)_
+claude-sonnet-4-5 (via FleetView bmad-auto sub-agent)
 
 ### Completion Notes List
 
-_(to be filled by developer)_
+- AC1 ✅ `buildScopedEnv(envVars)` added to `security.ts` as pure exported function. Allowlist: `PATH`, `HOME`, `LANG`, `TERM` (with defaults), `JAVA_HOME`/`GOPATH`/`GOROOT`/`RUNNER_TEMP` (pass-through when set), all `XDG_*` keys present in `process.env`. Spread `envVars` last so declared vars always win.
+- AC2 ✅ `validation.ts:buildChildEnv` refactored to `{ ...buildScopedEnv(envVars), AI_LAST_MESSAGE: sanitizedLastMessage }`. All 37 existing validation tests pass unchanged — single allowlist source of truth.
+- AC3 ✅ `InitializeOptions.envVars` added. `doInitialize` does: snapshot `originalEnv`, build `scopedEnv` (including `OPENCODE_EXPERIMENTAL_LSP_TOOL='true'` explicitly), mutate `process.env` to scoped set, `await createOpencode`, restore in `finally` (delete-all then `Object.assign`). LSP flag is injected directly into `scopedEnv` rather than relying on the pre-snapshot assignment.
+- AC4 ✅ Validated via unit tests that capture `process.env` at `createOpencode` call time — `GITHUB_TOKEN` and `AWS_SECRET_ACCESS_KEY` are absent from the spawned env.
+- AC5 ✅ Declared `envVars` (e.g. `AWS_ACCESS_KEY_ID`) survive into scoped env — verified by test `13-1-AC5`.
+- AC6 ✅ `process.env` fully restored after `createOpencode` (including throw path) — verified by tests `13-1-AC3: restores GITHUB_TOKEN` and `13-1-AC6: restores on throw`. No regression in 707 tests.
+- `runner.ts` updated to pass `envVars: inputs.envVars` in both `initialize()` call sites. Existing runner.spec.ts expectations updated to include `envVars`.
+- Coverage: `security.ts` 98.64%/93.18%, `opencode.ts` 88.79%/76.1% — all above 80%/75% thresholds.
+- Quality gates: `npm run lint` ✅ · `npm run format` ✅ · `npm run typecheck` ✅ · `npm run test:unit` 707/707 ✅
 
 ### File List
 
-_(to be filled by developer)_
+- `src/security.ts` — added `buildScopedEnv`, `SCOPED_ENV_PASSTHROUGH` constant
+- `src/validation.ts` — refactored `buildChildEnv` to use `buildScopedEnv`; added import
+- `src/opencode.ts` — added `envVars` to `InitializeOptions`; env scoping in `doInitialize`; added import of `buildScopedEnv`
+- `src/runner.ts` — passed `envVars: inputs.envVars` in both `initialize()` call sites
+- `src/security.spec.ts` — added `buildScopedEnv` test suite (10 tests covering AC1, AC4, AC5)
+- `src/opencode.spec.ts` — added env scoping sub-suite (5 tests covering AC3, AC4, AC5, AC6)
+- `src/runner.spec.ts` — updated 3 existing expectations to include `envVars` field

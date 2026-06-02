@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as core from '@actions/core';
 import { ValidationScriptType, ValidationOutput, INPUT_LIMITS } from './types.js';
-import { validateWorkspacePath, truncateString } from './security.js';
+import { validateWorkspacePath, truncateString, buildScopedEnv } from './security.js';
 
 export interface ValidationInput {
   script: string;
@@ -185,14 +185,7 @@ function buildChildEnv(
   envVars: Record<string, string>,
   sanitizedLastMessage: string
 ): Record<string, string> {
-  // Only pass essential env vars + user-provided vars to prevent leaking secrets
-  const essentialEnvVars: Record<string, string> = {
-    PATH: process.env['PATH'] || '',
-    HOME: process.env['HOME'] || '',
-    LANG: process.env['LANG'] || 'en_US.UTF-8',
-    TERM: process.env['TERM'] || 'xterm',
-  };
-  return { ...essentialEnvVars, ...envVars, AI_LAST_MESSAGE: sanitizedLastMessage };
+  return { ...buildScopedEnv(envVars), AI_LAST_MESSAGE: sanitizedLastMessage };
 }
 
 function runScript(input: RunScriptInput): Promise<string> {

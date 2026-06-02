@@ -82,6 +82,7 @@ export async function runWorkflow(
       opencodeConfig: inputs.opencodeConfig,
       authConfig: inputs.authConfig,
       model: inputs.model,
+      envVars: inputs.envVars,
     });
 
     if (inputs.disableFreeModels) {
@@ -262,6 +263,7 @@ async function handleListModels(inputs: ActionInputs): Promise<RunnerResult> {
       opencodeConfig: inputs.opencodeConfig,
       authConfig: inputs.authConfig,
       model: inputs.model,
+      envVars: inputs.envVars,
     });
 
     const allModels = await opencode.listModels();

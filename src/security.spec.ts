@@ -10,6 +10,7 @@ import {
   sanitizeErrorMessage,
   validateUtf8,
   scrubSecrets,
+  buildScopedEnv,
 } from './security';
 
 jest.mock('@actions/core');
@@ -262,6 +263,160 @@ describe('security', () => {
     it('rejects incomplete UTF-8 sequences', () => {
       const incompleteSequence = Buffer.from([0xc3]);
       expect(() => validateUtf8(incompleteSequence, 'test.md')).toThrow('File is not valid UTF-8');
+    });
+  });
+
+  describe('buildScopedEnv', () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it('includes essential base vars with defaults when absent', () => {
+      // Arrange
+      delete process.env['PATH'];
+      delete process.env['HOME'];
+      delete process.env['LANG'];
+      delete process.env['TERM'];
+
+      // Act
+      const result = buildScopedEnv({});
+
+      // Assert
+      expect(result['PATH']).toBe('');
+      expect(result['HOME']).toBe('');
+      expect(result['LANG']).toBe('en_US.UTF-8');
+      expect(result['TERM']).toBe('xterm');
+    });
+
+    it('passes through PATH/HOME/LANG/TERM from process.env when set', () => {
+      // Arrange
+      process.env['PATH'] = '/usr/bin:/bin';
+      process.env['HOME'] = '/root';
+      process.env['LANG'] = 'C.UTF-8';
+      process.env['TERM'] = 'xterm-256color';
+
+      // Act
+      const result = buildScopedEnv({});
+
+      // Assert
+      expect(result['PATH']).toBe('/usr/bin:/bin');
+      expect(result['HOME']).toBe('/root');
+      expect(result['LANG']).toBe('C.UTF-8');
+      expect(result['TERM']).toBe('xterm-256color');
+    });
+
+    it('includes JAVA_HOME/GOPATH/GOROOT/RUNNER_TEMP when set', () => {
+      // Arrange
+      process.env['JAVA_HOME'] = '/usr/lib/jvm/java-21';
+      process.env['GOPATH'] = '/root/go';
+      process.env['GOROOT'] = '/usr/local/go';
+      process.env['RUNNER_TEMP'] = '/tmp/runner';
+
+      // Act
+      const result = buildScopedEnv({});
+
+      // Assert
+      expect(result['JAVA_HOME']).toBe('/usr/lib/jvm/java-21');
+      expect(result['GOPATH']).toBe('/root/go');
+      expect(result['GOROOT']).toBe('/usr/local/go');
+      expect(result['RUNNER_TEMP']).toBe('/tmp/runner');
+    });
+
+    it('omits JAVA_HOME/GOPATH/GOROOT/RUNNER_TEMP when not set', () => {
+      // Arrange
+      delete process.env['JAVA_HOME'];
+      delete process.env['GOPATH'];
+      delete process.env['GOROOT'];
+      delete process.env['RUNNER_TEMP'];
+
+      // Act
+      const result = buildScopedEnv({});
+
+      // Assert
+      expect('JAVA_HOME' in result).toBe(false);
+      expect('GOPATH' in result).toBe(false);
+      expect('GOROOT' in result).toBe(false);
+      expect('RUNNER_TEMP' in result).toBe(false);
+    });
+
+    it('includes XDG_* vars from process.env when set', () => {
+      // Arrange
+      process.env['XDG_CONFIG_HOME'] = '/root/.config';
+      process.env['XDG_DATA_HOME'] = '/root/.local/share';
+
+      // Act
+      const result = buildScopedEnv({});
+
+      // Assert
+      expect(result['XDG_CONFIG_HOME']).toBe('/root/.config');
+      expect(result['XDG_DATA_HOME']).toBe('/root/.local/share');
+    });
+
+    it('omits XDG_* vars when not set', () => {
+      // Arrange
+      delete process.env['XDG_CONFIG_HOME'];
+      delete process.env['XDG_DATA_HOME'];
+
+      // Act
+      const result = buildScopedEnv({});
+
+      // Assert
+      expect('XDG_CONFIG_HOME' in result).toBe(false);
+      expect('XDG_DATA_HOME' in result).toBe(false);
+    });
+
+    it('includes declared envVars in output', () => {
+      // Arrange
+      const envVars = { AWS_ACCESS_KEY_ID: 'AKIAIOSFODNN7EXAMPLE', MY_TOKEN: 'tok-abc' };
+
+      // Act
+      const result = buildScopedEnv(envVars);
+
+      // Assert
+      expect(result['AWS_ACCESS_KEY_ID']).toBe('AKIAIOSFODNN7EXAMPLE');
+      expect(result['MY_TOKEN']).toBe('tok-abc');
+    });
+
+    it('excludes undeclared ambient secrets (GITHUB_TOKEN, AWS_SECRET_ACCESS_KEY)', () => {
+      // Arrange
+      process.env['GITHUB_TOKEN'] = 'ghs_supersecrettoken';
+      process.env['AWS_SECRET_ACCESS_KEY'] = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
+
+      // Act
+      const result = buildScopedEnv({});
+
+      // Assert
+      expect('GITHUB_TOKEN' in result).toBe(false);
+      expect('AWS_SECRET_ACCESS_KEY' in result).toBe(false);
+    });
+
+    it('declared envVars override allowlisted keys', () => {
+      // Arrange
+      process.env['PATH'] = '/usr/bin';
+      const envVars = { PATH: '/custom/bin' };
+
+      // Act
+      const result = buildScopedEnv(envVars);
+
+      // Assert
+      expect(result['PATH']).toBe('/custom/bin');
+    });
+
+    it('returns a new object and does not mutate process.env', () => {
+      // Arrange
+      const before = { ...process.env };
+
+      // Act
+      buildScopedEnv({ CUSTOM: 'value' });
+
+      // Assert
+      expect(process.env).toEqual(before);
     });
   });
 
