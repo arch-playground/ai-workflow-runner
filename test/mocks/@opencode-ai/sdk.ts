@@ -13,5 +13,9 @@ export interface OpencodeClient {
 }
 
 export const createOpencode = jest.fn();
+export const createOpencodeServer = jest.fn();
+export const createOpencodeClient = jest.fn();
 
 export type ToolState = Record<string, unknown>;
+export type PermissionConfig = Record<string, unknown>;
+export type PermissionObjectConfig = Record<string, string>;

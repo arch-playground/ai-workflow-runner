@@ -7,7 +7,7 @@ import {
   INPUT_LIMITS,
   type ValidationScriptType,
 } from './types.js';
-import { maskSecrets, validateConfigPath } from './security.js';
+import { maskSecrets, validateConfigPath, validateWorkspacePath } from './security.js';
 
 const SAFE_DEBUG_LOG_PREFIXES = ['/tmp/', '/github/runner_temp/'];
 
@@ -241,6 +241,15 @@ export function getInputs(): ActionInputs {
     }
   }
 
+  const bashAllowPatterns = core.getInput('bash_allow_patterns') || '';
+
+  const agentWorkingDirectoryRaw = core.getInput('agent_working_directory') || '';
+  let agentWorkingDirectory: string | undefined;
+  if (agentWorkingDirectoryRaw) {
+    // Validate that the working directory is inside the workspace.
+    agentWorkingDirectory = validateWorkspacePath(workspacePath, agentWorkingDirectoryRaw);
+  }
+
   return {
     workflowPath,
     prompt,
@@ -261,6 +270,8 @@ export function getInputs(): ActionInputs {
     exportTranscript,
     transcriptPath,
     writeJobSummary,
+    bashAllowPatterns,
+    agentWorkingDirectory,
   };
 }
 

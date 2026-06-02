@@ -1,5 +1,10 @@
 import * as core from '@actions/core';
-import { createOpencode, OpencodeClient } from '@opencode-ai/sdk/v2';
+import {
+  createOpencode,
+  createOpencodeServer,
+  createOpencodeClient,
+  OpencodeClient,
+} from '@opencode-ai/sdk/v2';
 import {
   OpenCodeService,
   getOpenCodeService,
@@ -21,6 +26,12 @@ jest.mock('@actions/core');
 jest.mock('@opencode-ai/sdk/v2');
 
 const mockCreateOpencode = createOpencode as jest.MockedFunction<typeof createOpencode>;
+const mockCreateOpencodeServer = createOpencodeServer as jest.MockedFunction<
+  typeof createOpencodeServer
+>;
+const mockCreateOpencodeClient = createOpencodeClient as jest.MockedFunction<
+  typeof createOpencodeClient
+>;
 const mockCore = core as jest.Mocked<typeof core>;
 
 describe('OpenCodeService', () => {
@@ -73,7 +84,7 @@ describe('OpenCodeService', () => {
     it('creates client and server', async () => {
       const target = new OpenCodeService();
       await target.initialize();
-      expect(mockCreateOpencode).toHaveBeenCalledWith(
+      expect(mockCreateOpencodeServer).toHaveBeenCalledWith(
         expect.objectContaining({ hostname: '127.0.0.1', port: 0 })
       );
       expect(mockCore.info).toHaveBeenCalledWith('[OpenCode] Initializing SDK server...');
@@ -84,22 +95,19 @@ describe('OpenCodeService', () => {
       const target = new OpenCodeService();
       await target.initialize();
       await target.initialize();
-      expect(mockCreateOpencode).toHaveBeenCalledTimes(1);
+      expect(mockCreateOpencodeServer).toHaveBeenCalledTimes(1);
     });
 
     it('allows retry after transient failure', async () => {
-      mockCreateOpencode.mockRejectedValueOnce(new Error('Network error'));
+      mockCreateOpencodeServer.mockRejectedValueOnce(new Error('Network error'));
       const target = new OpenCodeService();
 
       await expect(target.initialize()).rejects.toThrow('Network error');
 
-      mockCreateOpencode.mockResolvedValueOnce({
-        client: mockClient as unknown as OpencodeClient,
-        server: mockServer,
-      });
+      mockCreateOpencodeServer.mockResolvedValueOnce(mockServer);
 
       await target.initialize();
-      expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+      expect(mockCreateOpencodeServer).toHaveBeenCalledTimes(2);
     });
 
     it('logs server URL at debug level only', async () => {
@@ -109,6 +117,60 @@ describe('OpenCodeService', () => {
         expect.stringContaining('[OpenCode] Server URL:')
       );
       expect(mockCore.info).not.toHaveBeenCalledWith(expect.stringContaining('12345'));
+    });
+
+    describe('13-2-AC5: directory confinement root on client', () => {
+      it('creates client with directory = GITHUB_WORKSPACE when no agentWorkingDirectory', async () => {
+        // Arrange
+        const originalWs = process.env['GITHUB_WORKSPACE'];
+        process.env['GITHUB_WORKSPACE'] = '/github/workspace';
+
+        const target = new OpenCodeService();
+
+        // Act
+        await target.initialize();
+
+        // Assert — client must be created with the workspace as directory
+        expect(mockCreateOpencodeClient).toHaveBeenCalledWith(
+          expect.objectContaining({ directory: '/github/workspace' })
+        );
+
+        process.env['GITHUB_WORKSPACE'] = originalWs;
+      });
+
+      it('creates client with agentWorkingDirectory when provided', async () => {
+        // Arrange
+        const target = new OpenCodeService();
+
+        // Act
+        await target.initialize({ agentWorkingDirectory: '/github/workspace/src' });
+
+        // Assert
+        expect(mockCreateOpencodeClient).toHaveBeenCalledWith(
+          expect.objectContaining({ directory: '/github/workspace/src' })
+        );
+      });
+    });
+
+    describe('13-2-AC6: permission config in server options', () => {
+      it('passes security permission config with external_directory:deny to server', async () => {
+        // Act
+        const target = new OpenCodeService();
+        await target.initialize();
+
+        // Assert — server options must include the permission config
+        expect(mockCreateOpencodeServer).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: expect.objectContaining({
+              permission: expect.objectContaining({
+                external_directory: 'deny',
+                webfetch: 'deny',
+                websearch: 'allow',
+              }),
+            }),
+          })
+        );
+      });
     });
 
     describe('env scoping around createOpencode', () => {
@@ -130,12 +192,12 @@ describe('OpenCodeService', () => {
         Object.assign(process.env, envSnapshot);
       });
 
-      it('13-1-AC3: scoped env at createOpencode call excludes undeclared ambient secrets', async () => {
-        // Arrange
+      it('13-1-AC3: scoped env at createOpencodeServer call excludes undeclared ambient secrets', async () => {
+        // Arrange — capture process.env at the moment the server spawn is called
         let envAtSpawn: Record<string, string | undefined> = {};
-        mockCreateOpencode.mockImplementation(async () => {
+        mockCreateOpencodeServer.mockImplementation(async () => {
           envAtSpawn = { ...process.env };
-          return { client: mockClient as unknown as OpencodeClient, server: mockServer };
+          return mockServer;
         });
         const target = new OpenCodeService();
 
@@ -152,9 +214,9 @@ describe('OpenCodeService', () => {
       it('13-1-AC5: declared envVars reach the spawned process', async () => {
         // Arrange
         let envAtSpawn: Record<string, string | undefined> = {};
-        mockCreateOpencode.mockImplementation(async () => {
+        mockCreateOpencodeServer.mockImplementation(async () => {
           envAtSpawn = { ...process.env };
-          return { client: mockClient as unknown as OpencodeClient, server: mockServer };
+          return mockServer;
         });
         const target = new OpenCodeService();
 
@@ -177,9 +239,9 @@ describe('OpenCodeService', () => {
         expect(process.env['AWS_SECRET_ACCESS_KEY']).toBe('wJalrXUtnFEMI/K7MDENG');
       });
 
-      it('13-1-AC6: restores process.env even when createOpencode throws', async () => {
+      it('13-1-AC6: restores process.env even when createOpencodeServer throws', async () => {
         // Arrange
-        mockCreateOpencode.mockRejectedValueOnce(new Error('spawn failed'));
+        mockCreateOpencodeServer.mockRejectedValueOnce(new Error('spawn failed'));
         const target = new OpenCodeService();
 
         // Act
@@ -192,9 +254,9 @@ describe('OpenCodeService', () => {
       it('13-1-AC3: OPENCODE_EXPERIMENTAL_LSP_TOOL=true is set in the scoped env', async () => {
         // Arrange
         let envAtSpawn: Record<string, string | undefined> = {};
-        mockCreateOpencode.mockImplementation(async () => {
+        mockCreateOpencodeServer.mockImplementation(async () => {
           envAtSpawn = { ...process.env };
-          return { client: mockClient as unknown as OpencodeClient, server: mockServer };
+          return mockServer;
         });
         const target = new OpenCodeService();
 

@@ -1104,6 +1104,7 @@ describe('config', () => {
         exportTranscript: false,
         transcriptPath: '',
         writeJobSummary: false,
+        bashAllowPatterns: '',
       };
 
       // Act
@@ -1130,6 +1131,7 @@ describe('config', () => {
         exportTranscript: false,
         transcriptPath: '',
         writeJobSummary: false,
+        bashAllowPatterns: '',
       };
 
       // Act
@@ -1156,6 +1158,7 @@ describe('config', () => {
         exportTranscript: false,
         transcriptPath: '',
         writeJobSummary: false,
+        bashAllowPatterns: '',
       };
 
       // Act
@@ -1182,6 +1185,7 @@ describe('config', () => {
         exportTranscript: false,
         transcriptPath: '',
         writeJobSummary: false,
+        bashAllowPatterns: '',
       };
 
       // Act
@@ -1208,6 +1212,7 @@ describe('config', () => {
         exportTranscript: false,
         transcriptPath: '',
         writeJobSummary: false,
+        bashAllowPatterns: '',
       };
 
       // Act

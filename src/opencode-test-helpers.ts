@@ -1,4 +1,9 @@
-import { createOpencode, OpencodeClient } from '@opencode-ai/sdk/v2';
+import {
+  createOpencode,
+  createOpencodeServer,
+  createOpencodeClient,
+  OpencodeClient,
+} from '@opencode-ai/sdk/v2';
 
 export interface MockClient {
   session: {
@@ -125,13 +130,23 @@ export function setupMockCreateOpencode(
   eventControl: EventControl
 ): void {
   const mockCreateOpencode = createOpencode as jest.MockedFunction<typeof createOpencode>;
+  const mockCreateOpencodeServer = createOpencodeServer as jest.MockedFunction<
+    typeof createOpencodeServer
+  >;
+  const mockCreateOpencodeClient = createOpencodeClient as jest.MockedFunction<
+    typeof createOpencodeClient
+  >;
 
   mockClient.event.subscribe.mockResolvedValue({ stream: eventControl.generator });
 
+  // Mock both the combined and split entry points so tests work regardless of which
+  // path the production code uses.
   mockCreateOpencode.mockResolvedValue({
     client: mockClient as unknown as OpencodeClient,
     server: mockServer,
   });
+  mockCreateOpencodeServer.mockResolvedValue(mockServer);
+  mockCreateOpencodeClient.mockReturnValue(mockClient as unknown as OpencodeClient);
 }
 
 export function flushMicrotasks(): Promise<void> {

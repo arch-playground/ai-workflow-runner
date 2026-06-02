@@ -100,6 +100,7 @@ describe('runWorkflow — Epic 11 fallback pipeline (integration)', () => {
       exportTranscript: false,
       transcriptPath: '',
       writeJobSummary: false,
+      bashAllowPatterns: '',
       ...overrides,
     };
   }

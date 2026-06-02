@@ -80,6 +80,15 @@ inputs:
     required: false
     default: ''
 
+  bash_allow_patterns:
+    description: 'Comma or newline-separated list of additional bash command patterns to allow (e.g. "npm test*,npx*"). These are appended to the read-only default allow-set; the catch-all deny still applies. Default: empty (no extra patterns).'
+    required: false
+    default: ''
+  agent_working_directory:
+    description: 'Working directory for the agent (relative path within workspace). Confines agent filesystem access to this subtree. Default: workspace root ($GITHUB_WORKSPACE).'
+    required: false
+    default: ''
+
 outputs:
   status:
     description: 'Execution status: success, failure, cancelled, or timeout'

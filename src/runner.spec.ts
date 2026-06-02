@@ -113,6 +113,7 @@ describe('runner', () => {
     exportTranscript: false,
     transcriptPath: '',
     writeJobSummary: false,
+    bashAllowPatterns: '',
     ...overrides,
   });
 
@@ -152,6 +153,8 @@ describe('runner', () => {
           authConfig: '/workspace/auth.json',
           model: 'claude-sonnet-4-5-20250929',
           envVars: { TEST_KEY: 'test_value' },
+          bashAllowPatterns: '',
+          agentWorkingDirectory: undefined,
         });
       });
 
@@ -168,6 +171,8 @@ describe('runner', () => {
           authConfig: undefined,
           model: undefined,
           envVars: { TEST_KEY: 'test_value' },
+          bashAllowPatterns: '',
+          agentWorkingDirectory: undefined,
         });
       });
 
@@ -663,6 +668,8 @@ describe('runner', () => {
           authConfig: '/workspace/auth.json',
           model: 'claude-sonnet-4-5-20250929',
           envVars: { TEST_KEY: 'test_value' },
+          bashAllowPatterns: '',
+          agentWorkingDirectory: undefined,
         });
       });
     });
