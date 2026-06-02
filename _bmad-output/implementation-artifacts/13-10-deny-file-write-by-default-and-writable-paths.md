@@ -1,6 +1,10 @@
 # Story 13.10: Deny File-Write by Default + Writable-Path Allowlist
 
-Status: ready-for-dev
+---
+
+## baseline_commit: 376e0e6e290449f13b0fe46bf8e2b48be2d4cbb0
+
+Status: review
 
 ## Story
 
@@ -36,25 +40,25 @@ So that **the agent reads source to extract knowledge but cannot modify the chec
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Read Required Standards (MANDATORY)** (AC: All)
-  - [ ] coding-style, commenting, validation, security, unit-testing. Load `typescript-clean-code`, `typescript-unit-testing`.
-  - [ ] Read design `security-hardening-design-2026-06-02.md` (write-confinement note); epics.md Story 13.10.
+- [x] **Task 1: Read Required Standards (MANDATORY)** (AC: All)
+  - [x] coding-style, commenting, validation, security, unit-testing. Load `typescript-clean-code`, `typescript-unit-testing`.
+  - [x] Read design `security-hardening-design-2026-06-02.md` (write-confinement note); epics.md Story 13.10.
 
-- [ ] **Task 2: edit deny-by-default + writable_paths in permissions.ts** (AC: 1, 2, 3, 3b, 4)
-  - [ ] In `buildActionSecurityRules`, add `edit` as an object: `{ ...writablePathAllows, '*': 'deny' }`. Pass `writablePaths` into `buildAgentPermission` (new param, mirror `bashAllowPatterns`). A `parseWritablePaths`-style helper or reuse a comma/newline splitter.
-  - [ ] Remove `edit: 'allow'` from `READ_FAMILY_DEFAULTS` (or rely on actionRules-last overriding it — but cleanest is to remove it from defaults AND set it in actionRules so intent is explicit).
-  - [ ] Remove `'edit'` from `AUTO_APPROVE_PERMISSIONS`.
-  - [ ] Keep read/glob/grep/list/lsp allowed.
+- [x] **Task 2: edit deny-by-default + writable_paths in permissions.ts** (AC: 1, 2, 3, 3b, 4)
+  - [x] In `buildActionSecurityRules`, add `edit` as an object: `{ ...writablePathAllows, '*': 'deny' }`. Pass `writablePaths` into `buildAgentPermission` (new param, mirror `bashAllowPatterns`). A `parseWritablePaths`-style helper or reuse a comma/newline splitter.
+  - [x] Remove `edit: 'allow'` from `READ_FAMILY_DEFAULTS` (or rely on actionRules-last overriding it — but cleanest is to remove it from defaults AND set it in actionRules so intent is explicit).
+  - [x] Remove `'edit'` from `AUTO_APPROVE_PERMISSIONS`.
+  - [x] Keep read/glob/grep/list/lsp allowed.
 
-- [ ] **Task 3: `writable_paths` input + threading** (AC: 2)
-  - [ ] action.yml input; config.ts parse → `writablePaths: string[]` on ActionInputs; thread through runner.ts → InitializeOptions → buildSdkConfig's `buildAgentPermission` call.
+- [x] **Task 3: `writable_paths` input + threading** (AC: 2)
+  - [x] action.yml input; config.ts parse → `writablePaths: string[]` on ActionInputs; thread through runner.ts → InitializeOptions → buildSdkConfig's `buildAgentPermission` call.
 
-- [ ] **Task 4: Unit tests** (AC: 1–5)
-  - [ ] permissions.spec.ts: default (no writable_paths) → `edit['*']==='deny'`, no allow entries; with `writable_paths=['docs/**']` → `edit['docs/**']==='allow'` AND `edit['*']==='deny'` (allow before deny); `shouldAutoApprove('edit')===false`; read-family still allowed; consumer `edit:'allow'` does NOT override (merge test).
-  - [ ] config.ts: writable_paths parsed.
-  - [ ] (Live "agent can't write by default / can write under docs/\*\*" test → 13-8 epic-end funcval; note here.)
+- [x] **Task 4: Unit tests** (AC: 1–5)
+  - [x] permissions.spec.ts: default (no writable_paths) → `edit['*']==='deny'`, no allow entries; with `writable_paths=['docs/**']` → `edit['docs/**']==='allow'` AND `edit['*']==='deny'` (allow before deny); `shouldAutoApprove('edit')===false`; read-family still allowed; consumer `edit:'allow'` does NOT override (merge test).
+  - [x] config.ts: writable_paths parsed.
+  - [ ] (Live "agent can't write by default / can write under docs/\*\*" test → 13-8 epic-end funcval; note here.) — DEFERRED to 13-8
 
-- [ ] **Final Task: Quality Checks** — `npm run lint` · `npm run format` · `npm run typecheck` · `npm run test:unit`
+- [x] **Final Task: Quality Checks** — `npm run lint` · `npm run format` · `npm run typecheck` · `npm run test:unit`
 
 ## Dev Notes
 
@@ -75,12 +79,38 @@ So that **the agent reads source to extract knowledge but cannot modify the chec
 
 ### Agent Model Used
 
-_(developer)_
+claude-sonnet-4-7 (Amelia / bmad-agent-dev + bmad-dev-story)
 
 ### Completion Notes List
 
-_(developer)_
+- AC1: `edit: 'allow'` removed from `READ_FAMILY_DEFAULTS`; `buildActionSecurityRules` now sets `edit: { ...writablePaths, '*': 'deny' }` — deny-by-default. With empty `writablePaths`, result is `{ '*': 'deny' }`.
+- AC2: `parseWritablePaths(raw)` helper added to `permissions.ts` (mirrors `parseBashAllowPatterns`). Globs are workspace-relative (opencode path.relative(worktree, file)). Allow-globs inserted before catch-all deny so findLast precedence is correct.
+- AC3: `'edit'` removed from `AUTO_APPROVE_PERMISSIONS` — `shouldAutoApprove('edit') === false`. Handler will reject any edit "ask" from consumer config.
+- AC3b: read/glob/grep/list/lsp unaffected — remain allowed as before.
+- AC4: Merge precedence preserved — consumer `edit:'allow'` or `edit:{…}` is overridden by Action security rules applied last. Verified via merge test.
+- AC5 (live): Deferred to 13-8 epic-end funcval (no live Docker environment available here; unit tests cover all policy logic).
+- Threading: `writablePaths: string[]` added to `ActionInputs`, `InitializeOptions`, parsed in `config.ts`, threaded through both `runner.ts` `initialize()` call sites and `buildSdkConfig` in `opencode.ts`.
+- Tests: 21 new tests added (permissions.spec.ts: 15 new; config.spec.ts: 5 new). Updated 2 existing tests whose assertions referenced the old `edit:'allow'` / `shouldAutoApprove('edit')===true` behavior. Updated `createValidInputs` helpers in runner.spec.ts, runner-fallback-integration.spec.ts, config.spec.ts, index.spec.ts to include `writablePaths: []`. 847 unit tests all passing.
+- Quality checks: lint ✅ format ✅ typecheck ✅ test:unit ✅
 
 ### File List
 
-_(developer)_
+- `src/permissions.ts` — `parseWritablePaths()` new export; `buildActionSecurityRules()` signature + `edit` deny-object; `buildAgentPermission()` new `writablePaths` param; `READ_FAMILY_DEFAULTS` `edit:'allow'` removed; `AUTO_APPROVE_PERMISSIONS` `'edit'` removed
+- `src/types.ts` — `ActionInputs.writablePaths: string[]` added
+- `src/config.ts` — `writable_paths` input parsed → `writablePaths: string[]`; included in return
+- `src/opencode.ts` — `InitializeOptions.writablePaths?: string[]` added; `parseWritablePaths` imported; `buildSdkConfig` threads `writablePaths` to `buildAgentPermission`
+- `src/runner.ts` — `writablePaths: inputs.writablePaths` in both `initialize()` calls
+- `action.yml` — `writable_paths` input added
+- `src/permissions.spec.ts` — 15 new 13-10 tests; updated 2 existing tests; `parseWritablePaths` imported
+- `src/config.spec.ts` — 5 new 13-10 tests; `writablePaths: []` added to all `ActionInputs` objects in `validateInputs` block
+- `src/runner.spec.ts` — `writablePaths: []` in `createValidInputs`; `writablePaths: []` in 3 `toHaveBeenCalledWith` assertions
+- `src/runner-fallback-integration.spec.ts` — `writablePaths: []` in `createInputs`
+- `src/index.spec.ts` — `writablePaths: []` in `createValidInputs`
+
+## QA Results (leader code review + light funcval, 2026-06-02)
+
+**Code review: PASS.** `edit: { ...writablePaths, '*': 'deny' }` in ACTION_SECURITY_RULES (allow-globs first, deny last); `edit:'allow'` removed from READ_FAMILY_DEFAULTS; `'edit'` removed from AUTO_APPROVE_PERMISSIONS (handler won't rubber-stamp an edit ask); `parseWritablePaths` + threaded config→runner→InitializeOptions→buildAgentPermission; workspace-relative globs (write.ts:56/edit.ts:100). Comments explain each. Tests assert shouldAutoApprove('edit')===false, default edit catch-all deny, writable_paths allow-first/deny-last, consumer can't override.
+
+**Light funcval: PASS** — 847/847 tests; bundle builds. The live "agent can't write by default / can write under writable_paths glob" test is part of the 13-8 epic-end real-container funcval.
+
+**Workspace-write gap (BE-05) closed.** All 10 Epic 13 implementation stories done.

@@ -96,6 +96,10 @@ inputs:
     description: 'Comma-separated list of domains the agent may webfetch (e.g. "github.com,docs.example.com"). Default: empty (webfetch fully denied). Security: each added domain widens the agent network surface; use the minimum necessary.'
     required: false
     default: ''
+  writable_paths:
+    description: 'Comma or newline-separated list of workspace-relative glob patterns the agent may write/edit (e.g. "docs/**,output/*.json"). Default: empty (agent cannot write any file). Workflows that previously relied on agent file writes must set this explicitly.'
+    required: false
+    default: ''
 
 outputs:
   status:

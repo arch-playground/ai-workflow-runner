@@ -2,6 +2,7 @@ import {
   buildAgentPermission,
   buildWebfetchPermissionEnv,
   parseBashAllowPatterns,
+  parseWritablePaths,
   shouldAutoApprove,
   CREDENTIAL_READ_DENY_PATTERNS,
 } from './permissions';
@@ -59,14 +60,14 @@ describe('permissions', () => {
 
   describe('buildAgentPermission()', () => {
     describe('read-family defaults', () => {
-      it('allows edit, glob, grep, list, lsp by default', () => {
+      it('allows glob, grep, list, lsp by default (read-only knowledge-extraction tools)', () => {
         // Act
         const result = buildAgentPermission(undefined, {});
 
         // Assert — knowledge extraction tools must be allowed
         // Note: 'read' is an object (with credential-path denies) not a plain 'allow' string;
         // the SDK will allow reads of normal paths but deny .git/config etc.
-        expect(result['edit']).toBe('allow');
+        // Note: 'edit' is intentionally absent from READ_FAMILY_DEFAULTS (13-10 deny-by-default).
         expect(result['glob']).toBe('allow');
         expect(result['grep']).toBe('allow');
         expect(result['list']).toBe('allow');
@@ -300,10 +301,9 @@ describe('permissions', () => {
   });
 
   describe('shouldAutoApprove()', () => {
-    it('returns true for read-family tools', () => {
-      // Assert
+    it('returns true for safe read-only tools', () => {
+      // Assert — read-only tools allowed; edit intentionally excluded (13-10 deny-by-default)
       expect(shouldAutoApprove('read')).toBe(true);
-      expect(shouldAutoApprove('edit')).toBe(true);
       expect(shouldAutoApprove('glob')).toBe(true);
       expect(shouldAutoApprove('grep')).toBe(true);
       expect(shouldAutoApprove('list')).toBe(true);
@@ -311,6 +311,11 @@ describe('permissions', () => {
       expect(shouldAutoApprove('task')).toBe(true);
       expect(shouldAutoApprove('skill')).toBe(true);
       expect(shouldAutoApprove('repo_overview')).toBe(true);
+    });
+
+    it('13-10-AC3: returns false for edit (file-write denied by default)', () => {
+      // Assert — edit denied; handler must not rubber-stamp an edit "ask" from consumer config
+      expect(shouldAutoApprove('edit')).toBe(false);
     });
 
     it('returns false for bash (unsafe — allows arbitrary commands)', () => {
@@ -332,6 +337,178 @@ describe('permissions', () => {
       // Assert
       expect(shouldAutoApprove('')).toBe(false);
       expect(shouldAutoApprove('unknown_tool')).toBe(false);
+    });
+  });
+
+  describe('13-10: edit deny-by-default + writable_paths', () => {
+    describe('AC1: deny edit by default', () => {
+      it('edit is an object (not a string) in default config', () => {
+        // Act
+        const result = buildAgentPermission(undefined, {});
+
+        // Assert — edit must be an object so path-level allow/deny works
+        expect(typeof result['edit']).toBe('object');
+      });
+
+      it('default edit config has catch-all deny', () => {
+        // Act
+        const edit = buildAgentPermission(undefined, {})['edit'] as Record<string, string>;
+
+        // Assert
+        expect(edit['*']).toBe('deny');
+      });
+
+      it('default edit config has no allow entries when writable_paths is empty', () => {
+        // Act
+        const edit = buildAgentPermission(undefined, {})['edit'] as Record<string, string>;
+
+        // Assert — only the catch-all deny; no allow globs
+        expect(Object.entries(edit).filter(([, v]) => v === 'allow')).toHaveLength(0);
+      });
+    });
+
+    describe('AC2: writable_paths allow-first / deny-last', () => {
+      it('single writable_path: allow glob appears before catch-all deny', () => {
+        // Arrange
+        const writablePaths = parseWritablePaths('docs/**');
+
+        // Act
+        const edit = buildAgentPermission(undefined, {}, writablePaths)['edit'] as Record<
+          string,
+          string
+        >;
+        const keys = Object.keys(edit);
+
+        // Assert — allow before deny (findLast precedence)
+        expect(edit['docs/**']).toBe('allow');
+        expect(edit['*']).toBe('deny');
+        expect(keys.indexOf('docs/**')).toBeLessThan(keys.indexOf('*'));
+      });
+
+      it('multiple writable_paths: each allow glob appears before catch-all deny', () => {
+        // Arrange
+        const writablePaths = parseWritablePaths('docs/**,output/*.json');
+
+        // Act
+        const edit = buildAgentPermission(undefined, {}, writablePaths)['edit'] as Record<
+          string,
+          string
+        >;
+        const keys = Object.keys(edit);
+
+        // Assert
+        expect(edit['docs/**']).toBe('allow');
+        expect(edit['output/*.json']).toBe('allow');
+        expect(edit['*']).toBe('deny');
+        expect(keys.indexOf('docs/**')).toBeLessThan(keys.indexOf('*'));
+        expect(keys.indexOf('output/*.json')).toBeLessThan(keys.indexOf('*'));
+      });
+
+      it('catch-all deny is last entry in edit config regardless of writable_paths', () => {
+        // Arrange
+        const writablePaths = parseWritablePaths('docs/**,output/*.json');
+
+        // Act
+        const edit = buildAgentPermission(undefined, {}, writablePaths)['edit'] as Record<
+          string,
+          string
+        >;
+        const entries = Object.entries(edit);
+        const last = entries[entries.length - 1];
+
+        // Assert — catch-all deny must win under last-match-wins (findLast)
+        expect(last).toEqual(['*', 'deny']);
+      });
+    });
+
+    describe('AC4: merge precedence — consumer edit:"allow" cannot override deny', () => {
+      it('consumer edit:"allow" does NOT override Action deny-by-default', () => {
+        // Arrange — consumer tries to re-enable writes
+        const consumerPermission = { edit: 'allow' };
+
+        // Act
+        const result = buildAgentPermission(consumerPermission as never, {});
+
+        // Assert — Action security rules applied last; consumer edit:"allow" is overridden
+        expect(typeof result['edit']).toBe('object');
+        expect((result['edit'] as Record<string, string>)['*']).toBe('deny');
+      });
+
+      it('consumer edit object cannot override Action deny catch-all', () => {
+        // Arrange — consumer tries to allow a specific path
+        const consumerPermission = { edit: { 'src/**': 'allow' } };
+
+        // Act
+        const result = buildAgentPermission(consumerPermission as never, {});
+
+        // Assert — Action security rules are spread last; the catch-all deny still wins
+        expect(typeof result['edit']).toBe('object');
+        expect((result['edit'] as Record<string, string>)['*']).toBe('deny');
+      });
+    });
+
+    describe('AC3b: read-family still allowed', () => {
+      it('read, glob, grep, list, lsp remain allowed when edit is denied', () => {
+        // Act
+        const result = buildAgentPermission(undefined, {});
+
+        // Assert
+        expect(typeof result['read']).toBe('object'); // object with cred-path denies
+        expect(result['glob']).toBe('allow');
+        expect(result['grep']).toBe('allow');
+        expect(result['list']).toBe('allow');
+        expect(result['lsp']).toBe('allow');
+      });
+    });
+  });
+
+  describe('parseWritablePaths()', () => {
+    it('returns empty object for empty string', () => {
+      // Arrange / Act
+      const result = parseWritablePaths('');
+
+      // Assert
+      expect(result).toEqual({});
+    });
+
+    it('returns empty object for whitespace-only string', () => {
+      // Act
+      const result = parseWritablePaths('   ');
+
+      // Assert
+      expect(result).toEqual({});
+    });
+
+    it('parses comma-separated paths into allow map', () => {
+      // Act
+      const result = parseWritablePaths('docs/**,output/*.json');
+
+      // Assert
+      expect(result).toEqual({ 'docs/**': 'allow', 'output/*.json': 'allow' });
+    });
+
+    it('parses newline-separated paths', () => {
+      // Act
+      const result = parseWritablePaths('docs/**\noutput/*.json');
+
+      // Assert
+      expect(result).toEqual({ 'docs/**': 'allow', 'output/*.json': 'allow' });
+    });
+
+    it('trims whitespace around paths', () => {
+      // Act
+      const result = parseWritablePaths(' docs/** , output/*.json ');
+
+      // Assert
+      expect(result).toEqual({ 'docs/**': 'allow', 'output/*.json': 'allow' });
+    });
+
+    it('filters out empty entries', () => {
+      // Act
+      const result = parseWritablePaths('docs/**,,output/*.json');
+
+      // Assert
+      expect(result).toEqual({ 'docs/**': 'allow', 'output/*.json': 'allow' });
     });
   });
 

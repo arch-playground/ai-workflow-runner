@@ -54,6 +54,7 @@ export interface ActionInputs {
   transcriptPath: string;
   writeJobSummary: boolean;
   bashAllowPatterns: string;
+  writablePaths: string[];
   agentWorkingDirectory?: string;
   allowedProviderHosts: string[];
   webfetchAllowedDomains: string[];

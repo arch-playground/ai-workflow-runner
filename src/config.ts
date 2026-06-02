@@ -243,6 +243,12 @@ export function getInputs(): ActionInputs {
 
   const bashAllowPatterns = core.getInput('bash_allow_patterns') || '';
 
+  const writablePaths = core
+    .getInput('writable_paths')
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
   const allowedProviderHosts = core
     .getInput('allowed_provider_hosts')
     .split(',')
@@ -283,6 +289,7 @@ export function getInputs(): ActionInputs {
     transcriptPath,
     writeJobSummary,
     bashAllowPatterns,
+    writablePaths,
     agentWorkingDirectory,
     allowedProviderHosts,
     webfetchAllowedDomains,
