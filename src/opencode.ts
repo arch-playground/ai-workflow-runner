@@ -3,15 +3,17 @@ import type { ToolState } from '@opencode-ai/sdk/v2';
 import * as core from '@actions/core';
 import * as fs from 'fs';
 import * as path from 'path';
-import { OpenCodeSession, INPUT_LIMITS } from './types.js';
+import { OpenCodeSession, INPUT_LIMITS, ModelStrategy } from './types.js';
 import { truncateString } from './security.js';
 import { getToolLoggerFactory } from './tool-loggers/index.js';
 import { getDebugLogWriter } from './debug-log-writer.js';
+import { TokenTracker } from './token-tracker.js';
 
 export interface InitializeOptions {
   opencodeConfig?: string;
   authConfig?: string;
   model?: string;
+  modelStrategy?: ModelStrategy;
 }
 
 const SESSION_STATUS = {
@@ -83,6 +85,37 @@ export class OpenCodeService {
   private sessionCompletionCallbacks: Map<string, SessionCallbacks> = new Map();
   private sessionMessageState: Map<string, SessionMessageState> = new Map();
   private heartbeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  private tokenTracker = new TokenTracker();
+
+  private readonly DEFAULT_TASK_TYPES = ['explore', 'validate', 'format', 'generate'] as const;
+
+  private readonly TASK_TYPE_DESCRIPTIONS: Record<string, string> = {
+    explore: 'Exploration and codebase scanning tasks',
+    validate: 'Validation and checking tasks',
+    format: 'Formatting and transformation tasks',
+    generate: 'Code generation and implementation tasks',
+    default: 'Default fallback tasks',
+  };
+
+  private readonly KNOWN_MODELS: Record<string, string> = {
+    // Anthropic
+    opus: 'anthropic/claude-opus-4-6',
+    sonnet: 'anthropic/claude-sonnet-4-6',
+    haiku: 'anthropic/claude-haiku-4-5',
+    'sonnet-4': 'anthropic/claude-sonnet-4-6',
+    'opus-4': 'anthropic/claude-opus-4-6',
+    'haiku-4': 'anthropic/claude-haiku-4-5',
+    // OpenAI
+    'gpt-4o': 'openai/gpt-4o',
+    'gpt-4o-mini': 'openai/gpt-4o-mini',
+    o3: 'openai/o3',
+    'o3-mini': 'openai/o3-mini',
+    'o4-mini': 'openai/o4-mini',
+    // Google
+    'gemini-2.5-pro': 'google/gemini-2.5-pro',
+    'gemini-2.5-flash': 'google/gemini-2.5-flash',
+  };
 
   async initialize(options?: InitializeOptions): Promise<void> {
     if (this.initializationError) {
@@ -159,11 +192,87 @@ export class OpenCodeService {
       sdkConfig.model = options.model;
     }
 
+    if (options?.modelStrategy?.primary && !options?.model) {
+      sdkConfig.model = this.resolveModelName(options.modelStrategy.primary);
+    }
+
+    const strategyAgents = this.buildAgentConfigs(options?.modelStrategy, options?.model);
+    if (strategyAgents) {
+      const existingAgents = (sdkConfig.agent as Record<string, unknown>) || {};
+      sdkConfig.agent = { ...existingAgents, ...strategyAgents };
+    }
+
     sdkConfig.permission = this.buildPermissionConfig(
       sdkConfig.permission as Record<string, unknown> | undefined
     );
 
     return sdkConfig;
+  }
+
+  private isFullModelId(value: string): boolean {
+    return value.includes('/');
+  }
+
+  private resolveModelName(value: string): string {
+    if (this.isFullModelId(value)) return value;
+
+    const lower = value.toLowerCase();
+    const exact = this.KNOWN_MODELS[lower];
+    if (exact) return exact;
+
+    const matches = [
+      ...new Set(Object.values(this.KNOWN_MODELS).filter((fullId) => fullId.includes(lower))),
+    ];
+
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length > 1) {
+      throw new Error(
+        `Ambiguous model name "${value}" matches multiple models: ${matches.join(', ')}. ` +
+          `Use a full model ID or a more specific short name.`
+      );
+    }
+
+    const availableNames = Object.keys(this.KNOWN_MODELS).join(', ');
+    throw new Error(
+      `Unknown model short name "${value}". Available short names: ${availableNames}. ` +
+        `Use a full model ID (e.g., "anthropic/claude-sonnet-4-6") or one of: ${availableNames}.`
+    );
+  }
+
+  private buildAgentConfigs(
+    strategy: ModelStrategy | undefined,
+    defaultModel?: string
+  ): Record<string, unknown> | undefined {
+    if (!defaultModel && !strategy) return undefined;
+
+    const agents: Record<string, unknown> = {};
+    const model = defaultModel || '';
+
+    if (strategy) {
+      for (const [taskType, modelValue] of Object.entries(strategy)) {
+        if (taskType === 'primary') continue;
+        const resolvedModel = this.resolveModelName(modelValue);
+        agents[taskType] = {
+          model: resolvedModel,
+          mode: 'subagent',
+          description: this.TASK_TYPE_DESCRIPTIONS[taskType] || `${taskType} tasks`,
+        };
+      }
+    }
+
+    if (model) {
+      for (const taskType of this.DEFAULT_TASK_TYPES) {
+        if (!agents[taskType]) {
+          agents[taskType] = {
+            model: model,
+            mode: 'subagent',
+            description: this.TASK_TYPE_DESCRIPTIONS[taskType],
+          };
+        }
+      }
+    }
+
+    return Object.keys(agents).length > 0 ? agents : undefined;
   }
 
   private buildPermissionConfig(existing?: Record<string, unknown>): Record<string, string> {
@@ -264,7 +373,11 @@ export class OpenCodeService {
     }
 
     core.info(this.formatTimestampedLog('Prompt sent, waiting for completion...'));
-    await idlePromise;
+    try {
+      await idlePromise;
+    } finally {
+      await this.collectTokenMetrics(sessionId);
+    }
 
     return { sessionId, lastMessage: this.getLastMessage(sessionId) };
   }
@@ -299,8 +412,16 @@ export class OpenCodeService {
       parts: [{ type: 'text', text: truncatedMessage }],
     });
 
-    await idlePromise;
+    try {
+      await idlePromise;
+    } finally {
+      await this.collectTokenMetrics(sessionId);
+    }
     return { sessionId, lastMessage: this.getLastMessage(sessionId) };
+  }
+
+  getTokenTracker(): TokenTracker {
+    return this.tokenTracker;
   }
 
   getLastMessage(sessionId: string): string {
@@ -310,6 +431,23 @@ export class OpenCodeService {
       core.warning('[OpenCode] Last message truncated due to size limit');
     }
     return truncateString(message, INPUT_LIMITS.MAX_LAST_MESSAGE_SIZE);
+  }
+
+  private async collectTokenMetrics(sessionID: string): Promise<void> {
+    if (!this.client) return;
+
+    try {
+      const response = await this.client.session.messages({ sessionID });
+      if (!response.data) return;
+
+      for (const entry of response.data) {
+        if (entry.info.role === 'assistant') {
+          this.tokenTracker.trackMessage(entry.info as unknown as Record<string, unknown>);
+        }
+      }
+    } catch (error) {
+      core.warning(`[TokenTracker] Failed to collect token metrics: ${String(error)}`);
+    }
   }
 
   dispose(): void {

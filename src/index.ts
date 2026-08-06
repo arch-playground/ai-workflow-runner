@@ -69,6 +69,19 @@ async function run(): Promise<void> {
       return;
     }
 
+    try {
+      if (hasOpenCodeServiceInstance()) {
+        const opencode = getOpenCodeService();
+        const tokenTracker = opencode.getTokenTracker();
+        tokenTracker.emitLogs();
+        tokenTracker.setActionOutputs();
+      }
+    } catch (tokenError) {
+      core.warning(
+        `[TokenTracker] Failed to emit token outputs: ${tokenError instanceof Error ? tokenError.message : String(tokenError)}`
+      );
+    }
+
     status = result.success ? 'success' : 'failure';
     core.setOutput('status', status);
     core.setOutput('result', result.output);

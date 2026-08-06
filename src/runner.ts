@@ -76,6 +76,7 @@ export async function runWorkflow(
       opencodeConfig: inputs.opencodeConfig,
       authConfig: inputs.authConfig,
       model: inputs.model,
+      modelStrategy: inputs.modelStrategy,
     });
     session = await opencode.runSession(fullPrompt, timeoutMs, abortSignal);
 

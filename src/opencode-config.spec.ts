@@ -349,7 +349,9 @@ describe('OpenCodeService - config & reconnection', () => {
 
       // Assert
       expect(mockCreateOpencode).toHaveBeenCalledWith(
-        serverOptionsWithPermission({ model: 'claude-sonnet-4-5-20250929' })
+        expect.objectContaining({
+          config: expect.objectContaining({ model: 'claude-sonnet-4-5-20250929' }),
+        })
       );
     });
 
@@ -434,7 +436,9 @@ describe('OpenCodeService - config & reconnection', () => {
       // Assert
       expect(mockReadFile).not.toHaveBeenCalled();
       expect(mockCreateOpencode).toHaveBeenCalledWith(
-        serverOptionsWithPermission({ model: 'gpt-4' })
+        expect.objectContaining({
+          config: expect.objectContaining({ model: 'gpt-4' }),
+        })
       );
     });
 
@@ -457,7 +461,9 @@ describe('OpenCodeService - config & reconnection', () => {
 
       // Assert
       expect(mockCreateOpencode).toHaveBeenCalledWith(
-        serverOptionsWithPermission({ setting1: 'value1', model: 'claude-opus-4-6' })
+        expect.objectContaining({
+          config: expect.objectContaining({ setting1: 'value1', model: 'claude-opus-4-6' }),
+        })
       );
       expect(mockClient.auth.set).toHaveBeenCalledWith({
         providerID: 'anthropic',
@@ -543,6 +549,338 @@ describe('OpenCodeService - config & reconnection', () => {
       await expect(target.initialize({ authConfig: '/workspace/auth.json' })).rejects.toThrow(
         'Failed to set auth for provider anthropic'
       );
+    });
+  });
+
+  describe('model strategy agent config generation', () => {
+    it('generates subagent configs from model_strategy with short names', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        model: 'anthropic/claude-opus-4-6',
+        modelStrategy: { explore: 'haiku', validate: 'haiku', generate: 'sonnet' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.explore).toEqual(
+        expect.objectContaining({ model: 'anthropic/claude-haiku-4-5', mode: 'subagent' })
+      );
+      expect(agentConfig.validate).toEqual(
+        expect.objectContaining({ model: 'anthropic/claude-haiku-4-5', mode: 'subagent' })
+      );
+      expect(agentConfig.generate).toEqual(
+        expect.objectContaining({ model: 'anthropic/claude-sonnet-4-6', mode: 'subagent' })
+      );
+    });
+
+    it('uses full model ID when provided instead of short name', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        model: 'anthropic/claude-opus-4-6',
+        modelStrategy: { explore: 'anthropic/claude-haiku-4-5-20251001' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.explore).toEqual(
+        expect.objectContaining({ model: 'anthropic/claude-haiku-4-5-20251001' })
+      );
+    });
+
+    it('defaults all agents to model input when no strategy provided', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.explore).toEqual(
+        expect.objectContaining({ model: 'anthropic/claude-sonnet-4-6', mode: 'subagent' })
+      );
+      expect(agentConfig.validate).toEqual(
+        expect.objectContaining({ model: 'anthropic/claude-sonnet-4-6', mode: 'subagent' })
+      );
+      expect(agentConfig.generate).toEqual(
+        expect.objectContaining({ model: 'anthropic/claude-sonnet-4-6', mode: 'subagent' })
+      );
+    });
+
+    it('does not create default agents when model is undefined and no strategy', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({});
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      expect(configArg.agent).toBeUndefined();
+    });
+
+    it('merges strategy agents with existing opencode_config agents', async () => {
+      mockReadFile.mockResolvedValue(
+        JSON.stringify({
+          agent: { custom: { model: 'anthropic/claude-opus-4-6', mode: 'subagent' } },
+        })
+      );
+      const service = new OpenCodeService();
+      await service.initialize({
+        opencodeConfig: '/path/to/config.json',
+        model: 'anthropic/claude-sonnet-4-6',
+        modelStrategy: { explore: 'haiku' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.custom).toBeDefined();
+      expect(agentConfig.explore).toBeDefined();
+    });
+
+    it('model_strategy takes precedence over opencode_config for same agent name', async () => {
+      mockReadFile.mockResolvedValue(
+        JSON.stringify({
+          agent: { explore: { model: 'anthropic/claude-opus-4-6', mode: 'subagent' } },
+        })
+      );
+      const service = new OpenCodeService();
+      await service.initialize({
+        opencodeConfig: '/path/to/config.json',
+        model: 'anthropic/claude-sonnet-4-6',
+        modelStrategy: { explore: 'haiku' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      const exploreConfig = agentConfig.explore as Record<string, unknown>;
+      expect(exploreConfig.model).toContain('haiku');
+    });
+
+    it('throws error for unrecognized short names', async () => {
+      const service = new OpenCodeService();
+      await expect(
+        service.initialize({
+          model: 'anthropic/claude-sonnet-4-6',
+          modelStrategy: { explore: 'unknown-model' },
+        })
+      ).rejects.toThrow(/Unknown model short name "unknown-model"/);
+    });
+
+    it('accepts custom/unknown task types as subagent configs', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        model: 'anthropic/claude-sonnet-4-6',
+        modelStrategy: { lint: 'haiku', review: 'sonnet' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      const lintConfig = agentConfig.lint as Record<string, unknown>;
+      expect(lintConfig.model).toBe('anthropic/claude-haiku-4-5');
+      expect(lintConfig.mode).toBe('subagent');
+      expect(lintConfig.description).toBe('lint tasks');
+    });
+
+    it('uses primary from strategy as main model when model input is absent', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ modelStrategy: { primary: 'opus', explore: 'haiku' } });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      expect(configArg.model).toBe('anthropic/claude-opus-4-6');
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.explore).toEqual(
+        expect.objectContaining({ model: 'anthropic/claude-haiku-4-5', mode: 'subagent' })
+      );
+    });
+
+    it('model input takes precedence over primary in strategy', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        model: 'anthropic/claude-sonnet-4-6',
+        modelStrategy: { primary: 'opus', explore: 'haiku' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      expect(configArg.model).toBe('anthropic/claude-sonnet-4-6');
+    });
+
+    it('throws error for unrecognized primary short name', async () => {
+      const service = new OpenCodeService();
+      await expect(
+        service.initialize({
+          modelStrategy: { primary: 'unknown-model' },
+        })
+      ).rejects.toThrow(/Unknown model short name "unknown-model"/);
+    });
+
+    it('resolves partial model name via substring match', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        modelStrategy: { primary: 'claude-haiku-4-5' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      expect(configArg.model).toBe('anthropic/claude-haiku-4-5');
+    });
+
+    it('resolves partial model name case-insensitively', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        modelStrategy: { primary: 'Claude-Haiku-4-5' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      expect(configArg.model).toBe('anthropic/claude-haiku-4-5');
+    });
+
+    it('resolves new OpenAI short names', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        model: 'anthropic/claude-sonnet-4-6',
+        modelStrategy: { explore: 'gpt-4o', validate: 'o3-mini' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.explore).toEqual(expect.objectContaining({ model: 'openai/gpt-4o' }));
+      expect(agentConfig.validate).toEqual(expect.objectContaining({ model: 'openai/o3-mini' }));
+    });
+
+    it('resolves new Google short names', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        model: 'anthropic/claude-sonnet-4-6',
+        modelStrategy: { explore: 'gemini-2.5-pro' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.explore).toEqual(
+        expect.objectContaining({ model: 'google/gemini-2.5-pro' })
+      );
+    });
+
+    it('throws ambiguous error when substring matches multiple models', async () => {
+      const service = new OpenCodeService();
+      await expect(
+        service.initialize({
+          model: 'anthropic/claude-sonnet-4-6',
+          modelStrategy: { explore: 'claude' },
+        })
+      ).rejects.toThrow(/Ambiguous model name "claude" matches multiple models/);
+    });
+
+    it('resolves substring match for agent configs', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({
+        model: 'anthropic/claude-sonnet-4-6',
+        modelStrategy: { explore: 'claude-opus-4-6' },
+      });
+      const configArg = mockCreateOpencode.mock.calls[0]![0]!.config as Record<string, unknown>;
+      const agentConfig = configArg.agent as Record<string, unknown>;
+      expect(agentConfig.explore).toEqual(
+        expect.objectContaining({ model: 'anthropic/claude-opus-4-6' })
+      );
+    });
+  });
+
+  describe('token tracking integration', () => {
+    it('exposes TokenTracker via getTokenTracker()', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+      const tracker = service.getTokenTracker();
+      expect(tracker).toBeDefined();
+      expect(tracker.getSummary().totalTokens).toBe(0);
+    });
+
+    it('collects token metrics after runSession completes', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+
+      mockClient.session.messages.mockResolvedValue({
+        data: [
+          {
+            info: {
+              id: 'msg-1',
+              role: 'assistant',
+              model: { providerID: 'anthropic', modelID: 'opus' },
+              cost: 0.1,
+              tokens: { input: 1000, output: 500, reasoning: 0, cache: { read: 0, write: 0 } },
+            },
+            parts: [],
+          },
+          { info: { id: 'msg-2', role: 'user' }, parts: [] },
+        ],
+      });
+
+      const sessionPromise = service.runSession('test prompt', 30000);
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      eventControl.emit({
+        type: 'session.idle',
+        properties: { sessionID: 'session-123', status: { type: 'idle' } },
+      });
+
+      await sessionPromise;
+
+      expect(mockClient.session.messages).toHaveBeenCalledWith({ sessionID: 'session-123' });
+      const tracker = service.getTokenTracker();
+      const summary = tracker.getSummary();
+      expect(summary.inputTokens).toBe(1000);
+      expect(summary.outputTokens).toBe(500);
+    });
+
+    it('only tracks assistant messages, not user messages', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+
+      mockClient.session.messages.mockResolvedValue({
+        data: [
+          { info: { id: 'msg-1', role: 'user' }, parts: [] },
+          {
+            info: {
+              id: 'msg-2',
+              role: 'assistant',
+              model: { providerID: 'anthropic', modelID: 'opus' },
+              cost: 0.1,
+              tokens: { input: 1000, output: 500, reasoning: 0, cache: { read: 0, write: 0 } },
+            },
+            parts: [],
+          },
+        ],
+      });
+
+      const sessionPromise = service.runSession('test prompt', 30000);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      eventControl.emit({
+        type: 'session.idle',
+        properties: { sessionID: 'session-123', status: { type: 'idle' } },
+      });
+      await sessionPromise;
+
+      const tracker = service.getTokenTracker();
+      const summary = tracker.getSummary();
+      expect(summary.perModel['opus']?.messageCount).toBe(1);
+    });
+
+    it('handles session.messages failure gracefully', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+
+      mockClient.session.messages.mockRejectedValue(new Error('API error'));
+
+      const sessionPromise = service.runSession('test prompt', 30000);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      eventControl.emit({
+        type: 'session.idle',
+        properties: { sessionID: 'session-123', status: { type: 'idle' } },
+      });
+      await sessionPromise;
+
+      expect(mockCore.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to collect token metrics')
+      );
+    });
+
+    it('collects token metrics even when session errors (try/finally)', async () => {
+      const service = new OpenCodeService();
+      await service.initialize({ model: 'anthropic/claude-sonnet-4-6' });
+
+      mockClient.session.messages.mockResolvedValue({ data: [] });
+
+      const sessionPromise = service.runSession('test prompt', 30000);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      eventControl.emit({
+        type: 'session.error',
+        properties: { sessionID: 'session-123', error: { message: 'Something went wrong' } },
+      });
+
+      await expect(sessionPromise).rejects.toThrow('Session error');
+
+      expect(mockClient.session.messages).toHaveBeenCalledWith({ sessionID: 'session-123' });
     });
   });
 });
