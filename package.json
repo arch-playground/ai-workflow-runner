@@ -33,7 +33,7 @@
   "license": "MIT",
   "dependencies": {
     "@actions/core": "^3.0.1",
-    "@opencode-ai/sdk": "^1.18.18"
+    "@opencode-ai/sdk": "^1.18.22"
   },
   "devDependencies": {
     "@commitlint/cli": "^20.5.3",
