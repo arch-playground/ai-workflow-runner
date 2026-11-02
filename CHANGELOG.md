@@ -5,6 +5,13 @@ All notable changes to AI Workflow Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.7.0...v1.8.0) (2026-11-02)
+
+
+### Features
+
+* **evaluation:** add pre-evaluation checklist and evaluation framework documentation ([7293411](https://github.com/arch-playground/ai-workflow-runner/commit/72934111a447ff2f0f0e9540e70dde0b10296ac4))
+
 ## [1.7.0](https://github.com/arch-playground/ai-workflow-runner/compare/v1.6.0...v1.7.0) (2026-03-13)
 
 
