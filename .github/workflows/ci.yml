@@ -722,7 +722,7 @@ jobs:
 
       - name: PR status check - Quality Gate
         if: always()
-        uses: LouisBrunner/checks-action@v2.0.0
+        uses: LouisBrunner/checks-action@v3.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: Quality Gate
@@ -733,7 +733,7 @@ jobs:
 
       - name: PR status check - Test Suite
         if: always()
-        uses: LouisBrunner/checks-action@v2.0.0
+        uses: LouisBrunner/checks-action@v3.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: Test Suite
@@ -744,7 +744,7 @@ jobs:
 
       - name: PR status check - Build & Integration
         if: always()
-        uses: LouisBrunner/checks-action@v2.0.0
+        uses: LouisBrunner/checks-action@v3.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: Build & Integration
@@ -755,7 +755,7 @@ jobs:
 
       - name: PR status check - E2E Action Tests
         if: always()
-        uses: LouisBrunner/checks-action@v2.0.0
+        uses: LouisBrunner/checks-action@v3.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: E2E Action Tests
@@ -766,7 +766,7 @@ jobs:
 
       - name: PR status check - Security Audit
         if: always()
-        uses: LouisBrunner/checks-action@v2.0.0
+        uses: LouisBrunner/checks-action@v3.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: Security Audit
